@@ -1,0 +1,80 @@
+use std::{
+    error::Error, fs, io::{self, Write}, process
+};
+use clap::Parser as ClapParser;
+
+
+// --------
+//   CLI
+// --------
+
+#[derive(ClapParser)]
+#[command(version)]
+#[command(about="Interpreter for ODScript")]
+struct CLI {
+    #[arg(short, long)]
+    /// Path to the file to parse
+    file: Option<String>,
+
+    /// Interactive mode after interpreting a file
+    #[arg(short, long)]
+    inter: bool,
+
+    // Prints the AST tree
+    // #[arg(short, long)]
+    // ast_print: bool,
+}
+
+fn main() {
+    let cli = CLI::parse();
+
+    match cli.file {
+        Some(f) => run_file(f),
+        None => run_repl()
+    };
+}
+
+fn run(code: String) -> Result<() , Box<dyn Error>> {
+    
+
+    Ok(())
+}
+
+
+fn run_file(file_path: String) -> Result<() , Box<dyn Error>> {
+    let code = fs::read_to_string(file_path)?;
+
+    match run(code) {
+        Ok(_) => Ok(()),
+        Err(_) => panic!("Error reading file")
+    }
+}
+
+fn run_repl() -> Result<() , Box<dyn Error>> {
+    // Local variables
+    let stdin = io::stdin();
+    let mut stdout = io::stdout();
+
+    let mut input = String::new();
+
+    loop {
+        input.clear();
+        print!("\n> ");
+        stdout.flush().unwrap();
+
+        stdin.read_line(&mut input)?;
+        let trimmed_input = input.trim();
+
+        if trimmed_input == "quit" {
+            process::exit(0);
+        }
+
+        if input.is_empty() { continue }
+
+        // Execute interpreter
+        match run(trimmed_input.to_string()) {
+            Ok(_) => continue,
+            Err(_) => panic!("Error reading from terminal")
+        };
+    }
+}
