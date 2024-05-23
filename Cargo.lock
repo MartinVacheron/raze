@@ -111,6 +111,7 @@ dependencies = [
 name = "frontend"
 version = "0.1.0"
 dependencies = [
+ "colored",
  "utils",
 ]
 
@@ -155,6 +156,7 @@ name = "repl"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "frontend",
 ]
 
 [[package]]

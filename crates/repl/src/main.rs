@@ -3,6 +3,8 @@ use std::{
 };
 use clap::Parser as ClapParser;
 
+use frontend::lexer::Lexer;
+
 
 // --------
 //   CLI
@@ -35,7 +37,13 @@ fn main() {
 }
 
 fn run(code: String) -> Result<() , Box<dyn Error>> {
-    
+    let mut lexer = Lexer::new(&code);
+    match lexer.tokenize() {
+        Ok(_) => {},
+        Err(e) => {
+            e.iter().for_each(|e| e.report(&"placeholder.arc".into(), &code))
+        }
+    }
 
     Ok(())
 }
