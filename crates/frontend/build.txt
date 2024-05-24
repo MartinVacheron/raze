@@ -1,0 +1,65 @@
+use std::{error::Error, fs::OpenOptions, io::Write};
+
+fn main() -> Result<(), Box<dyn Error>> {
+    Ok(())
+    //define_ast(
+    //    "src",
+    //    "Expr",
+    //    &[
+    //        "std::rc::Rc",
+    //        "crate::lexer::Token"
+    //    ],
+    //    &[
+    //        "Binary   : Expr left, Token operator, Expr right",
+    //        "Grouping : Expr expression",
+    //        "Literal  : String value",
+    //        "Unary    : Token operator, Expr right",
+    //    ]
+    //)
+}
+
+fn define_ast(
+    output_dir: &str,
+    base_name: &str,
+    imports: &[&str],
+    structs: &[&str]
+) -> Result<(), Box<dyn Error>>
+{
+    let file_name = format!("{}/{}.rs", output_dir, base_name.to_lowercase());
+    println!("File name: {}", file_name);
+
+    let mut file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(file_name)?;
+
+    for import in imports {
+        writeln!(file, "use {};", import)?;
+    }
+
+    writeln!(file, "\n")?;
+
+    let mut all_structs: Vec<_> = vec![];
+
+    for st in structs {
+        let (name, args) = st.split_once(':').unwrap();
+        let struct_name = name.trim();
+        let full_name = format!("{}{}", struct_name, base_name);
+
+        writeln!(file, "struct {} {{", full_name)?;
+        all_structs.push(full_name);
+
+        let args_split = args.split(',');
+
+        for arg in args_split {
+            let arg_trim = arg.trim();
+            let (ttype, name) = arg_trim.split_once(' ').unwrap();
+
+            writeln!(file, "\t{}: {},", name, ttype)?;
+        }
+        writeln!(file, "}}\n")?;
+    }
+
+    Ok(())
+}
