@@ -7,13 +7,13 @@ use frontend::lexer::Lexer;
 
 
 // --------
-//   CLI
+//   Cli
 // --------
 
 #[derive(ClapParser)]
 #[command(version)]
 #[command(about="Interpreter for ODScript")]
-struct CLI {
+struct Cli {
     #[arg(short, long)]
     /// Path to the file to parse
     file: Option<String>,
@@ -28,9 +28,9 @@ struct CLI {
 }
 
 fn main() {
-    let cli = CLI::parse();
+    let cli = Cli::parse();
 
-    match cli.file {
+    let _ = match cli.file {
         Some(f) => run_file(f),
         None => run_repl()
     };

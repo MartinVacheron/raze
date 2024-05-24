@@ -50,17 +50,17 @@ enum TokenKind {
     False,
 
     NewLine,
-    EOF,
+    Eof,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 pub struct Loc {
     pub start: usize,
     pub end: usize
 }
 
 impl Loc {
-    fn new(line: usize, start: usize, end: usize) -> Self {
+    fn new(start: usize, end: usize) -> Self {
         Self { start, end }
     }
      pub fn get_len(&self) -> usize {
@@ -85,7 +85,7 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub fn new(code: &String) -> Self {
+    pub fn new(code: &str) -> Self {
         let mut lex = Lexer {
             code: code.chars().collect(),
             tokens: vec![],
@@ -116,6 +116,7 @@ impl Lexer {
         map.insert("or".into(), TokenKind::Or);
         map.insert("for".into(), TokenKind::For);
         map.insert("while".into(), TokenKind::While);
+        map.insert("null".into(), TokenKind::Null);
         map.insert("print".into(), TokenKind::Print);
 
         self.keywords = map;
@@ -215,6 +216,8 @@ impl Lexer {
                 }
             }
         }
+        
+        self.add_token(TokenKind::Eof);
 
         match errors.is_empty() {
             true => Ok(&self.tokens),
@@ -248,12 +251,11 @@ impl Lexer {
         }
 
         // We create the token without the surronding quotes
-        let value: String = self.code.get(self.start + 1..self.current).unwrap().iter().collect();
-        self.add_value_token(TokenKind::String, value);
-
+        let value: String = self.code.get(self.start + 2..self.current).unwrap().iter().collect();
         // We eat the "
         self.eat();
 
+        self.add_value_token(TokenKind::String, value);
         Ok(())
     }
 
@@ -328,10 +330,7 @@ impl Lexer {
     }
 
     fn is_skippable(&self) -> bool {
-        match self.at() {
-            ' ' | '\t' | '\r' => true,
-            _ => false
-        }
+        matches!(self.at(), ' ' | '\t' | '\r')
     }
 
     fn eat(&mut self) -> char {
@@ -344,11 +343,13 @@ impl Lexer {
         if self.at() != expected { return false }
 
         self.current += 1;
-        return true
+        true
     }
 
     fn trigger_error(&mut self, msg: String) -> Result<(), ArcResult> {
+        println!("Before: start: {}, cur: {}", self.start, self.current);
         self.synchronize();
+        println!("Loc: {:?}", self.get_loc());
         let err = ArcResult::lexer_error(msg, self.get_loc());
 
         Err(err)
@@ -363,9 +364,11 @@ impl Lexer {
         // We rewind
         self.current = self.start;
         // Until white space, we skip
-        while (self.at() != ' ' && self.at() != '\n') && !self.eof() {
+        while !self.is_skippable() && self.at() != '\n' && !self.eof() {
             self.current += 1;
         }
+        // We add the last one
+        self.current += 1;
     }
 
     fn add_token(&mut self, kind: TokenKind) {
@@ -386,19 +389,19 @@ impl Lexer {
     }
 
     fn get_loc(&self) -> Loc {
-        Loc::new(self.line, self.start, self.current)
+        Loc::new(self.start, self.current)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::lexer::{Token, TokenKind, Loc};
+    use crate::lexer::{ TokenKind, Loc };
 
     use super::Lexer;
 
     #[test]
     fn tokenize_single_char() {
-        let code: String = "(){},.-+/*=!<>".into();
+        let code: String = "(){},.-+/*=!<>\n".into();
         let mut lexer = Lexer::new(&code); 
         let tokens = lexer.tokenize().unwrap();
 
@@ -421,6 +424,8 @@ mod tests {
                 TokenKind::Bang,
                 TokenKind::Less,
                 TokenKind::Greater,
+                TokenKind::NewLine,
+                TokenKind::Eof,
             ]
         );
     }
@@ -440,6 +445,7 @@ mod tests {
                 TokenKind::LessEqual,
                 TokenKind::GreaterEqual,
                 TokenKind::EqualEqual,
+                TokenKind::Eof,
             ]
         );
     }
@@ -450,16 +456,9 @@ mod tests {
         let mut lexer = Lexer::new(&code); 
         let tokens = lexer.tokenize().unwrap();
 
-        assert_eq!(
-            tokens,
-            &vec![
-                Token {
-                    kind: TokenKind::String,
-                    value: "hello world!".into(),
-                    loc: Loc { start: 0, end: 13 }
-                }
-            ]
-        );
+        let tk_kind: Vec<TokenKind> = tokens.iter().map(|tk| tk.kind.clone()).collect();
+
+        assert_eq!(tk_kind, vec![TokenKind::String, TokenKind::Eof]);
     }
 
     #[test]
@@ -468,24 +467,75 @@ mod tests {
         let mut lexer = Lexer::new(&code); 
         let tokens = lexer.tokenize().unwrap();
 
+        let tk_value: Vec<String> = tokens.iter().map(|tk| tk.value.clone()).collect();
+
+        // Eof has the same value as the last one
         assert_eq!(
-            tokens,
-            &vec![
-                Token {
-                    kind: TokenKind::Number,
-                    value: "12".into(),
-                    loc: Loc { line: 1, start: 0, end: 2 }
-                },
-                Token {
-                    kind: TokenKind::Number,
-                    value: "25.".into(),
-                    loc: Loc { line: 1, start: 3, end: 6 }
-                },
-                Token {
-                    kind: TokenKind::Number,
-                    value: "26.345".into(),
-                    loc: Loc { line: 1, start: 7, end: 13 }
-                }
+            tk_value,
+            vec!["12".to_string(), "25.".to_string(), "26.345".to_string(), "26.345".to_string()]
+        );
+    }
+
+    #[test]
+    fn number_errors() {
+        let code: String = "12.5.".into();
+        let mut lexer = Lexer::new(&code); 
+        let tokens = lexer.tokenize();
+
+        assert!(tokens.is_err());
+
+        let code: String = "12.534.45".into();
+        let mut lexer = Lexer::new(&code); 
+        let tokens = lexer.tokenize();
+
+        assert!(tokens.is_err());
+
+        let code: String = "12.a".into();
+        let mut lexer = Lexer::new(&code); 
+        let tokens = lexer.tokenize();
+
+        assert!(tokens.is_err());
+    }
+
+    #[test]
+    fn string_errors() {
+        let code: String = "\"foo".into();
+        let mut lexer = Lexer::new(&code); 
+        let tokens = lexer.tokenize();
+
+        assert!(tokens.is_err());
+    }
+
+    #[test]
+    fn location() {
+        let code: String = "
+12345.43
+\"foo bar\"
+for while
+
+break 45+7".into();
+        let mut lexer = Lexer::new(&code); 
+        let tokens = lexer.tokenize().unwrap();
+
+        let tk_loc: Vec<&Loc> = tokens.iter().map(|tk| &tk.loc).collect();
+
+        assert_eq!(
+            tk_loc,
+            vec![
+                &Loc::new(0, 1),
+                &Loc::new(1, 9),
+                &Loc::new(9, 10),
+                &Loc::new(10, 19),
+                &Loc::new(19, 20),
+                &Loc::new(20, 23),
+                &Loc::new(24, 29),
+                &Loc::new(29, 30),
+                &Loc::new(30, 31),
+                &Loc::new(31, 36),
+                &Loc::new(37, 39),
+                &Loc::new(39, 40),
+                &Loc::new(40, 41),
+                &Loc::new(40, 41),
             ]
         );
     }

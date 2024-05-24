@@ -10,6 +10,7 @@ struct ReportContext<'a> {
     offset: usize,
 }
 
+#[derive(Debug)]
 pub struct ArcResult {
     kind: ArcResultKind,
     msg: String,
@@ -38,7 +39,7 @@ impl<'a> ArcResult {
         }
     }
     
-    pub fn report(&self, file_name: &String, code: &String) {
+    pub fn report(&self, file_name: &String, code: &str) {
         let cx = self.get_context(code);
         let deco = self.get_decorators(&cx);
 
@@ -54,7 +55,7 @@ impl<'a> ArcResult {
         println!("{}{}\n", " ".repeat(margin), deco.red());
     }
 
-    fn get_context(&'a self, code: &'a String) -> ReportContext {
+    fn get_context(&'a self, code: &'a str) -> ReportContext {
         let mut offset: usize = 0;
         let mut lines: VecDeque<(usize, &'a str)> = VecDeque::new();
 
