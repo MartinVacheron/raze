@@ -1,4 +1,5 @@
 pub mod lexer;
 mod results;
 mod expr;
-mod ast_pretty_print;
+pub mod ast_pretty_print;
+pub mod parser;

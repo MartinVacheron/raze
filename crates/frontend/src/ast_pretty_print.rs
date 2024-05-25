@@ -1,8 +1,7 @@
-use crate::expr::{BinaryExpr, GroupingExpr, LiteralExpr, UnaryExpr, VisitExpr};
-use crate::{
-    expr::Expr,
-    results::ArcResult,
+use crate::expr::{
+    BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, UnaryExpr, VisitExpr,
 };
+use crate::{expr::Expr, results::ArcResult};
 
 pub struct AstPrinter {}
 
@@ -26,55 +25,52 @@ impl AstPrinter {
 }
 
 impl VisitExpr<String> for AstPrinter {
-	fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<String, ArcResult> {
-        self.parenthesize(expr.operator.value.as_str(), &[&expr.left, &expr.right])
+    fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<String, ArcResult> {
+        self.parenthesize(expr.operator.as_str(), &[&expr.left, &expr.right])
     }
 
     fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<String, ArcResult> {
         self.parenthesize("group", &[&expr.expr])
     }
 
-    fn visit_literal_expr(&self, expr: &LiteralExpr) -> Result<String, ArcResult> {
-        Ok(expr.value.to_string())
+    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<String, ArcResult> {
+        Ok(format!("{}", expr.value))
+    }
+
+    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<String, ArcResult> {
+        Ok(format!("{}", expr.value))
+    }
+
+    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<String, ArcResult> {
+        Ok(expr.name.to_string())
     }
 
     fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<String, ArcResult> {
-        self.parenthesize(expr.operator.value.as_str(), &[&expr.right])
+        self.parenthesize(expr.operator.as_str(), &[&expr.right])
     }
 }
-
 
 #[cfg(test)]
 mod tests {
     use ecow::EcoString;
 
-    use crate::{expr::Expr, lexer::{Loc, Token, TokenKind}};
     use crate::ast_pretty_print::AstPrinter;
-    use crate::expr::{BinaryExpr, UnaryExpr, LiteralExpr, GroupingExpr};
+    use crate::expr::Expr;
+    use crate::expr::{BinaryExpr, GroupingExpr, IntLiteralExpr, RealLiteralExpr, UnaryExpr};
 
     #[test]
     fn test_print() {
         let expr = Expr::Binary(BinaryExpr {
-            left: Box::new(
-                Expr::Unary(UnaryExpr {
-                    operator: Token {
-                        kind: TokenKind::Minus,
-                        value: EcoString::from("-"),
-                        loc: Loc::default(),
-                    },
-                    right: Box::new(Expr::Literal(LiteralExpr { value: EcoString::from("98") }))
-                })
-            ),
-            operator: Token {
-                kind: TokenKind::Star,
-                value: EcoString::from("*"),
-                loc: Loc::default()
-            },
+            left: Box::new(Expr::Unary(UnaryExpr {
+                operator: EcoString::from("-"),
+                right: Box::new(Expr::IntLiteral(IntLiteralExpr { value: 98 })),
+            })),
+            operator: EcoString::from("*"),
             right: Box::new(Expr::Grouping(GroupingExpr {
-                expr: Box::new(Expr::Literal(LiteralExpr { value: EcoString::from("13.45") }))
-            }))
+                expr: Box::new(Expr::RealLiteral(RealLiteralExpr { value: 13.45 })),
+            })),
         });
-        
+
         let app = AstPrinter {};
         assert_eq!("(* (- 98) (group 13.45))", app.print(&expr).unwrap())
     }

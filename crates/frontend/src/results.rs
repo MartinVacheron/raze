@@ -14,18 +14,25 @@ struct ReportContext<'a> {
 pub struct ArcResult {
     kind: ArcResultKind,
     msg: String,
-    loc: Loc,
 }
 
 #[derive(Debug)]
 pub enum ArcResultKind {
-    LexerErr,
+    LexerErr {
+        loc: Loc
+    },
+    ParserErr {
+        loc: Loc
+    },
+    InternalErr,
 }
 
 impl Display for ArcResultKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ArcResultKind::LexerErr => write!(f, "{}", "Lexer error".red()),
+            ArcResultKind::LexerErr { .. } => write!(f, "{}", "Lexer error".red()),
+            ArcResultKind::ParserErr { .. } => write!(f, "{}", "Parser error".red()),
+            ArcResultKind::InternalErr => write!(f, "{}", "Internal error".red()),
         }
     }
 }
@@ -33,36 +40,58 @@ impl Display for ArcResultKind {
 impl<'a> ArcResult {
     pub fn lexer_error(msg: String, loc: Loc) -> Self {
         ArcResult {
-            kind: ArcResultKind::LexerErr,
+            kind: ArcResultKind::LexerErr { loc },
             msg,
-            loc
+        }
+    }
+
+    pub fn parser_error(msg: String, loc: Loc) -> Self {
+        ArcResult {
+            kind: ArcResultKind::ParserErr { loc },
+            msg,
+        }
+    }
+
+    pub fn internal_error(msg: String) -> Self {
+        ArcResult {
+            kind: ArcResultKind::InternalErr,
+            msg,
         }
     }
     
     pub fn report(&self, file_name: &String, code: &str) {
-        let cx = self.get_context(code);
-        let deco = self.get_decorators(&cx);
-
+        // Error msg
         println!("{}: {}", self.kind, self.msg);
-        println!("  {} {} [line {}]", "-->".cyan(), file_name, cx.line);
 
-        for (i, line) in cx.snippets {
-            println!(" {} {}", format!("{} |", i).cyan(), line);
+        // Additional infos
+        match &self.kind {
+            ArcResultKind::LexerErr { loc }
+            | ArcResultKind::ParserErr { loc } => {
+                let cx = self.get_context(code, loc);
+                let deco = self.get_decorators(&cx, loc);
+
+                println!("  {} {} [line {}]", "-->".cyan(), file_name, cx.line);
+
+                for (i, line) in cx.snippets {
+                    println!(" {} {}", format!("{} |", i).cyan(), line);
+                }
+
+                // Here, 3 is for space between line nb and '|' and space again
+                let margin = cx.line.to_string().len() + 3;
+                println!("{}{}\n", " ".repeat(margin), deco.red());
+            }
+            _ => {}
         }
-
-        // Here, 3 is for space between line nb and '|' and space again
-        let margin = cx.line.to_string().len() + 3;
-        println!("{}{}\n", " ".repeat(margin), deco.red());
     }
 
-    fn get_context(&'a self, code: &'a str) -> ReportContext {
+    fn get_context(&'a self, code: &'a str, loc: &Loc) -> ReportContext {
         let mut offset: usize = 0;
         let mut lines: VecDeque<(usize, &'a str)> = VecDeque::new();
 
         for (i, line) in code.split('\n').enumerate() {
             lines.push_back((i + 1, line));
 
-            if self.loc.start > offset && self.loc.start < offset + line.len() {
+            if loc.start > offset && loc.start < offset + line.len() {
                 return ReportContext { line: i + 1, snippets: lines, offset }
             } else {
                 if lines.len() == 2 {
@@ -76,9 +105,9 @@ impl<'a> ArcResult {
         panic!("Code snippet not found while reporting error: {}", self.msg)
     }
     
-    fn get_decorators(&self, cx: &ReportContext) -> String {
-        let mut decorators = " ".repeat(self.loc.start - cx.offset);
-        let indicators = "^".repeat(self.loc.get_len());
+    fn get_decorators(&self, cx: &ReportContext, loc: &Loc) -> String {
+        let mut decorators = " ".repeat(loc.start - cx.offset);
+        let indicators = "^".repeat(loc.get_len());
 
         decorators.push_str(indicators.as_str());
         decorators

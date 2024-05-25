@@ -3,7 +3,7 @@ use std::{
 };
 use clap::Parser as ClapParser;
 
-use frontend::lexer::Lexer;
+use frontend::{lexer::Lexer, parser::Parser, ast_pretty_print::AstPrinter};
 
 
 // --------
@@ -12,7 +12,7 @@ use frontend::lexer::Lexer;
 
 #[derive(ClapParser)]
 #[command(version)]
-#[command(about="Interpreter for ODScript")]
+#[command(about="Interpreter for Arc language")]
 struct Cli {
     #[arg(short, long)]
     /// Path to the file to parse
@@ -36,26 +36,38 @@ fn main() {
     };
 }
 
-fn run(code: String) -> Result<() , Box<dyn Error>> {
+fn run(code: String) {
     let mut lexer = Lexer::new(&code);
-    match lexer.tokenize() {
-        Ok(_) => {},
+    
+    let tokens = match lexer.tokenize() {
+        Ok(tk) => tk,
         Err(e) => {
-            e.iter().for_each(|e| e.report(&"placeholder.arc".into(), &code))
+            e.iter().for_each(|e| e.report(&"placeholder.arc".into(), &code));
+            return
         }
-    }
+    };
 
-    Ok(())
+    let mut parser = Parser::new(&tokens);
+    let nodes = match parser.parse() {
+        Ok(n) => n,
+        Err(e) => {
+            e.iter().for_each(|e| e.report(&"placeholder.arc".into(), &code));
+            return
+        }
+    };
+
+    let ast_print = AstPrinter {};
+    for n in nodes {
+        println!("{}", ast_print.print(n).unwrap());
+    }
 }
 
 
 fn run_file(file_path: String) -> Result<() , Box<dyn Error>> {
     let code = fs::read_to_string(file_path)?;
+    run(code);
 
-    match run(code) {
-        Ok(_) => Ok(()),
-        Err(_) => panic!("Error reading file")
-    }
+    Ok(())
 }
 
 fn run_repl() -> Result<() , Box<dyn Error>> {
@@ -80,9 +92,6 @@ fn run_repl() -> Result<() , Box<dyn Error>> {
         if input.is_empty() { continue }
 
         // Execute interpreter
-        match run(trimmed_input.to_string()) {
-            Ok(_) => continue,
-            Err(_) => panic!("Error reading from terminal")
-        };
+        run(trimmed_input.to_string());
     }
 }

@@ -8,4 +8,3 @@ edition = "2021"
 [dependencies]
 frontend = { path = "../frontend" }
 clap = { workspace = true }
-ecow = { worskapce = true }

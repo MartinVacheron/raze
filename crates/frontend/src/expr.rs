@@ -1,13 +1,14 @@
 use std::fmt::Display;
 use ecow::EcoString;
-use crate::lexer::Token;
 use crate::results::ArcResult;
 
 
 pub enum Expr {
     Binary(BinaryExpr),
     Grouping(GroupingExpr),
-    Literal(LiteralExpr),
+    IntLiteral(IntLiteralExpr),
+    RealLiteral(RealLiteralExpr),
+    Identifier(IdentifierExpr),
     Unary(UnaryExpr),
 }
 
@@ -16,7 +17,9 @@ impl Display for Expr {
         match self {
             Expr::Binary(e) => write!(f, "{} {} {}", e.left, e.operator, e.right),
             Expr::Grouping(e) => write!(f, "{}", e.expr),
-            Expr::Literal(e) => write!(f, "{}", e.value),
+            Expr::IntLiteral(e) => write!(f, "{}", e.value),
+            Expr::RealLiteral(e) => write!(f, "{}", e.value),
+            Expr::Identifier(e) => write!(f, "{}", e.name),
             Expr::Unary(e) => write!(f, "{} {}", e.operator, e.right),
         }
     }
@@ -24,7 +27,7 @@ impl Display for Expr {
 
 pub struct BinaryExpr {
     pub left: Box<Expr>,
-    pub operator: Token,
+    pub operator: EcoString,
     pub right: Box<Expr>,
 }
 
@@ -32,12 +35,20 @@ pub struct GroupingExpr {
     pub expr: Box<Expr>,
 }
 
-pub struct LiteralExpr {
-    pub value: EcoString,
+pub struct IntLiteralExpr {
+    pub value: i64,
+}
+
+pub struct RealLiteralExpr {
+    pub value: f64,
+}
+
+pub struct IdentifierExpr {
+    pub name: EcoString,
 }
 
 pub struct UnaryExpr {
-    pub operator: Token,
+    pub operator: EcoString,
     pub right: Box<Expr>,
 }
 
@@ -46,7 +57,9 @@ impl Expr {
 		match self {
 			Expr::Binary(e) => visitor.visit_binary_expr(e),
 			Expr::Grouping(e) => visitor.visit_grouping_expr(e),
-			Expr::Literal(e) => visitor.visit_literal_expr(e),
+			Expr::IntLiteral(e) => visitor.visit_int_literal_expr(e),
+			Expr::RealLiteral(e) => visitor.visit_real_literal_expr(e),
+			Expr::Identifier(e) => visitor.visit_identifier_expr(e),
 			Expr::Unary(e) => visitor.visit_unary_expr(e),
 		}
 	}
@@ -56,6 +69,8 @@ impl Expr {
 pub trait VisitExpr<T> {
 	fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<T, ArcResult>;
 	fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<T, ArcResult>;
-	fn visit_literal_expr(&self, expr: &LiteralExpr) -> Result<T, ArcResult>;
+	fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<T, ArcResult>;
+	fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<T, ArcResult>;
+	fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<T, ArcResult>;
 	fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<T, ArcResult>;
 }

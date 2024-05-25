@@ -30,7 +30,8 @@ pub enum TokenKind {
     // Literals
     Identifier,
     String,
-    Number,
+    Int,
+    Real,
 
     // Keywords
     Struct,
@@ -54,7 +55,7 @@ pub enum TokenKind {
     Eof,
 }
 
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq, Default, Clone)]
 pub struct Loc {
     pub start: usize,
     pub end: usize
@@ -307,9 +308,12 @@ impl Lexer {
                     )
                 }
             }
+            self.add_token(TokenKind::Real);
+
+        } else {
+            self.add_token(TokenKind::Int);
         }
 
-        self.add_token(TokenKind::Number);
         Ok(())
     }
 
@@ -363,9 +367,7 @@ impl Lexer {
     }
 
     fn trigger_error(&mut self, msg: String) -> Result<(), ArcResult> {
-        println!("Before: start: {}, cur: {}", self.start, self.current);
         self.synchronize();
-        println!("Loc: {:?}", self.get_loc());
         let err = ArcResult::lexer_error(msg, self.get_loc());
 
         Err(err)
@@ -487,7 +489,13 @@ mod tests {
         let mut lexer = Lexer::new(&code); 
         let tokens = lexer.tokenize().unwrap();
 
+        let tk_type: Vec<TokenKind> = tokens.iter().map(|tk| tk.kind.clone()).collect();
         let tk_value: Vec<EcoString> = tokens.iter().map(|tk| tk.value.clone()).collect();
+
+        assert_eq!(
+            tk_type,
+            vec![TokenKind::Int, TokenKind::Real, TokenKind::Real, TokenKind::Eof]
+        );
 
         assert_eq!(
             tk_value,
