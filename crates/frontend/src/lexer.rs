@@ -1,9 +1,10 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
+use ecow::EcoString;
 
 use super::results::ArcResult;
 
 #[derive(Clone, Debug, PartialEq)]
-enum TokenKind {
+pub enum TokenKind {
     // Single character
     OpenParen,
     CloseParen,
@@ -70,9 +71,15 @@ impl Loc {
 
 #[derive(Debug, PartialEq)]
 pub struct Token {
-    kind: TokenKind,
-    value: String,
-    loc: Loc
+    pub kind: TokenKind,
+    pub value: EcoString,
+    pub loc: Loc
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
 }
 
 pub struct Lexer {
@@ -217,7 +224,16 @@ impl Lexer {
             }
         }
         
-        self.add_token(TokenKind::Eof);
+        // We do it like this because if last token was an error, we synchronized
+        // att eof already so we are at out of bounds. We manually add a slot
+        // past end of file to represent the token location
+        self.tokens.push(
+            Token {
+                kind: TokenKind::Eof,
+                value: "eof".into(),
+                loc: Loc { start: self.code.len(), end: self.code.len() + 1 }
+            }
+        );
 
         match errors.is_empty() {
             true => Ok(&self.tokens),
@@ -255,7 +271,7 @@ impl Lexer {
         // We eat the "
         self.eat();
 
-        self.add_value_token(TokenKind::String, value);
+        self.add_value_token(TokenKind::String, value.into());
         Ok(())
     }
 
@@ -306,7 +322,7 @@ impl Lexer {
         
         match self.keywords.get(&ident) {
             Some(tk) => self.add_token(tk.clone()),
-            None => self.add_value_token(TokenKind::Identifier, ident)
+            None => self.add_value_token(TokenKind::Identifier, ident.into())
         }
 
         Ok(())
@@ -372,15 +388,17 @@ impl Lexer {
     }
 
     fn add_token(&mut self, kind: TokenKind) {
+        let code: String = self.code[self.start..self.current].iter().collect();
+
         self.tokens.push(Token {
             kind,
-            value: self.code[self.start..self.current].iter().collect(),
+            value: code.into(),
             loc: self.get_loc()
         });
     }
 
-    // Add a toekn with a specific value
-    fn add_value_token(&mut self, kind: TokenKind, value: String) {
+    // Add a token with a specific value
+    fn add_value_token(&mut self, kind: TokenKind, value: EcoString) {
         self.tokens.push(Token {
             kind,
             value,
@@ -395,6 +413,8 @@ impl Lexer {
 
 #[cfg(test)]
 mod tests {
+    use ecow::EcoString;
+
     use crate::lexer::{ TokenKind, Loc };
 
     use super::Lexer;
@@ -467,12 +487,11 @@ mod tests {
         let mut lexer = Lexer::new(&code); 
         let tokens = lexer.tokenize().unwrap();
 
-        let tk_value: Vec<String> = tokens.iter().map(|tk| tk.value.clone()).collect();
+        let tk_value: Vec<EcoString> = tokens.iter().map(|tk| tk.value.clone()).collect();
 
-        // Eof has the same value as the last one
         assert_eq!(
             tk_value,
-            vec!["12".to_string(), "25.".to_string(), "26.345".to_string(), "26.345".to_string()]
+            vec!["12".to_string(), "25.".to_string(), "26.345".to_string(), "eof".to_string()]
         );
     }
 
@@ -535,7 +554,7 @@ break 45+7".into();
                 &Loc::new(37, 39),
                 &Loc::new(39, 40),
                 &Loc::new(40, 41),
-                &Loc::new(40, 41),
+                &Loc::new(41, 42),
             ]
         );
     }

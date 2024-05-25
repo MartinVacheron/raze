@@ -1,30 +1,28 @@
-use std::{error::Error, fs::OpenOptions, io::Write};
+use std::{
+    fs::{File, OpenOptions},
+    io::{Result, Write},
+};
 
-fn main() -> Result<(), Box<dyn Error>> {
-    Ok(())
-    //define_ast(
-    //    "src",
-    //    "Expr",
-    //    &[
-    //        "std::rc::Rc",
-    //        "crate::lexer::Token"
-    //    ],
-    //    &[
-    //        "Binary   : Expr left, Token operator, Expr right",
-    //        "Grouping : Expr expression",
-    //        "Literal  : String value",
-    //        "Unary    : Token operator, Expr right",
-    //    ]
-    //)
+fn main() -> Result<()> {
+    define_ast(
+        "src",
+        "Expr",
+        &["std::rc::Rc", "crate::lexer::Token", "crate::results::ArcResult"],
+        &[
+            "Binary   : Expr left, Token operator, Expr right",
+            "Grouping : Expr expression",
+            "Literal  : String value",
+            "Unary    : Token operator, Expr right",
+        ],
+    )
 }
 
-fn define_ast(
-    output_dir: &str,
-    base_name: &str,
-    imports: &[&str],
-    structs: &[&str]
-) -> Result<(), Box<dyn Error>>
-{
+struct AstNodeInfos<'a> {
+    name: &'a str, // Binary
+    types_and_args: Vec<(&'a str, &'a str)> // [(left, Expr)]
+}
+
+fn define_ast(output_dir: &str, base_name: &str, imports: &[&str], structs: &[&str]) -> Result<()> {
     let file_name = format!("{}/{}.rs", output_dir, base_name.to_lowercase());
     println!("File name: {}", file_name);
 
@@ -34,32 +32,100 @@ fn define_ast(
         .truncate(true)
         .open(file_name)?;
 
+    // Writes imports
     for import in imports {
         writeln!(file, "use {};", import)?;
     }
-
     writeln!(file, "\n")?;
 
-    let mut all_structs: Vec<_> = vec![];
+    // We collect data about nodes
+    let mut ast_nodes: Vec<AstNodeInfos> = vec![];
 
     for st in structs {
         let (name, args) = st.split_once(':').unwrap();
-        let struct_name = name.trim();
-        let full_name = format!("{}{}", struct_name, base_name);
-
-        writeln!(file, "struct {} {{", full_name)?;
-        all_structs.push(full_name);
+        let name = name.trim();
 
         let args_split = args.split(',');
 
+        let mut types_and_args: Vec<(&str, &str)> = vec![];
         for arg in args_split {
             let arg_trim = arg.trim();
-            let (ttype, name) = arg_trim.split_once(' ').unwrap();
-
-            writeln!(file, "\t{}: {},", name, ttype)?;
+            types_and_args.push(arg_trim.split_once(' ').unwrap());
         }
+
+        ast_nodes.push(AstNodeInfos { name, types_and_args });
+    }
+    
+    write_enum(&mut file, &ast_nodes, base_name)?;
+    write_structures(&mut file, &ast_nodes, base_name)?;
+    write_visit_trait(&mut file, &ast_nodes, base_name)?;
+
+    Ok(())
+}
+
+fn write_enum(file: &mut File, nodes: &Vec<AstNodeInfos>, base_name: &str) -> Result<()> {
+    writeln!(file, "")?;
+    writeln!(file, "pub enum {} {{", base_name)?;
+
+    for node in nodes {
+        writeln!(file, "\t{}({}{}),", node.name, node.name, base_name)?;
+    }
+
+    writeln!(file, "}}\n")?;
+
+    writeln!(file, "impl {} {{", base_name)?;
+    writeln!(file, "\tpub fn accept<T>(&self, visitor: &dyn Visit{}<T>) -> Result<T, ArcResult> {{", base_name)?;
+    writeln!(file, "\t\tmatch self {{")?;
+
+    for node in nodes {
+        writeln!(file,
+            "\t\t\t{}::{}(e) => visitor.visit_{}_{}(e),",
+            base_name,
+            node.name,
+            node.name.to_lowercase(),
+            base_name.to_lowercase(),
+        )?;
+    }
+    writeln!(file, "\t\t}}")?;
+    writeln!(file, "\t}}")?;
+    writeln!(file, "}}\n")?;
+
+    Ok(())
+}
+
+fn write_structures(file: &mut File, nodes: &Vec<AstNodeInfos>, base_name: &str) -> Result<()> {
+    writeln!(file, "")?;
+
+    for node in nodes {
+        let struct_name = format!("{}{}", node.name, base_name);
+
+        writeln!(file, "pub struct {} {{", struct_name)?;
+
+        for (ttype, arg) in &node.types_and_args {
+            writeln!(file, "\t{}: {},", arg, ttype)?;
+        }
+
         writeln!(file, "}}\n")?;
     }
+
+    Ok(())
+}
+
+fn write_visit_trait( file: &mut File, nodes: &Vec<AstNodeInfos>, base_name: &str) -> Result<()> {
+    writeln!(file, "")?;
+    writeln!(file, "pub trait Visit{}<T> {{", base_name)?;
+
+    for node in nodes {
+        writeln!(
+            file,
+            "\tfn visit_{}_{}(&self, expr: &{}) -> Result<T, ArcResult>;",
+            node.name.to_lowercase(),
+            base_name.to_lowercase(),
+            format!("{}{}", node.name, base_name)
+        )?;
+    }
+
+    writeln!(file, "}}")?;
 
     Ok(())
 }
