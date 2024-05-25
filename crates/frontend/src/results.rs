@@ -73,11 +73,15 @@ impl<'a> ArcResult {
                 println!("  {} {} [line {}]", "-->".cyan(), file_name, cx.line);
 
                 for (i, line) in cx.snippets {
-                    println!(" {} {}", format!("{} |", i).cyan(), line);
+                    // If this line + 1 is % 10, the next one will be one digit
+                    // longer, so we add a space before the smallest
+                    let add_space = if (i + 1) % 10 == 0 { " " } else { "" };
+
+                    println!(" {} {}", format!("{}{} |", add_space, i).cyan(), line);
                 }
 
-                // Here, 3 is for space between line nb and '|' and space again
-                let margin = cx.line.to_string().len() + 3;
+                // Here, 4 is for space at the beginning and between line nb and '|' and space again
+                let margin = cx.line.to_string().len() + 4;
                 println!("{}{}\n", " ".repeat(margin), deco.red());
             }
             _ => {}
@@ -91,13 +95,14 @@ impl<'a> ArcResult {
         for (i, line) in code.split('\n').enumerate() {
             lines.push_back((i + 1, line));
 
-            if loc.start > offset && loc.start < offset + line.len() {
+            if loc.start >= offset && loc.start < offset + line.len() {
                 return ReportContext { line: i + 1, snippets: lines, offset }
             } else {
                 if lines.len() == 2 {
                     lines.pop_front();
                 }
 
+                // + 1 because we don't have '\n' anymore
                 offset += line.len() + 1;
             }
         }

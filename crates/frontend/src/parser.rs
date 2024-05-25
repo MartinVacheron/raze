@@ -1,16 +1,17 @@
 use crate::expr::{BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, UnaryExpr};
 use crate::results::ArcResult;
-use crate::lexer::{Token, TokenKind};
+use crate::lexer::{Loc, Token, TokenKind};
 
 pub struct Parser<'a> {
     tokens: &'a [Token],
+    start_loc: usize,
     current: usize,
     nodes: Vec<Expr>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(tokens: &'a [Token]) -> Self {
-        Parser { tokens, current: 0, nodes: vec![] }
+        Parser { tokens, start_loc: 0, current: 0, nodes: vec![] }
     }
 
     pub fn parse(&mut self) -> Result<&Vec<Expr>, Vec<ArcResult>> {
@@ -19,18 +20,18 @@ impl<'a> Parser<'a> {
         while !self.eof() {
             // If we have a new line to begin a statement/expr parsing,
             // we skip it. There are important only in parsing steps
-            if self.at().kind == TokenKind::NewLine {
+            while !self.eof() && self.is_at(TokenKind::NewLine) {
                 self.current += 1;
-                continue
             }
+            
+            // We could have reached EOF while skipping new lines
+            if self.eof() { break }
+
+            self.start_loc = self.at().loc.start;
 
             match self.parse_expr() {
                 Ok(expr) => self.nodes.push(expr),
-                Err(e) => {
-                    self.synchronize();
-
-                    errors.push(e)
-                }
+                Err(e) => { errors.push(e) }
             }
         }
         
@@ -136,7 +137,8 @@ impl<'a> Parser<'a> {
             TokenKind::True => Ok(Expr::Identifier(IdentifierExpr { name: self.at().value.clone() })),
             TokenKind::False => Ok(Expr::Identifier(IdentifierExpr { name: self.at().value.clone() })),
             TokenKind::Null => Ok(Expr::Identifier(IdentifierExpr { name: self.at().value.clone() })),
-            _ => Err(ArcResult::parser_error(format!("Unknown token to parse: '{}'", self.prev()), self.prev().loc.clone()))
+            TokenKind::NewLine => { Err(self.trigger_error("Unexpected end of line".into(), false)) },
+            _ => Err(self.trigger_error(format!("Unknown token to parse: '{}'", self.prev()), true))
         }
     }
 
@@ -156,6 +158,7 @@ impl<'a> Parser<'a> {
 
     fn parse_grouping(&mut self) -> Result<Expr, ArcResult> {
         let expr = self.parse_expr()?;
+        println!("\nGrouping end, we are at: {:?}\n", self.at());
         self.expect(TokenKind::CloseParen)?;
 
         Ok(Expr::Grouping(GroupingExpr { expr: Box::new(expr) }))
@@ -179,10 +182,10 @@ impl<'a> Parser<'a> {
 
         match tk.kind == kind {
             true => Ok(()),
-            false => Err(ArcResult::parser_error(
-                format!("Expected token type '{:?}', found: {:?}", kind, tk.kind),
-                tk.loc.clone()
-            ))
+            false => {
+                let msg = format!("Expected token type '{:?}', found: {:?}", kind, tk.kind);
+                Err(self.trigger_error(msg, false))
+            }
         }
     }
 
@@ -198,6 +201,17 @@ impl<'a> Parser<'a> {
         self.is_at(TokenKind::Eof)
     }
 
+    // We dont have to activate the synchro each time, if the error occured
+    // because we ate a '\n' that wasn't supposed to be here, we are already
+    // past the error, we are on the new line. No need to synchronize
+    fn trigger_error(&mut self, msg: String, synchro: bool) -> ArcResult {
+        if synchro {
+            self.synchronize();
+        }
+        
+        ArcResult::parser_error(msg, self.get_loc())
+    }
+
     // TODO: For now, we are only looking for new line token as we
     // don't have ';' to clearly know where the current statement stops.
     // It would be great to have an argument to this function that let
@@ -206,7 +220,6 @@ impl<'a> Parser<'a> {
 
     // We are here in panic mode
     fn synchronize(&mut self) {
-
         // We parse potential other errors in statements
         while !self.eof() {
             match self.at().kind {
@@ -224,4 +237,9 @@ impl<'a> Parser<'a> {
             }
         }
     }
+
+    fn get_loc(&self) -> Loc {
+        Loc::new(self.start_loc, self.at().loc.start - 1)
+    }
 }
+

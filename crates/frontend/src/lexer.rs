@@ -62,7 +62,7 @@ pub struct Loc {
 }
 
 impl Loc {
-    fn new(start: usize, end: usize) -> Self {
+    pub fn new(start: usize, end: usize) -> Self {
         Self { start, end }
     }
      pub fn get_len(&self) -> usize {
@@ -216,10 +216,7 @@ impl Lexer {
                             Err(e) => errors.push(e)
                         }
                     } else {
-                        errors.push(ArcResult::lexer_error(
-                            format!("Unexpected token found: {}", c),
-                            self.get_loc() 
-                        ))
+                        errors.push(self.trigger_error(format!("Unexpected token found: '{}'", c)))
                     }
                 }
             }
@@ -264,7 +261,7 @@ impl Lexer {
         }
 
         if self.eof() {
-            return self.trigger_error("String literal never closed with '\"'".into())
+            return Err(self.trigger_error("String literal never closed with '\"'".into()))
         }
 
         // We create the token without the surronding quotes
@@ -287,12 +284,12 @@ impl Lexer {
             if self.eof() || self.is_skippable() || self.at() == '\n' {
                 
             } else if !self.at().is_numeric() {
-                return self.trigger_error(
+                return Err(self.trigger_error(
                     format!(
                         "Expected numbers or nothing after '.' in number literal, found: '{}'",
                         self.at()
                     )
-                )
+                ))
             } else {
                 while self.at().is_numeric() {
                     self.eat();
@@ -300,12 +297,12 @@ impl Lexer {
 
                 // After all the numbers, we expect a white space
                 if !self.eof() && !self.is_skippable() && self.at() != '\n' {
-                    return self.trigger_error(
+                    return Err(self.trigger_error(
                         format!(
                             "Expected nothing after number literal, found: '{}'",
                             self.at()
                         )
-                    )
+                    ))
                 }
             }
             self.add_token(TokenKind::Real);
@@ -366,27 +363,20 @@ impl Lexer {
         true
     }
 
-    fn trigger_error(&mut self, msg: String) -> Result<(), ArcResult> {
+    fn trigger_error(&mut self, msg: String) -> ArcResult {
         self.synchronize();
-        let err = ArcResult::lexer_error(msg, self.get_loc());
-
-        Err(err)
+        ArcResult::lexer_error(msg, self.get_loc())
     }
 
     // Function used when an error is encountered. We skip until next
     // part to lex aka white space, to collect potentially more errors
     fn synchronize(&mut self) {
-        // Only for error reporting purpose, we move the cursor at the
-        // beggining of the token that caused the error
-        self.start += 1;
         // We rewind
         self.current = self.start;
         // Until white space, we skip
         while !self.is_skippable() && self.at() != '\n' && !self.eof() {
             self.current += 1;
         }
-        // We add the last one
-        self.current += 1;
     }
 
     fn add_token(&mut self, kind: TokenKind) {

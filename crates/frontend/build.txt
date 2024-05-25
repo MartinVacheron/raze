@@ -31,7 +31,7 @@ fn define_ast(output_dir: &str, base_name: &str, imports: &[&str], structs: &[&s
         .write(true)
         .truncate(true)
         .open(file_name)?;
-
+Writes
     // Writes imports
     for import in imports {
         writeln!(file, "use {};", import)?;
