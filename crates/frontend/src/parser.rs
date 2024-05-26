@@ -40,7 +40,7 @@ impl<'a> Parser<'a> {
         }
 
         Ok(&self.nodes)
-    }
+}
 
     fn parse_expr(&mut self) -> Result<Expr, ArcResult> {
         self.parse_equality()
@@ -55,7 +55,8 @@ impl<'a> Parser<'a> {
             expr = Expr::Binary(BinaryExpr {
                 left: Box::new(expr),
                 operator,
-                right: Box::new(right)
+                right: Box::new(right),
+                loc: self.get_loc(),
             });
         }
 
@@ -75,7 +76,8 @@ impl<'a> Parser<'a> {
             expr = Expr::Binary(BinaryExpr {
                 left: Box::new(expr),
                 operator,
-                right: Box::new(right)
+                right: Box::new(right),
+                loc: self.get_loc(),
             });
         }
 
@@ -91,7 +93,8 @@ impl<'a> Parser<'a> {
             expr = Expr::Binary(BinaryExpr {
                 left: Box::new(expr),
                 operator,
-                right: Box::new(right)
+                right: Box::new(right),
+                loc: self.get_loc(),
             });
         }
 
@@ -107,7 +110,8 @@ impl<'a> Parser<'a> {
             expr = Expr::Binary(BinaryExpr {
                 left: Box::new(expr),
                 operator,
-                right: Box::new(right)
+                right: Box::new(right),
+                loc: self.get_loc(),
             });
         }
 
@@ -121,7 +125,8 @@ impl<'a> Parser<'a> {
 
             return Ok(Expr::Unary(UnaryExpr {
                 operator,
-                right: Box::new(right)
+                right: Box::new(right),
+                loc: self.get_loc(),
             }))
         }
 
@@ -130,13 +135,18 @@ impl<'a> Parser<'a> {
 
     fn parse_primary(&mut self) -> Result<Expr, ArcResult> {
         match self.eat()?.kind {
-            TokenKind::Identifier => Ok(Expr::Identifier(IdentifierExpr { name: self.prev().value.clone() })),
+            TokenKind::Identifier 
+            | TokenKind::True
+            | TokenKind::False
+            | TokenKind::Null => Ok(Expr::Identifier(
+                IdentifierExpr {
+                    name: self.prev().value.clone(),
+                    loc: self.get_loc(),
+                })
+            ),
             TokenKind::Int => self.parse_int_literal(),
             TokenKind::Real => self.parse_real_literal(),
             TokenKind::OpenParen => self.parse_grouping(),
-            TokenKind::True => Ok(Expr::Identifier(IdentifierExpr { name: self.at().value.clone() })),
-            TokenKind::False => Ok(Expr::Identifier(IdentifierExpr { name: self.at().value.clone() })),
-            TokenKind::Null => Ok(Expr::Identifier(IdentifierExpr { name: self.at().value.clone() })),
             TokenKind::NewLine => { Err(self.trigger_error("Unexpected end of line".into(), false)) },
             _ => Err(self.trigger_error(format!("Unknown token to parse: '{}'", self.prev()), true))
         }
@@ -146,14 +156,14 @@ impl<'a> Parser<'a> {
         let tk = self.prev();
         let value = tk.value.parse::<i64>().map_err(|_| ArcResult::internal_error("Error parsing int from string".into()))?;
 
-        Ok(Expr::IntLiteral(IntLiteralExpr { value }))
+        Ok(Expr::IntLiteral(IntLiteralExpr { value, loc: self.get_loc() }))
     }
 
     fn parse_real_literal(&self) -> Result<Expr, ArcResult> {
         let tk = self.prev();
         let value = tk.value.parse::<f64>().map_err(|_| ArcResult::internal_error("Error parsing real from string".into()))?;
 
-        Ok(Expr::RealLiteral(RealLiteralExpr { value }))
+        Ok(Expr::RealLiteral(RealLiteralExpr { value, loc: self.get_loc() }))
     }
 
     fn parse_grouping(&mut self) -> Result<Expr, ArcResult> {
@@ -161,7 +171,7 @@ impl<'a> Parser<'a> {
         println!("\nGrouping end, we are at: {:?}\n", self.at());
         self.expect(TokenKind::CloseParen)?;
 
-        Ok(Expr::Grouping(GroupingExpr { expr: Box::new(expr) }))
+        Ok(Expr::Grouping(GroupingExpr { expr: Box::new(expr), loc: self.get_loc() }))
     }
 
     fn at(&self) -> &Token {
@@ -184,7 +194,7 @@ impl<'a> Parser<'a> {
             true => Ok(()),
             false => {
                 let msg = format!("Expected token type '{:?}', found: {:?}", kind, tk.kind);
-                Err(self.trigger_error(msg, false))
+                Err(self.trigger_error(msg, true))
             }
         }
     }
@@ -243,3 +253,104 @@ impl<'a> Parser<'a> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use ecow::EcoString;
+
+    use crate::lexer::{Lexer, Loc};
+    use super::Parser;
+    use crate::expr::*;
+
+    #[test]
+    fn parse_primary() {
+        let code:String = "12 24. 54.678 (true) ( (null ))".into();
+        let mut lexer = Lexer::new(code.as_str());
+        let tokens = lexer.tokenize().unwrap();
+        let mut parser = Parser::new(tokens);
+        let nodes = parser.parse().unwrap();
+
+        assert_eq!(
+            nodes,
+            &vec![
+                Expr::IntLiteral(IntLiteralExpr {
+                    value: 12,
+                    loc: Loc::new(0, 2),
+                }),
+                Expr::RealLiteral(RealLiteralExpr {
+                    value: 24.,
+                    loc: Loc::new(4, 6),
+                }),
+                Expr::RealLiteral(RealLiteralExpr {
+                    value: 54.678,
+                    loc: Loc::new(8, 13),
+                }),
+                Expr::Grouping(GroupingExpr {
+                    expr: Box::new(Expr::Identifier(IdentifierExpr {
+                        name: EcoString::from("true"),
+                        loc: Loc::new(16, 19),
+                    })),
+                    loc: Loc::new(15, 20),
+                }),
+                Expr::Grouping(GroupingExpr {
+                    expr: Box::new(
+                        Expr::Grouping(GroupingExpr {
+                            expr: Box::new(Expr::Identifier(IdentifierExpr {
+                                name: EcoString::from("null"),
+                                loc: Loc::new(25, 28),
+                            })),
+                            loc: Loc::new(24, 30)
+                        })
+                    ),
+                    loc: Loc::new(22, 31),
+                }),
+            ]
+        )
+    }
+
+    #[test]
+    fn parse_unary() {
+        let code:String = "-12 -24. -54.67 !true".into();
+        let mut lexer = Lexer::new(code.as_str());
+        let tokens = lexer.tokenize().unwrap();
+        let mut parser = Parser::new(tokens);
+        let nodes = parser.parse().unwrap();
+
+        assert_eq!(
+            nodes,
+            &vec![
+                Expr::Unary(UnaryExpr {
+                    operator: EcoString::from("-"),
+                    right: Box::new(Expr::IntLiteral(IntLiteralExpr {
+                        value: 12,
+                        loc: Loc::new(0, 1),
+                    })),
+                    loc: Loc::new(0, 2),
+                }),
+                Expr::Unary(UnaryExpr {
+                    operator: EcoString::from("-"),
+                    right: Box::new(Expr::RealLiteral(RealLiteralExpr {
+                        value: 24.,
+                        loc: Loc::new(5, 7),
+                    })),
+                    loc: Loc::new(4, 7),
+                }),
+                Expr::Unary(UnaryExpr {
+                    operator: EcoString::from("-"),
+                    right: Box::new(Expr::RealLiteral(RealLiteralExpr {
+                        value: 54.67,
+                        loc: Loc::new(10, 14),
+                    })),
+                    loc: Loc::new(9, 14),
+                }),
+                Expr::Unary(UnaryExpr {
+                    operator: EcoString::from("!"),
+                    right: Box::new(Expr::Identifier(IdentifierExpr {
+                        name: EcoString::from("true"),
+                        loc: Loc::new(17, 20),
+                    })),
+                    loc: Loc::new(16, 20),
+                }),
+            ]
+        )
+    }
+}

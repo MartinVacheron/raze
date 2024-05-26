@@ -1,8 +1,9 @@
 use std::fmt::Display;
 use ecow::EcoString;
-use crate::results::ArcResult;
+use crate::{lexer::Loc, results::ArcResult};
 
 
+#[derive(Debug, PartialEq)]
 pub enum Expr {
     Binary(BinaryExpr),
     Grouping(GroupingExpr),
@@ -25,31 +26,43 @@ impl Display for Expr {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct BinaryExpr {
     pub left: Box<Expr>,
     pub operator: EcoString,
     pub right: Box<Expr>,
+    pub loc: Loc,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct GroupingExpr {
     pub expr: Box<Expr>,
+    pub loc: Loc,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct IntLiteralExpr {
     pub value: i64,
+    pub loc: Loc,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct RealLiteralExpr {
     pub value: f64,
+    pub loc: Loc,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct IdentifierExpr {
     pub name: EcoString,
+    pub loc: Loc,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct UnaryExpr {
     pub operator: EcoString,
     pub right: Box<Expr>,
+    pub loc: Loc,
 }
 
 impl Expr {

@@ -57,18 +57,28 @@ mod tests {
     use crate::ast_pretty_print::AstPrinter;
     use crate::expr::Expr;
     use crate::expr::{BinaryExpr, GroupingExpr, IntLiteralExpr, RealLiteralExpr, UnaryExpr};
+    use crate::lexer::Loc;
 
     #[test]
     fn test_print() {
         let expr = Expr::Binary(BinaryExpr {
             left: Box::new(Expr::Unary(UnaryExpr {
                 operator: EcoString::from("-"),
-                right: Box::new(Expr::IntLiteral(IntLiteralExpr { value: 98 })),
+                right: Box::new(Expr::IntLiteral(IntLiteralExpr {
+                    value: 98,
+                    loc: Loc::new(0, 0),
+                })),
+                loc: Loc::new(0, 0)
             })),
             operator: EcoString::from("*"),
             right: Box::new(Expr::Grouping(GroupingExpr {
-                expr: Box::new(Expr::RealLiteral(RealLiteralExpr { value: 13.45 })),
+                expr: Box::new(Expr::RealLiteral(RealLiteralExpr {
+                    value: 13.45,
+                    loc: Loc::new(0, 0),
+                })),
+                loc: Loc::new(0, 0),
             })),
+            loc: Loc::new(0, 0),
         });
 
         let app = AstPrinter {};
