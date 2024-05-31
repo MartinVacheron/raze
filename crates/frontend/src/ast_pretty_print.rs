@@ -1,16 +1,16 @@
 use crate::expr::{
     BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, UnaryExpr, VisitExpr,
 };
-use crate::{expr::Expr, results::ArcResult};
+use crate::{expr::Expr, results::RazeResult};
 
 pub struct AstPrinter {}
 
 impl AstPrinter {
-    pub fn print(&self, expr: &Expr) -> Result<String, ArcResult> {
+    pub fn print(&self, expr: &Expr) -> Result<String, RazeResult> {
         expr.accept(self)
     }
 
-    fn parenthesize(&self, name: &str, exprs: &[&Expr]) -> Result<String, ArcResult> {
+    fn parenthesize(&self, name: &str, exprs: &[&Expr]) -> Result<String, RazeResult> {
         let mut final_str: String = format!("({}", name);
 
         for expr in exprs {
@@ -25,27 +25,27 @@ impl AstPrinter {
 }
 
 impl VisitExpr<String> for AstPrinter {
-    fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<String, ArcResult> {
+    fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<String, RazeResult> {
         self.parenthesize(expr.operator.as_str(), &[&expr.left, &expr.right])
     }
 
-    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<String, ArcResult> {
+    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<String, RazeResult> {
         self.parenthesize("group", &[&expr.expr])
     }
 
-    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<String, ArcResult> {
+    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<String, RazeResult> {
         Ok(format!("{}", expr.value))
     }
 
-    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<String, ArcResult> {
+    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<String, RazeResult> {
         Ok(format!("{}", expr.value))
     }
 
-    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<String, ArcResult> {
+    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<String, RazeResult> {
         Ok(expr.name.to_string())
     }
 
-    fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<String, ArcResult> {
+    fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<String, RazeResult> {
         self.parenthesize(expr.operator.as_str(), &[&expr.right])
     }
 }

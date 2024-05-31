@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 use ecow::EcoString;
 
-use super::results::ArcResult;
+use super::results::RazeResult;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenKind {
@@ -16,6 +16,7 @@ pub enum TokenKind {
     Plus,
     Slash,
     Star,
+    Modulo,
 
     // One or two characters
     Bang,
@@ -130,8 +131,8 @@ impl Lexer {
         self.keywords = map;
     }
 
-    pub fn tokenize(&mut self) -> Result<&Vec<Token>, Vec<ArcResult>> {
-        let mut errors: Vec<ArcResult> = vec![];
+    pub fn tokenize(&mut self) -> Result<&Vec<Token>, Vec<RazeResult>> {
+        let mut errors: Vec<RazeResult> = vec![];
         
         while !self.eof() {
             self.start = self.current;
@@ -152,6 +153,7 @@ impl Lexer {
                 '-' => self.add_token(TokenKind::Minus),
                 '+' => self.add_token(TokenKind::Plus),
                 '*' => self.add_token(TokenKind::Star),
+                '%' => self.add_token(TokenKind::Modulo),
 
                 // One or two char tokens
                 '!' => {
@@ -250,7 +252,7 @@ impl Lexer {
         }
     }
 
-    fn lex_string(&mut self) -> Result<(), ArcResult> {
+    fn lex_string(&mut self) -> Result<(), RazeResult> {
         while !self.eof() && self.at() != '\"' {
             if self.at() == '\n' {
                 self.eat();
@@ -273,7 +275,7 @@ impl Lexer {
         Ok(())
     }
 
-    fn lex_number(&mut self) -> Result<(), ArcResult> {
+    fn lex_number(&mut self) -> Result<(), RazeResult> {
         while self.at().is_numeric() {
             self.eat();
         }
@@ -314,7 +316,7 @@ impl Lexer {
         Ok(())
     }
 
-    fn lex_identifier(&mut self) -> Result<(), ArcResult> {
+    fn lex_identifier(&mut self) -> Result<(), RazeResult> {
         while self.at().is_alphanumeric() || self.at() == '_' {
             self.eat();
         }
@@ -363,9 +365,9 @@ impl Lexer {
         true
     }
 
-    fn trigger_error(&mut self, msg: String) -> ArcResult {
+    fn trigger_error(&mut self, msg: String) -> RazeResult {
         self.synchronize();
-        ArcResult::lexer_error(msg, self.get_loc())
+        RazeResult::lexer_error(msg, self.get_loc())
     }
 
     // Function used when an error is encountered. We skip until next
@@ -413,7 +415,7 @@ mod tests {
 
     #[test]
     fn tokenize_single_char() {
-        let code: String = "(){},.-+/*=!<>\n".into();
+        let code: String = "(){},.-+%/*=!<>\n".into();
         let mut lexer = Lexer::new(&code); 
         let tokens = lexer.tokenize().unwrap();
 
@@ -430,6 +432,7 @@ mod tests {
                 TokenKind::Dot,
                 TokenKind::Minus,
                 TokenKind::Plus,
+                TokenKind::Modulo,
                 TokenKind::Slash,
                 TokenKind::Star,
                 TokenKind::Equal,

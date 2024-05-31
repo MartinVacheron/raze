@@ -11,13 +11,13 @@ struct ReportContext<'a> {
 }
 
 #[derive(Debug)]
-pub struct ArcResult {
-    kind: ArcResultKind,
+pub struct RazeResult {
+    pub kind: RazeResultKind,
     msg: String,
 }
 
-#[derive(Debug)]
-pub enum ArcResultKind {
+#[derive(Debug, PartialEq)]
+pub enum RazeResultKind {
     LexerErr {
         loc: Loc
     },
@@ -27,34 +27,34 @@ pub enum ArcResultKind {
     InternalErr,
 }
 
-impl Display for ArcResultKind {
+impl Display for RazeResultKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ArcResultKind::LexerErr { .. } => write!(f, "{}", "Lexer error".red()),
-            ArcResultKind::ParserErr { .. } => write!(f, "{}", "Parser error".red()),
-            ArcResultKind::InternalErr => write!(f, "{}", "Internal error".red()),
+            RazeResultKind::LexerErr { .. } => write!(f, "{}", "Lexer error".red()),
+            RazeResultKind::ParserErr { .. } => write!(f, "{}", "Parser error".red()),
+            RazeResultKind::InternalErr => write!(f, "{}", "Internal error".red()),
         }
     }
 }
 
-impl<'a> ArcResult {
+impl<'a> RazeResult {
     pub fn lexer_error(msg: String, loc: Loc) -> Self {
-        ArcResult {
-            kind: ArcResultKind::LexerErr { loc },
+        RazeResult {
+            kind: RazeResultKind::LexerErr { loc },
             msg,
         }
     }
 
     pub fn parser_error(msg: String, loc: Loc) -> Self {
-        ArcResult {
-            kind: ArcResultKind::ParserErr { loc },
+        RazeResult {
+            kind: RazeResultKind::ParserErr { loc },
             msg,
         }
     }
 
     pub fn internal_error(msg: String) -> Self {
-        ArcResult {
-            kind: ArcResultKind::InternalErr,
+        RazeResult {
+            kind: RazeResultKind::InternalErr,
             msg,
         }
     }
@@ -65,8 +65,8 @@ impl<'a> ArcResult {
 
         // Additional infos
         match &self.kind {
-            ArcResultKind::LexerErr { loc }
-            | ArcResultKind::ParserErr { loc } => {
+            RazeResultKind::LexerErr { loc }
+            | RazeResultKind::ParserErr { loc } => {
                 let cx = self.get_context(code, loc);
                 let deco = self.get_decorators(&cx, loc);
 

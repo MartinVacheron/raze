@@ -12,7 +12,7 @@ use frontend::{lexer::Lexer, parser::Parser, ast_pretty_print::AstPrinter};
 
 #[derive(ClapParser)]
 #[command(version)]
-#[command(about="Interpreter for Arc language")]
+#[command(about="Interpreter for Raze language")]
 struct Cli {
     #[arg(short, long)]
     /// Path to the file to parse
@@ -42,7 +42,7 @@ fn run(code: String) {
     let tokens = match lexer.tokenize() {
         Ok(tk) => tk,
         Err(e) => {
-            e.iter().for_each(|e| e.report(&"placeholder.arc".into(), &code));
+            e.iter().for_each(|e| e.report(&"placeholder.rz".into(), &code));
             return
         }
     };
@@ -51,7 +51,7 @@ fn run(code: String) {
     let nodes = match parser.parse() {
         Ok(n) => n,
         Err(e) => {
-            e.iter().for_each(|e| e.report(&"placeholder.arc".into(), &code));
+            e.iter().for_each(|e| e.report(&"placeholder.rz".into(), &code));
             return
         }
     };
