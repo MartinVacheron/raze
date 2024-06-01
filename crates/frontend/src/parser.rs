@@ -4,24 +4,19 @@ use crate::expr::{
 use crate::lexer::{Loc, Token, TokenKind};
 use crate::results::RazeResult;
 
+
+#[derive(Default)]
 pub struct Parser<'a> {
     tokens: &'a [Token],
     start_loc: usize,
     current: usize,
-    nodes: Vec<Expr>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(tokens: &'a [Token]) -> Self {
-        Parser {
-            tokens,
-            start_loc: 0,
-            current: 0,
-            nodes: vec![],
-        }
-    }
+    pub fn parse(&mut self, tokens: &'a [Token]) -> Result<Vec<Expr>, Vec<RazeResult>> {
+        self.tokens = tokens;
 
-    pub fn parse(&mut self) -> Result<&Vec<Expr>, Vec<RazeResult>> {
+        let mut nodes: Vec<Expr> = vec![];
         let mut errors: Vec<RazeResult> = vec![];
 
         while !self.eof() {
@@ -39,7 +34,7 @@ impl<'a> Parser<'a> {
             self.start_loc = self.at().loc.start;
 
             match self.parse_expr() {
-                Ok(expr) => self.nodes.push(expr),
+                Ok(expr) => nodes.push(expr),
                 Err(e) => errors.push(e),
             }
         }
@@ -48,7 +43,7 @@ impl<'a> Parser<'a> {
             return Err(errors);
         }
 
-        Ok(&self.nodes)
+        Ok(nodes)
     }
 
     fn parse_expr(&mut self) -> Result<Expr, RazeResult> {
@@ -143,11 +138,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_primary(&mut self) -> Result<Expr, RazeResult> {
-        match &self
-            .eat()
-            .map_err(|_| RazeResult::parser_error("Unexpected end of file".into(), self.get_loc()))?
-            .kind
-        {
+        match &self.eat()?.kind {
             TokenKind::Identifier | TokenKind::True | TokenKind::False | TokenKind::Null => {
                 Ok(Expr::Identifier(IdentifierExpr {
                     name: self.prev().value.clone(),
@@ -215,9 +206,7 @@ impl<'a> Parser<'a> {
 
     fn eat(&mut self) -> Result<&Token, RazeResult> {
         if self.eof() {
-            return Err(RazeResult::internal_error(
-                "Token access out of bound".into(),
-            ));
+            return Err(RazeResult::parser_error("Unexpected end of file".into(), self.get_loc()))
         }
 
         self.current += 1;
@@ -311,10 +300,10 @@ mod tests {
 (true)
 ( (null ))"
             .into();
-        let mut lexer = Lexer::new(code.as_str());
-        let tokens = lexer.tokenize().unwrap();
-        let mut parser = Parser::new(tokens);
-        let nodes = parser.parse().unwrap();
+        let mut lexer = Lexer::new();
+        let tokens = lexer.tokenize(code.as_str()).unwrap();
+        let mut parser = Parser::default();
+        let nodes = parser.parse(tokens).unwrap();
 
         let mut test_parser = TestParser::default();
         let infos = test_parser.get_all_infos(&nodes).unwrap();
@@ -339,10 +328,10 @@ mod tests {
 25. / 3 + 4
             "
         .into();
-        let mut lexer = Lexer::new(code.as_str());
-        let tokens = lexer.tokenize().unwrap();
-        let mut parser = Parser::new(tokens);
-        let nodes = parser.parse().unwrap();
+        let mut lexer = Lexer::new();
+        let tokens = lexer.tokenize(code.as_str()).unwrap();
+        let mut parser = Parser::default();
+        let nodes = parser.parse(tokens).unwrap();
         let mut test_parser = TestParser::default();
         let infos = test_parser.get_all_infos(&nodes).unwrap();
 
@@ -384,10 +373,10 @@ mod tests {
 -54.67
 !true"
             .into();
-        let mut lexer = Lexer::new(code.as_str());
-        let tokens = lexer.tokenize().unwrap();
-        let mut parser = Parser::new(tokens);
-        let nodes = parser.parse().unwrap();
+        let mut lexer = Lexer::new();
+        let tokens = lexer.tokenize(code.as_str()).unwrap();
+        let mut parser = Parser::default();
+        let nodes = parser.parse(tokens).unwrap();
 
         let mut test_parser = TestParser::default();
         let infos = test_parser.get_all_infos(&nodes).unwrap();
@@ -418,10 +407,10 @@ mod tests {
   -24. + 6
 (a + foo)"
             .into();
-        let mut lexer = Lexer::new(code.as_str());
-        let tokens = lexer.tokenize().unwrap();
-        let mut parser = Parser::new(tokens);
-        let nodes = parser.parse().unwrap();
+        let mut lexer = Lexer::new();
+        let tokens = lexer.tokenize(code.as_str()).unwrap();
+        let mut parser = Parser::default();
+        let nodes = parser.parse(tokens).unwrap();
 
         let mut test_parser = TestParser::default();
         let infos = test_parser.get_all_infos(&nodes).unwrap();
@@ -446,10 +435,10 @@ mod tests {
 5 +
 (art + "
             .into();
-        let mut lexer = Lexer::new(code.as_str());
-        let tokens = lexer.tokenize().unwrap();
-        let mut parser = Parser::new(tokens);
-        let errs = parser.parse().err().unwrap();
+        let mut lexer = Lexer::new();
+        let tokens = lexer.tokenize(code.as_str()).unwrap();
+        let mut parser = Parser::default();
+        let errs = parser.parse(tokens).err().unwrap();
         assert_eq!(errs.len(), 6usize);
         // It must not be internal errors
         assert!(errs.iter().all(|e| e.kind != RazeResultKind::InternalErr));

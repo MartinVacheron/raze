@@ -90,18 +90,16 @@ pub struct Lexer {
     keywords: HashMap<String, TokenKind>,
     start: usize,
     current: usize,
-    line: usize,
 }
 
 impl Lexer {
-    pub fn new(code: &str) -> Self {
+    pub fn new() -> Self {
         let mut lex = Lexer {
-            code: code.chars().collect(),
+            code: vec![],
             tokens: vec![],
             keywords: HashMap::new(),
             start: 0,
             current: 0,
-            line: 1
         };
 
         lex.generate_keywords();
@@ -131,7 +129,9 @@ impl Lexer {
         self.keywords = map;
     }
 
-    pub fn tokenize(&mut self) -> Result<&Vec<Token>, Vec<RazeResult>> {
+    pub fn tokenize(&mut self, code: &str) -> Result<&Vec<Token>, Vec<RazeResult>> {
+        self.code = code.chars().collect();
+
         let mut errors: Vec<RazeResult> = vec![];
         
         while !self.eof() {
@@ -142,7 +142,7 @@ impl Lexer {
             match c {
                 // Skipable char
                 '\r' | '\t' | ' ' => {},
-                '\n' => self.lex_new_line(),
+                '\n' => self.add_token(TokenKind::NewLine),
                 // Single char tokens
                 '(' => self.add_token(TokenKind::OpenParen),
                 ')' => self.add_token(TokenKind::CloseParen),
@@ -241,11 +241,6 @@ impl Lexer {
         }
     }
 
-    fn lex_new_line(&mut self) {
-        self.line += 1;
-        self.add_token(TokenKind::NewLine);
-    }
-
     fn lex_comment(&mut self) {
         while !self.eof() && self.at() != '\n' {
             self.eat();
@@ -256,7 +251,7 @@ impl Lexer {
         while !self.eof() && self.at() != '\"' {
             if self.at() == '\n' {
                 self.eat();
-                self.lex_new_line();
+                self.add_token(TokenKind::NewLine);
             } else {
                 self.eat();
             }
@@ -416,8 +411,8 @@ mod tests {
     #[test]
     fn tokenize_single_char() {
         let code: String = "(){},.-+%/*=!<>\n".into();
-        let mut lexer = Lexer::new(&code); 
-        let tokens = lexer.tokenize().unwrap();
+        let mut lexer = Lexer::new(); 
+        let tokens = lexer.tokenize(&code).unwrap();
 
         let tk_kind: Vec<TokenKind> = tokens.iter().map(|tk| tk.kind.clone()).collect();
 
@@ -448,8 +443,8 @@ mod tests {
     #[test]
     fn tokenize_double_char() {
         let code: String = "!= <= >= ==".into();
-        let mut lexer = Lexer::new(&code); 
-        let tokens = lexer.tokenize().unwrap();
+        let mut lexer = Lexer::new(); 
+        let tokens = lexer.tokenize(&code).unwrap();
 
         let tk_kind: Vec<TokenKind> = tokens.iter().map(|tk| tk.kind.clone()).collect();
 
@@ -468,8 +463,8 @@ mod tests {
     #[test]
     fn tokenize_string() {
         let code: String = "\"hello world!\"".into();
-        let mut lexer = Lexer::new(&code); 
-        let tokens = lexer.tokenize().unwrap();
+        let mut lexer = Lexer::new(); 
+        let tokens = lexer.tokenize(&code).unwrap();
 
         let tk_kind: Vec<TokenKind> = tokens.iter().map(|tk| tk.kind.clone()).collect();
 
@@ -479,8 +474,8 @@ mod tests {
     #[test]
     fn tokenize_number() {
         let code: String = "12 25. 26.345".into();
-        let mut lexer = Lexer::new(&code); 
-        let tokens = lexer.tokenize().unwrap();
+        let mut lexer = Lexer::new(); 
+        let tokens = lexer.tokenize(&code).unwrap();
 
         let tk_type: Vec<TokenKind> = tokens.iter().map(|tk| tk.kind.clone()).collect();
         let tk_value: Vec<EcoString> = tokens.iter().map(|tk| tk.value.clone()).collect();
@@ -499,20 +494,20 @@ mod tests {
     #[test]
     fn number_errors() {
         let code: String = "12.5.".into();
-        let mut lexer = Lexer::new(&code); 
-        let tokens = lexer.tokenize();
+        let mut lexer = Lexer::new(); 
+        let tokens = lexer.tokenize(&code);
 
         assert!(tokens.is_err());
 
         let code: String = "12.534.45".into();
-        let mut lexer = Lexer::new(&code); 
-        let tokens = lexer.tokenize();
+        let mut lexer = Lexer::new(); 
+        let tokens = lexer.tokenize(&code);
 
         assert!(tokens.is_err());
 
         let code: String = "12.a".into();
-        let mut lexer = Lexer::new(&code); 
-        let tokens = lexer.tokenize();
+        let mut lexer = Lexer::new(); 
+        let tokens = lexer.tokenize(&code);
 
         assert!(tokens.is_err());
     }
@@ -520,8 +515,8 @@ mod tests {
     #[test]
     fn string_errors() {
         let code: String = "\"foo".into();
-        let mut lexer = Lexer::new(&code); 
-        let tokens = lexer.tokenize();
+        let mut lexer = Lexer::new(); 
+        let tokens = lexer.tokenize(&code);
 
         assert!(tokens.is_err());
     }
@@ -534,8 +529,8 @@ mod tests {
 for while
 
 break 45+7".into();
-        let mut lexer = Lexer::new(&code); 
-        let tokens = lexer.tokenize().unwrap();
+        let mut lexer = Lexer::new(); 
+        let tokens = lexer.tokenize(&code).unwrap();
 
         let tk_loc: Vec<&Loc> = tokens.iter().map(|tk| &tk.loc).collect();
 

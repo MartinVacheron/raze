@@ -1,10 +1,12 @@
-use std::{
-    error::Error, fs, io::{self, Write}, process
-};
 use clap::Parser as ClapParser;
+use std::{
+    error::Error,
+    fs,
+    io::{self, Write},
+    process,
+};
 
-use frontend::{lexer::Lexer, parser::Parser, ast_pretty_print::AstPrinter};
-
+use frontend::{ast_pretty_print::AstPrinter, lexer::Lexer, parser::Parser};
 
 // --------
 //   Cli
@@ -12,7 +14,7 @@ use frontend::{lexer::Lexer, parser::Parser, ast_pretty_print::AstPrinter};
 
 #[derive(ClapParser)]
 #[command(version)]
-#[command(about="Interpreter for Raze language")]
+#[command(about = "Interpreter for Raze language")]
 struct Cli {
     #[arg(short, long)]
     /// Path to the file to parse
@@ -22,76 +24,100 @@ struct Cli {
     #[arg(short, long)]
     inter: bool,
 
+    // Prints the tokens
+    #[arg(long)]
+    print_tokens: bool,
+
     // Prints the AST tree
-    // #[arg(short, long)]
-    // ast_print: bool,
+    #[arg(short, long)]
+    print_ast: bool,
+}
+
+struct Repl {
+    cli: Cli,
+    ast_printer: AstPrinter,
 }
 
 fn main() {
-    let cli = Cli::parse();
-
-    let _ = match cli.file {
-        Some(f) => run_file(f),
-        None => run_repl()
+    let mut repl = Repl {
+        cli: Cli::parse(),
+        ast_printer: AstPrinter {},
     };
+
+    repl.run();
 }
 
-fn run(code: String) {
-    let mut lexer = Lexer::new(&code);
-    
-    let tokens = match lexer.tokenize() {
-        Ok(tk) => tk,
-        Err(e) => {
-            e.iter().for_each(|e| e.report(&"placeholder.rz".into(), &code));
-            return
-        }
-    };
-
-    let mut parser = Parser::new(&tokens);
-    let nodes = match parser.parse() {
-        Ok(n) => n,
-        Err(e) => {
-            e.iter().for_each(|e| e.report(&"placeholder.rz".into(), &code));
-            return
-        }
-    };
-
-    let ast_print = AstPrinter {};
-    for n in nodes {
-        println!("{}", ast_print.print(n).unwrap());
+impl Repl {
+    pub fn run(&mut self) {
+        let _ = match &self.cli.file {
+            Some(f) => self.run_file(f.clone()),
+            None => self.run_repl(),
+        };
     }
-}
 
+    fn run_file(&mut self, file_path: String) -> Result<(), Box<dyn Error>> {
+        let code = fs::read_to_string(file_path)?;
+        self.sequence(code);
 
-fn run_file(file_path: String) -> Result<() , Box<dyn Error>> {
-    let code = fs::read_to_string(file_path)?;
-    run(code);
+        Ok(())
+    }
 
-    Ok(())
-}
+    fn run_repl(&mut self) -> Result<(), Box<dyn Error>> {
+        let stdin = io::stdin();
+        let mut stdout = io::stdout();
+        let mut input = String::new();
 
-fn run_repl() -> Result<() , Box<dyn Error>> {
-    // Local variables
-    let stdin = io::stdin();
-    let mut stdout = io::stdout();
+        loop {
+            input.clear();
+            print!("\n> ");
+            stdout.flush().unwrap();
 
-    let mut input = String::new();
+            stdin.read_line(&mut input)?;
+            let trimmed_input = input.trim();
 
-    loop {
-        input.clear();
-        print!("\n> ");
-        stdout.flush().unwrap();
+            if trimmed_input == "quit" {
+                process::exit(0);
+            }
 
-        stdin.read_line(&mut input)?;
-        let trimmed_input = input.trim();
+            if input.is_empty() {
+                continue;
+            }
 
-        if trimmed_input == "quit" {
-            process::exit(0);
+            // Execute interpreter
+            self.sequence(trimmed_input.to_string());
+        }
+    }
+
+    fn sequence(&mut self, code: String) {
+        let mut lexer = Lexer::new();
+        let mut parser = Parser::default();
+
+        let tokens = match lexer.tokenize(&code) {
+            Ok(tk) => tk,
+            Err(e) => {
+                e.iter() .for_each(|e| e.report(&"placeholder.rz".into(), &code));
+
+                return;
+            }
+        };
+
+        if self.cli.print_tokens {
+            println!("Tokens: {:#?}", tokens);
         }
 
-        if input.is_empty() { continue }
+        let nodes = match parser.parse(&tokens) {
+            Ok(n) => n,
+            Err(e) => {
+                e.iter()
+                    .for_each(|e| e.report(&"placeholder.rz".into(), &code));
+                return;
+            }
+        };
 
-        // Execute interpreter
-        run(trimmed_input.to_string());
+        if self.cli.print_ast {
+            for n in nodes {
+                println!("{}", self.ast_printer.print(&n).unwrap());
+            }
+        }
     }
 }
