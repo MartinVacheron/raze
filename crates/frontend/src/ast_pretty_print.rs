@@ -1,5 +1,5 @@
 use crate::expr::{
-    BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, UnaryExpr, VisitExpr,
+    BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
 };
 use crate::{expr::Expr, results::RazeResult};
 
@@ -38,6 +38,10 @@ impl VisitExpr<String> for AstPrinter {
     }
 
     fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<String, RazeResult> {
+        Ok(format!("{}", expr.value))
+    }
+
+    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<String, RazeResult> {
         Ok(format!("{}", expr.value))
     }
 

@@ -1,5 +1,5 @@
 use crate::expr::{
-    BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, UnaryExpr,
+    BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr
 };
 use crate::lexer::{Loc, Token, TokenKind};
 use crate::results::RazeResult;
@@ -147,6 +147,7 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Int => self.parse_int_literal(),
             TokenKind::Real => self.parse_real_literal(),
+            TokenKind::String => self.parse_str_literal(),
             TokenKind::OpenParen => self.parse_grouping(),
             TokenKind::NewLine => Err(self.trigger_error("Unexpected end of line".into(), false)),
             tk @ _ => match tk {
@@ -185,6 +186,15 @@ impl<'a> Parser<'a> {
         Ok(Expr::RealLiteral(RealLiteralExpr {
             value,
             loc: self.get_loc(),
+        }))
+    }
+    
+    fn parse_str_literal(&self) -> Result<Expr, RazeResult> {
+        let tk = self.prev();
+
+        Ok(Expr::StrLiteral(StrLiteralExpr {
+            value: tk.value.clone(),
+            loc: self.get_loc()
         }))
     }
 
@@ -297,6 +307,7 @@ mod tests {
         let code: String = "12
 24.
 54.678
+\"foo bar! 5-{6}\"
 (true)
 ( (null ))"
             .into();
@@ -310,6 +321,7 @@ mod tests {
 
         assert_eq!(infos.get_int_values(), vec![&12]);
         assert_eq!(infos.get_real_values(), vec![&24., &54.678]);
+        assert_eq!(infos.get_str_values(), vec![EcoString::from("foo bar! 5-{6}")]);
 
         assert_eq!(
             infos.get_grp_values()[0].get_ident_values(),

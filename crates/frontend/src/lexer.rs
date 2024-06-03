@@ -262,7 +262,7 @@ impl Lexer {
         }
 
         // We create the token without the surronding quotes
-        let value: String = self.code.get(self.start + 2..self.current).unwrap().iter().collect();
+        let value: String = self.code.get(self.start + 1..self.current).unwrap().iter().collect();
         // We eat the "
         self.eat();
 

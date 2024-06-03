@@ -2,8 +2,7 @@ use ecow::EcoString;
 
 use crate::{
     expr::{
-        BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, UnaryExpr,
-        VisitExpr,
+        BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
     },
     lexer::Loc,
     results::RazeResult,
@@ -13,6 +12,8 @@ use crate::{
 pub struct ExprInfos {
     pub int: Vec<IntInfo>,
     pub real: Vec<RealInfo>,
+    pub str: Vec<StrInfo>,
+    pub bool: Vec<BoolInfo>,
     pub binop: Vec<BinopInfo>,
     pub grouping: Vec<GroupingInfo>,
     pub ident: Vec<IdentifierInfo>,
@@ -26,6 +27,10 @@ impl ExprInfos {
 
     pub fn get_real_values(&self) -> Vec<&f64> {
         self.real.iter().map(|i| &i.value).collect()
+    }
+
+    pub fn get_str_values(&self) -> Vec<EcoString> {
+        self.str.iter().map(|i| i.value.clone()).collect()
     }
 
     pub fn get_grp_values(&self) -> Vec<&ExprInfos> {
@@ -57,6 +62,7 @@ impl ExprInfos {
     fn concat(&mut self, other: &mut ExprInfos) {
         self.int.append(&mut other.int);
         self.real.append(&mut other.real);
+        self.str.append(&mut other.str);
         self.binop.append(&mut other.binop);
         self.grouping.append(&mut other.grouping);
         self.unary.append(&mut other.unary);
@@ -80,6 +86,18 @@ pub struct IntInfo {
 #[derive(Debug, PartialEq)]
 pub struct RealInfo {
     pub value: f64,
+    pub loc: Loc,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct StrInfo {
+    pub value: EcoString,
+    pub loc: Loc,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct BoolInfo {
+    pub value: bool,
     pub loc: Loc,
 }
 
@@ -160,6 +178,17 @@ impl VisitExpr<ExprInfos> for TestParser {
             loc: expr.loc.clone(),
         };
         infos.real.push(real_infos);
+
+        Ok(infos)
+    }
+
+    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<ExprInfos, RazeResult> {
+        let mut infos = ExprInfos::default();
+        let str_infos = StrInfo {
+            value: expr.value.clone(),
+            loc: expr.loc.clone(),
+        };
+        infos.str.push(str_infos);
 
         Ok(infos)
     }

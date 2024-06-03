@@ -4,3 +4,5 @@ mod expr;
 pub mod ast_pretty_print;
 pub mod parser;
 pub mod test_parser;
+pub mod interpreter;
+pub mod values;

@@ -9,6 +9,7 @@ pub enum Expr {
     Grouping(GroupingExpr),
     IntLiteral(IntLiteralExpr),
     RealLiteral(RealLiteralExpr),
+    StrLiteral(StrLiteralExpr),
     Identifier(IdentifierExpr),
     Unary(UnaryExpr),
 }
@@ -20,6 +21,7 @@ impl Display for Expr {
             Expr::Grouping(e) => write!(f, "{}", e.expr),
             Expr::IntLiteral(e) => write!(f, "{}", e.value),
             Expr::RealLiteral(e) => write!(f, "{}", e.value),
+            Expr::StrLiteral(e) => write!(f, "{}", e.value),
             Expr::Identifier(e) => write!(f, "{}", e.name),
             Expr::Unary(e) => write!(f, "{} {}", e.operator, e.right),
         }
@@ -53,6 +55,12 @@ pub struct RealLiteralExpr {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct StrLiteralExpr {
+    pub value: EcoString,
+    pub loc: Loc,
+}
+
+#[derive(Debug, PartialEq)]
 pub struct IdentifierExpr {
     pub name: EcoString,
     pub loc: Loc,
@@ -72,6 +80,7 @@ impl Expr {
 			Expr::Grouping(e) => visitor.visit_grouping_expr(e),
 			Expr::IntLiteral(e) => visitor.visit_int_literal_expr(e),
 			Expr::RealLiteral(e) => visitor.visit_real_literal_expr(e),
+			Expr::StrLiteral(e) => visitor.visit_str_literal_expr(e),
 			Expr::Identifier(e) => visitor.visit_identifier_expr(e),
 			Expr::Unary(e) => visitor.visit_unary_expr(e),
 		}
@@ -84,6 +93,7 @@ pub trait VisitExpr<T> {
 	fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<T, RazeResult>;
 	fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<T, RazeResult>;
 	fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<T, RazeResult>;
+	fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<T, RazeResult>;
 	fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<T, RazeResult>;
 	fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<T, RazeResult>;
 }
