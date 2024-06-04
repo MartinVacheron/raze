@@ -1,6 +1,6 @@
 use std::rc::Rc;
 use crate::lexer::Token;
-use crate::results::RazeResult;
+use crate::results::PhyResult;
 
 
 
@@ -12,7 +12,7 @@ pub enum Expr {
 }
 
 impl Expr {
-	pub fn accept<T>(&self, visitor: &dyn VisitExpr<T>) -> Result<T, RazeResult> {
+	pub fn accept<T>(&self, visitor: &dyn VisitExpr<T>) -> Result<T, PhyResult> {
 		match self {
 			Expr::Binary(e) => visitor.visit_binary_expr(e.clone()),
 			Expr::Grouping(e) => visitor.visit_grouping_expr(e.clone()),
@@ -44,8 +44,8 @@ pub struct UnaryExpr {
 
 
 pub trait VisitExpr<T> {
-	fn visit_binary_expr(&self, expr: Rc<BinaryExpr>) -> Result<T, RazeResult>;
-	fn visit_grouping_expr(&self, expr: Rc<GroupingExpr>) -> Result<T, RazeResult>;
-	fn visit_literal_expr(&self, expr: Rc<LiteralExpr>) -> Result<T, RazeResult>;
-	fn visit_unary_expr(&self, expr: Rc<UnaryExpr>) -> Result<T, RazeResult>;
+	fn visit_binary_expr(&self, expr: Rc<BinaryExpr>) -> Result<T, PhyResult>;
+	fn visit_grouping_expr(&self, expr: Rc<GroupingExpr>) -> Result<T, PhyResult>;
+	fn visit_literal_expr(&self, expr: Rc<LiteralExpr>) -> Result<T, PhyResult>;
+	fn visit_unary_expr(&self, expr: Rc<UnaryExpr>) -> Result<T, PhyResult>;
 }

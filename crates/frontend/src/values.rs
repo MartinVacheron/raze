@@ -1,44 +1,144 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use ecow::EcoString;
 
+use crate::results::PhyResult;
+
 pub enum Values {
-    IntVal(Rc<Int>),
-    RealVal(Rc<Real>),
-    StrVal(Rc<Str>),
-    BoolVal(Rc<Bool>),
+    IntVal(Rc<RefCell<Int>>),
+    RealVal(Rc<RefCell<Real>>),
+    StrVal(Rc<RefCell<Str>>),
+    BoolVal(Rc<RefCell<Bool>>),
+}
+
+impl Values {
+    pub fn negate(&self) -> Result<(), PhyResult> {
+        match self {
+            Values::IntVal(i) => i.borrow_mut().value *= -1,
+            Values::RealVal(r) => r.borrow_mut().value *= -1.,
+            Values::BoolVal(b) => b.borrow_mut().value = !b.borrow().value,
+            _ => {
+                return Err(PhyResult::value_error(
+                    "Can't negate a value that isn't either: int, real or bool".into(),
+                ))
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn operate(&self, rhs: &Values, operator: &str) -> Result<Values, PhyResult> {
+        match (self, rhs) {
+            (Values::IntVal(i1), Values::IntVal(i2)) => match operator {
+                "+" => Ok((i1.borrow().value + i2.borrow().value).into()),
+                "-" => Ok((i1.borrow().value - i2.borrow().value).into()),
+                "*" => Ok((i1.borrow().value * i2.borrow().value).into()),
+                "/" => Ok((i1.borrow().value / i2.borrow().value).into()),
+                op => Err(PhyResult::value_error(
+                    format!(
+                        "Operator '{}' is not supported for operations on int type",
+                        op
+                    )
+                    .into(),
+                )),
+            },
+            (Values::RealVal(r1), Values::RealVal(r2)) => match operator {
+                "+" => Ok((r1.borrow().value + r2.borrow().value).into()),
+                "-" => Ok((r1.borrow().value - r2.borrow().value).into()),
+                "*" => Ok((r1.borrow().value * r2.borrow().value).into()),
+                "/" => Ok((r1.borrow().value / r2.borrow().value).into()),
+                op => Err(PhyResult::value_error(
+                    format!(
+                        "Operator '{}' is not supported for operations on real type",
+                        op
+                    )
+                    .into(),
+                )),
+            },
+            (Values::IntVal(i1), Values::RealVal(r1)) => match operator {
+                "+" => Ok((i1.borrow().value as f64 + r1.borrow().value).into()),
+                "-" => Ok((i1.borrow().value as f64 - r1.borrow().value).into()),
+                "*" => Ok((i1.borrow().value as f64 * r1.borrow().value).into()),
+                "/" => Ok((i1.borrow().value as f64 / r1.borrow().value).into()),
+                op => Err(PhyResult::value_error(
+                    format!(
+                        "Operator '{}' is not supported for operations on real type",
+                        op
+                    )
+                    .into(),
+                )),
+            },
+            (Values::RealVal(r1), Values::IntVal(i1)) => match operator {
+                "+" => Ok((r1.borrow().value + i1.borrow().value as f64).into()),
+                "-" => Ok((r1.borrow().value - i1.borrow().value as f64).into()),
+                "*" => Ok((r1.borrow().value * i1.borrow().value as f64).into()),
+                "/" => Ok((r1.borrow().value / i1.borrow().value as f64).into()),
+                op => Err(PhyResult::value_error(
+                    format!(
+                        "Operator '{}' is not supported for operations on real type",
+                        op
+                    )
+                    .into(),
+                )),
+            },
+            (Values::StrVal(s1), Values::StrVal(s2)) => match operator {
+                "+" => Ok(
+                    EcoString::from(format!("{}{}", s1.borrow().value, s2.borrow().value)).into(),
+                ),
+                op => Err(PhyResult::value_error(
+                    format!("Operator '{}' is not supported for string manipulation", op).into(),
+                )),
+            },
+            (Values::StrVal(s1), Values::IntVal(i1)) => match operator {
+                "*" => Ok(
+                    EcoString::from(s1.borrow().value.repeat(i1.borrow().value as usize)).into(),
+                ),
+                op => Err(PhyResult::value_error(
+                    format!("Operator '{}' is not supported for string repetition", op).into(),
+                )),
+            },
+            (Values::IntVal(i1), Values::StrVal(s1)) => match operator {
+                "*" => Ok(
+                    EcoString::from(s1.borrow().value.repeat(i1.borrow().value as usize)).into(),
+                ),
+                op => Err(PhyResult::value_error(
+                    format!("Operator '{}' is not supported for string repetition", op).into(),
+                )),
+            },
+            _ => Err(PhyResult::value_error("Operation not supported".into())),
+        }
+    }
 }
 
 pub struct Int {
-    value: i64,
+    pub value: i64,
 }
 pub struct Real {
-    value: f64,
+    pub value: f64,
 }
 pub struct Str {
-    value: EcoString,
+    pub value: EcoString,
 }
 pub struct Bool {
-    value: bool,
+    pub value: bool,
 }
 
 impl From<i64> for Values {
     fn from(value: i64) -> Self {
-        Values::IntVal(Rc::new(Int { value }))
+        Values::IntVal(Rc::new(RefCell::new(Int { value })))
     }
 }
 
 impl From<f64> for Values {
     fn from(value: f64) -> Self {
-        Values::RealVal(Rc::new(Real { value }))
+        Values::RealVal(Rc::new(RefCell::new(Real { value })))
     }
 }
 
-impl From<&EcoString> for Values {
-    fn from(value: &EcoString) -> Self {
-        Values::StrVal(Rc::new(Str {
+impl From<EcoString> for Values {
+    fn from(value: EcoString) -> Self {
+        Values::StrVal(Rc::new(RefCell::new(Str {
             value: value.clone(),
-        }))
+        })))
     }
 }
-

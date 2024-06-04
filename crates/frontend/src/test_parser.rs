@@ -5,7 +5,7 @@ use crate::{
         BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
     },
     lexer::Loc,
-    results::RazeResult,
+    results::PhyResult,
 };
 
 #[derive(Default, Debug, PartialEq)]
@@ -125,7 +125,7 @@ pub struct TestParser {
 }
 
 impl TestParser {
-    pub fn get_all_infos(&mut self, nodes: &[Expr]) -> Result<&ExprInfos, RazeResult> {
+    pub fn get_all_infos(&mut self, nodes: &[Expr]) -> Result<&ExprInfos, PhyResult> {
         for node in nodes {
             let mut res = node.accept(self).unwrap();
             self.infos.concat(&mut res);
@@ -136,7 +136,7 @@ impl TestParser {
 }
 
 impl VisitExpr<ExprInfos> for TestParser {
-    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<ExprInfos, RazeResult> {
+    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<ExprInfos, PhyResult> {
         let mut infos = ExprInfos::default();
         let int_infos = IntInfo {
             value: expr.value,
@@ -147,7 +147,7 @@ impl VisitExpr<ExprInfos> for TestParser {
         Ok(infos)
     }
 
-    fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<ExprInfos, RazeResult> {
+    fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<ExprInfos, PhyResult> {
         let mut infos = ExprInfos::default();
         let binop_infos = BinopInfo {
             left: expr.left.accept(self).unwrap(),
@@ -160,7 +160,7 @@ impl VisitExpr<ExprInfos> for TestParser {
         Ok(infos)
     }
 
-    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<ExprInfos, RazeResult> {
+    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<ExprInfos, PhyResult> {
         let mut infos = ExprInfos::default();
         let grouping_info = GroupingInfo {
             expr: expr.expr.accept(self).unwrap(),
@@ -171,7 +171,7 @@ impl VisitExpr<ExprInfos> for TestParser {
         Ok(infos)
     }
 
-    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<ExprInfos, RazeResult> {
+    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<ExprInfos, PhyResult> {
         let mut infos = ExprInfos::default();
         let real_infos = RealInfo {
             value: expr.value,
@@ -182,7 +182,7 @@ impl VisitExpr<ExprInfos> for TestParser {
         Ok(infos)
     }
 
-    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<ExprInfos, RazeResult> {
+    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<ExprInfos, PhyResult> {
         let mut infos = ExprInfos::default();
         let str_infos = StrInfo {
             value: expr.value.clone(),
@@ -193,7 +193,7 @@ impl VisitExpr<ExprInfos> for TestParser {
         Ok(infos)
     }
 
-    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<ExprInfos, RazeResult> {
+    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<ExprInfos, PhyResult> {
         let mut infos = ExprInfos::default();
         let ident_info = IdentifierInfo {
             name: expr.name.clone(),
@@ -203,7 +203,7 @@ impl VisitExpr<ExprInfos> for TestParser {
         Ok(infos)
     }
 
-    fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<ExprInfos, RazeResult> {
+    fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<ExprInfos, PhyResult> {
         let mut infos = ExprInfos::default();
         let unary_info = UnaryInfo {
             expr: expr.right.accept(self).unwrap(),

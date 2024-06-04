@@ -14,7 +14,7 @@ use frontend::{ast_pretty_print::AstPrinter, lexer::Lexer, parser::Parser};
 
 #[derive(ClapParser)]
 #[command(version)]
-#[command(about = "Interpreter for Raze language")]
+#[command(about = "Interpreter for Phy language")]
 struct Cli {
     #[arg(short, long)]
     /// Path to the file to parse
@@ -105,7 +105,7 @@ impl Repl {
             println!("Tokens: {:#?}", tokens);
         }
 
-        let nodes = match parser.parse(&tokens) {
+        let nodes = match parser.parse(tokens) {
             Ok(n) => n,
             Err(e) => {
                 e.iter()

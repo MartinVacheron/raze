@@ -2,7 +2,7 @@ use crate::expr::{
     BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr
 };
 use crate::lexer::{Loc, Token, TokenKind};
-use crate::results::RazeResult;
+use crate::results::PhyResult;
 
 
 #[derive(Default)]
@@ -13,11 +13,11 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse(&mut self, tokens: &'a [Token]) -> Result<Vec<Expr>, Vec<RazeResult>> {
+    pub fn parse(&mut self, tokens: &'a [Token]) -> Result<Vec<Expr>, Vec<PhyResult>> {
         self.tokens = tokens;
 
         let mut nodes: Vec<Expr> = vec![];
-        let mut errors: Vec<RazeResult> = vec![];
+        let mut errors: Vec<PhyResult> = vec![];
 
         while !self.eof() {
             // If we have a new line to begin a statement/expr parsing,
@@ -46,11 +46,11 @@ impl<'a> Parser<'a> {
         Ok(nodes)
     }
 
-    fn parse_expr(&mut self) -> Result<Expr, RazeResult> {
+    fn parse_expr(&mut self) -> Result<Expr, PhyResult> {
         self.parse_equality()
     }
 
-    fn parse_equality(&mut self) -> Result<Expr, RazeResult> {
+    fn parse_equality(&mut self) -> Result<Expr, PhyResult> {
         let mut expr = self.parse_comparison()?;
 
         while self.is_at(TokenKind::EqualEqual) || self.is_at(TokenKind::BangEqual) {
@@ -67,7 +67,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_comparison(&mut self) -> Result<Expr, RazeResult> {
+    fn parse_comparison(&mut self) -> Result<Expr, PhyResult> {
         let mut expr = self.parse_term()?;
 
         while self.is_at(TokenKind::Less)
@@ -88,7 +88,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_term(&mut self) -> Result<Expr, RazeResult> {
+    fn parse_term(&mut self) -> Result<Expr, PhyResult> {
         let mut expr = self.parse_factor()?;
 
         while self.is_at(TokenKind::Minus) || self.is_at(TokenKind::Plus) {
@@ -105,7 +105,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_factor(&mut self) -> Result<Expr, RazeResult> {
+    fn parse_factor(&mut self) -> Result<Expr, PhyResult> {
         let mut expr = self.parse_unary()?;
 
         while self.is_at(TokenKind::Star) || self.is_at(TokenKind::Slash) {
@@ -122,7 +122,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_unary(&mut self) -> Result<Expr, RazeResult> {
+    fn parse_unary(&mut self) -> Result<Expr, PhyResult> {
         if self.is_at(TokenKind::Bang) || self.is_at(TokenKind::Minus) {
             let operator = self.eat()?.value.clone();
             let right = self.parse_primary()?;
@@ -137,7 +137,7 @@ impl<'a> Parser<'a> {
         self.parse_primary()
     }
 
-    fn parse_primary(&mut self) -> Result<Expr, RazeResult> {
+    fn parse_primary(&mut self) -> Result<Expr, PhyResult> {
         match &self.eat()?.kind {
             TokenKind::Identifier | TokenKind::True | TokenKind::False | TokenKind::Null => {
                 Ok(Expr::Identifier(IdentifierExpr {
@@ -150,7 +150,7 @@ impl<'a> Parser<'a> {
             TokenKind::String => self.parse_str_literal(),
             TokenKind::OpenParen => self.parse_grouping(),
             TokenKind::NewLine => Err(self.trigger_error("Unexpected end of line".into(), false)),
-            tk @ _ => match tk {
+            tk => match tk {
                 TokenKind::Star | TokenKind::Plus | TokenKind::Slash | TokenKind::Modulo => {
                     Err(self
                         .trigger_error("Missing left hand side of binary expression".into(), true))
@@ -163,12 +163,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_int_literal(&self) -> Result<Expr, RazeResult> {
+    fn parse_int_literal(&self) -> Result<Expr, PhyResult> {
         let tk = self.prev();
         let value = tk
             .value
             .parse::<i64>()
-            .map_err(|_| RazeResult::internal_error("Error parsing int from string".into()))?;
+            .map_err(|_| PhyResult::internal_error("Error parsing int from string".into()))?;
 
         Ok(Expr::IntLiteral(IntLiteralExpr {
             value,
@@ -176,12 +176,12 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_real_literal(&self) -> Result<Expr, RazeResult> {
+    fn parse_real_literal(&self) -> Result<Expr, PhyResult> {
         let tk = self.prev();
         let value = tk
             .value
             .parse::<f64>()
-            .map_err(|_| RazeResult::internal_error("Error parsing real from string".into()))?;
+            .map_err(|_| PhyResult::internal_error("Error parsing real from string".into()))?;
 
         Ok(Expr::RealLiteral(RealLiteralExpr {
             value,
@@ -189,7 +189,7 @@ impl<'a> Parser<'a> {
         }))
     }
     
-    fn parse_str_literal(&self) -> Result<Expr, RazeResult> {
+    fn parse_str_literal(&self) -> Result<Expr, PhyResult> {
         let tk = self.prev();
 
         Ok(Expr::StrLiteral(StrLiteralExpr {
@@ -198,10 +198,10 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_grouping(&mut self) -> Result<Expr, RazeResult> {
+    fn parse_grouping(&mut self) -> Result<Expr, PhyResult> {
         let expr = self.parse_expr()?;
         self.expect(TokenKind::CloseParen).map_err(|_| {
-            RazeResult::parser_error("Parenthesis group is never closed".into(), self.get_loc())
+            PhyResult::parser_error("Parenthesis group is never closed".into(), self.get_loc())
         })?;
 
         Ok(Expr::Grouping(GroupingExpr {
@@ -214,16 +214,16 @@ impl<'a> Parser<'a> {
         self.tokens.get(self.current).unwrap()
     }
 
-    fn eat(&mut self) -> Result<&Token, RazeResult> {
+    fn eat(&mut self) -> Result<&Token, PhyResult> {
         if self.eof() {
-            return Err(RazeResult::parser_error("Unexpected end of file".into(), self.get_loc()))
+            return Err(PhyResult::parser_error("Unexpected end of file".into(), self.get_loc()))
         }
 
         self.current += 1;
         Ok(self.prev())
     }
 
-    fn expect(&mut self, kind: TokenKind) -> Result<(), RazeResult> {
+    fn expect(&mut self, kind: TokenKind) -> Result<(), PhyResult> {
         let tk = self.eat()?;
 
         match tk.kind == kind {
@@ -250,12 +250,12 @@ impl<'a> Parser<'a> {
     // We dont have to activate the synchro each time, if the error occured
     // because we ate a '\n' that wasn't supposed to be here, we are already
     // past the error, we are on the new line. No need to synchronize
-    fn trigger_error(&mut self, msg: String, synchro: bool) -> RazeResult {
+    fn trigger_error(&mut self, msg: String, synchro: bool) -> PhyResult {
         if synchro {
             self.synchronize();
         }
 
-        RazeResult::parser_error(msg, self.get_loc())
+        PhyResult::parser_error(msg, self.get_loc())
     }
 
     // TODO: For now, we are only looking for new line token as we
@@ -298,7 +298,7 @@ mod tests {
     use super::Parser;
     use crate::{
         lexer::{Lexer, Loc},
-        results::RazeResultKind,
+        results::PhyResultKind,
         test_parser::TestParser,
     };
 
@@ -453,6 +453,6 @@ mod tests {
         let errs = parser.parse(tokens).err().unwrap();
         assert_eq!(errs.len(), 6usize);
         // It must not be internal errors
-        assert!(errs.iter().all(|e| e.kind != RazeResultKind::InternalErr));
+        assert!(errs.iter().all(|e| e.kind != PhyResultKind::InternalErr));
     }
 }

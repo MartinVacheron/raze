@@ -11,50 +11,70 @@ struct ReportContext<'a> {
 }
 
 #[derive(Debug)]
-pub struct RazeResult {
-    pub kind: RazeResultKind,
+pub struct PhyResult {
+    pub kind: PhyResultKind,
     msg: String,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum RazeResultKind {
+pub enum PhyResultKind {
     LexerErr {
         loc: Loc
     },
     ParserErr {
         loc: Loc
     },
+    InterpreterErr {
+        loc: Loc,
+    },
+    ValueErr,
     InternalErr,
 }
 
-impl Display for RazeResultKind {
+impl Display for PhyResultKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RazeResultKind::LexerErr { .. } => write!(f, "{}", "Lexer error".red()),
-            RazeResultKind::ParserErr { .. } => write!(f, "{}", "Parser error".red()),
-            RazeResultKind::InternalErr => write!(f, "{}", "Internal error".red()),
+            PhyResultKind::LexerErr { .. } => write!(f, "{}", "Lexer error".red()),
+            PhyResultKind::ParserErr { .. } => write!(f, "{}", "Parser error".red()),
+            PhyResultKind::InterpreterErr { .. } => write!(f, "{}", "Interpreter error".red()),
+            PhyResultKind::ValueErr => write!(f, "{}", "Value error".red()),
+            PhyResultKind::InternalErr => write!(f, "{}", "Internal error".red()),
         }
     }
 }
 
-impl<'a> RazeResult {
+impl<'a> PhyResult {
     pub fn lexer_error(msg: String, loc: Loc) -> Self {
-        RazeResult {
-            kind: RazeResultKind::LexerErr { loc },
+        PhyResult {
+            kind: PhyResultKind::LexerErr { loc },
             msg,
         }
     }
 
     pub fn parser_error(msg: String, loc: Loc) -> Self {
-        RazeResult {
-            kind: RazeResultKind::ParserErr { loc },
+        PhyResult {
+            kind: PhyResultKind::ParserErr { loc },
+            msg,
+        }
+    }
+
+    pub fn interpreter_error(msg: String, loc: Loc) -> Self {
+        PhyResult {
+            kind: PhyResultKind::InterpreterErr { loc },
+            msg,
+        }
+    }
+
+    pub fn value_error(msg: String) -> Self {
+        PhyResult {
+            kind: PhyResultKind::ValueErr,
             msg,
         }
     }
 
     pub fn internal_error(msg: String) -> Self {
-        RazeResult {
-            kind: RazeResultKind::InternalErr,
+        PhyResult {
+            kind: PhyResultKind::InternalErr,
             msg,
         }
     }
@@ -65,8 +85,9 @@ impl<'a> RazeResult {
 
         // Additional infos
         match &self.kind {
-            RazeResultKind::LexerErr { loc }
-            | RazeResultKind::ParserErr { loc } => {
+            PhyResultKind::LexerErr { loc }
+            | PhyResultKind::ParserErr { loc }
+            | PhyResultKind::InterpreterErr { loc } => {
                 let cx = self.get_context(code, loc);
                 let deco = self.get_decorators(&cx, loc);
 

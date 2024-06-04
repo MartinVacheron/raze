@@ -1,16 +1,16 @@
 use crate::expr::{
     BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
 };
-use crate::{expr::Expr, results::RazeResult};
+use crate::{expr::Expr, results::PhyResult};
 
 pub struct AstPrinter {}
 
 impl AstPrinter {
-    pub fn print(&self, expr: &Expr) -> Result<String, RazeResult> {
+    pub fn print(&self, expr: &Expr) -> Result<String, PhyResult> {
         expr.accept(self)
     }
 
-    fn parenthesize(&self, name: &str, exprs: &[&Expr]) -> Result<String, RazeResult> {
+    fn parenthesize(&self, name: &str, exprs: &[&Expr]) -> Result<String, PhyResult> {
         let mut final_str: String = format!("({}", name);
 
         for expr in exprs {
@@ -18,38 +18,38 @@ impl AstPrinter {
             final_str.push_str(expr.accept(self)?.as_str());
         }
 
-        final_str.push_str(")");
+        final_str.push('(');
 
         Ok(final_str)
     }
 }
 
 impl VisitExpr<String> for AstPrinter {
-    fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<String, RazeResult> {
+    fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<String, PhyResult> {
         self.parenthesize(expr.operator.as_str(), &[&expr.left, &expr.right])
     }
 
-    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<String, RazeResult> {
+    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<String, PhyResult> {
         self.parenthesize("group", &[&expr.expr])
     }
 
-    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<String, RazeResult> {
+    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<String, PhyResult> {
         Ok(format!("{}", expr.value))
     }
 
-    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<String, RazeResult> {
+    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<String, PhyResult> {
         Ok(format!("{}", expr.value))
     }
 
-    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<String, RazeResult> {
+    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<String, PhyResult> {
         Ok(format!("{}", expr.value))
     }
 
-    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<String, RazeResult> {
+    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<String, PhyResult> {
         Ok(expr.name.to_string())
     }
 
-    fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<String, RazeResult> {
+    fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<String, PhyResult> {
         self.parenthesize(expr.operator.as_str(), &[&expr.right])
     }
 }

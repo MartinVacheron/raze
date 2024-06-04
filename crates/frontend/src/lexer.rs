@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 use ecow::EcoString;
 
-use super::results::RazeResult;
+use super::results::PhyResult;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenKind {
@@ -84,6 +84,7 @@ impl Display for Token {
     }
 }
 
+#[derive(Default)]
 pub struct Lexer {
     code: Vec<char>,
     tokens: Vec<Token>,
@@ -94,13 +95,7 @@ pub struct Lexer {
 
 impl Lexer {
     pub fn new() -> Self {
-        let mut lex = Lexer {
-            code: vec![],
-            tokens: vec![],
-            keywords: HashMap::new(),
-            start: 0,
-            current: 0,
-        };
+        let mut lex = Lexer::default();
 
         lex.generate_keywords();
         lex
@@ -129,10 +124,10 @@ impl Lexer {
         self.keywords = map;
     }
 
-    pub fn tokenize(&mut self, code: &str) -> Result<&Vec<Token>, Vec<RazeResult>> {
+    pub fn tokenize(&mut self, code: &str) -> Result<&Vec<Token>, Vec<PhyResult>> {
         self.code = code.chars().collect();
 
-        let mut errors: Vec<RazeResult> = vec![];
+        let mut errors: Vec<PhyResult> = vec![];
         
         while !self.eof() {
             self.start = self.current;
@@ -247,7 +242,7 @@ impl Lexer {
         }
     }
 
-    fn lex_string(&mut self) -> Result<(), RazeResult> {
+    fn lex_string(&mut self) -> Result<(), PhyResult> {
         while !self.eof() && self.at() != '\"' {
             if self.at() == '\n' {
                 self.eat();
@@ -270,7 +265,7 @@ impl Lexer {
         Ok(())
     }
 
-    fn lex_number(&mut self) -> Result<(), RazeResult> {
+    fn lex_number(&mut self) -> Result<(), PhyResult> {
         while self.at().is_numeric() {
             self.eat();
         }
@@ -311,7 +306,7 @@ impl Lexer {
         Ok(())
     }
 
-    fn lex_identifier(&mut self) -> Result<(), RazeResult> {
+    fn lex_identifier(&mut self) -> Result<(), PhyResult> {
         while self.at().is_alphanumeric() || self.at() == '_' {
             self.eat();
         }
@@ -360,9 +355,9 @@ impl Lexer {
         true
     }
 
-    fn trigger_error(&mut self, msg: String) -> RazeResult {
+    fn trigger_error(&mut self, msg: String) -> PhyResult {
         self.synchronize();
-        RazeResult::lexer_error(msg, self.get_loc())
+        PhyResult::lexer_error(msg, self.get_loc())
     }
 
     // Function used when an error is encountered. We skip until next
