@@ -13,7 +13,7 @@ struct ReportContext<'a> {
 #[derive(Debug)]
 pub struct PhyResult {
     pub kind: PhyResultKind,
-    msg: String,
+    pub msg: String,
 }
 
 #[derive(Debug, PartialEq)]

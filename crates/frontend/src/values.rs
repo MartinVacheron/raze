@@ -9,6 +9,7 @@ pub enum Values {
     RealVal(Rc<RefCell<Real>>),
     StrVal(Rc<RefCell<Str>>),
     BoolVal(Rc<RefCell<Bool>>),
+    Null,
 }
 
 impl Values {
@@ -27,6 +28,7 @@ impl Values {
         Ok(())
     }
 
+    // TODO: Error handling for other operation
     pub fn operate(&self, rhs: &Values, operator: &str) -> Result<Values, PhyResult> {
         match (self, rhs) {
             (Values::IntVal(i1), Values::IntVal(i2)) => match operator {
@@ -34,6 +36,12 @@ impl Values {
                 "-" => Ok((i1.borrow().value - i2.borrow().value).into()),
                 "*" => Ok((i1.borrow().value * i2.borrow().value).into()),
                 "/" => Ok((i1.borrow().value / i2.borrow().value).into()),
+                "<" => Ok((i1.borrow().value < i2.borrow().value).into()),
+                ">" => Ok((i1.borrow().value > i2.borrow().value).into()),
+                "<=" => Ok((i1.borrow().value <= i2.borrow().value).into()),
+                ">=" => Ok((i1.borrow().value >= i2.borrow().value).into()),
+                "==" => Ok((i1.borrow().value == i2.borrow().value).into()),
+                "!=" => Ok((i1.borrow().value != i2.borrow().value).into()),
                 op => Err(PhyResult::value_error(
                     format!(
                         "Operator '{}' is not supported for operations on int type",
@@ -47,6 +55,12 @@ impl Values {
                 "-" => Ok((r1.borrow().value - r2.borrow().value).into()),
                 "*" => Ok((r1.borrow().value * r2.borrow().value).into()),
                 "/" => Ok((r1.borrow().value / r2.borrow().value).into()),
+                "<" => Ok((r1.borrow().value < r2.borrow().value).into()),
+                ">" => Ok((r1.borrow().value > r2.borrow().value).into()),
+                "<=" => Ok((r1.borrow().value <= r2.borrow().value).into()),
+                ">=" => Ok((r1.borrow().value >= r2.borrow().value).into()),
+                "==" => Ok((r1.borrow().value == r2.borrow().value).into()),
+                "!=" => Ok((r1.borrow().value != r2.borrow().value).into()),
                 op => Err(PhyResult::value_error(
                     format!(
                         "Operator '{}' is not supported for operations on real type",
@@ -60,6 +74,12 @@ impl Values {
                 "-" => Ok((i1.borrow().value as f64 - r1.borrow().value).into()),
                 "*" => Ok((i1.borrow().value as f64 * r1.borrow().value).into()),
                 "/" => Ok((i1.borrow().value as f64 / r1.borrow().value).into()),
+                "<" => Ok(((i1.borrow().value as f64) < r1.borrow().value).into()),
+                ">" => Ok((i1.borrow().value as f64 > r1.borrow().value).into()),
+                "<=" => Ok((i1.borrow().value as f64 <= r1.borrow().value).into()),
+                ">=" => Ok((i1.borrow().value as f64 >= r1.borrow().value).into()),
+                "==" => Ok((i1.borrow().value as f64 == r1.borrow().value).into()),
+                "!=" => Ok((i1.borrow().value as f64 != r1.borrow().value).into()),
                 op => Err(PhyResult::value_error(
                     format!(
                         "Operator '{}' is not supported for operations on real type",
@@ -73,6 +93,12 @@ impl Values {
                 "-" => Ok((r1.borrow().value - i1.borrow().value as f64).into()),
                 "*" => Ok((r1.borrow().value * i1.borrow().value as f64).into()),
                 "/" => Ok((r1.borrow().value / i1.borrow().value as f64).into()),
+                "<" => Ok((r1.borrow().value < i1.borrow().value as f64).into()),
+                ">" => Ok((r1.borrow().value > i1.borrow().value as f64).into()),
+                "<=" => Ok((r1.borrow().value <= i1.borrow().value as f64).into()),
+                ">=" => Ok((r1.borrow().value >= i1.borrow().value as f64).into()),
+                "==" => Ok((r1.borrow().value == i1.borrow().value as f64).into()),
+                "!=" => Ok((r1.borrow().value != i1.borrow().value as f64).into()),
                 op => Err(PhyResult::value_error(
                     format!(
                         "Operator '{}' is not supported for operations on real type",
@@ -85,6 +111,8 @@ impl Values {
                 "+" => Ok(
                     EcoString::from(format!("{}{}", s1.borrow().value, s2.borrow().value)).into(),
                 ),
+                "==" => Ok((s1.borrow().value == s2.borrow().value).into()),
+                "!=" => Ok((s1.borrow().value != s2.borrow().value).into()),
                 op => Err(PhyResult::value_error(
                     format!("Operator '{}' is not supported for string manipulation", op).into(),
                 )),
@@ -105,6 +133,19 @@ impl Values {
                     format!("Operator '{}' is not supported for string repetition", op).into(),
                 )),
             },
+            (Values::BoolVal(b1), Values::BoolVal(b2)) => match operator {
+                "and" => Ok((b1.borrow().value && b2.borrow().value).into()),
+                "or" => Ok((b1.borrow().value || b2.borrow().value).into()),
+                "==" => Ok((b1.borrow().value == b2.borrow().value).into()),
+                "!=" => Ok((b1.borrow().value != b2.borrow().value).into()),
+                op => Err(PhyResult::value_error(format!(
+                    "Operator '{}' is not supported for operations on bool type",
+                    op
+                ))),
+            },
+            (Values::Null, _) | (_, Values::Null) => {
+                Err(PhyResult::value_error("Can't use a null value in a binary operation".into()))
+            }
             _ => Err(PhyResult::value_error("Operation not supported".into())),
         }
     }
@@ -140,5 +181,11 @@ impl From<EcoString> for Values {
         Values::StrVal(Rc::new(RefCell::new(Str {
             value: value.clone(),
         })))
+    }
+}
+
+impl From<bool> for Values {
+    fn from(value: bool) -> Self {
+        Values::BoolVal(Rc::new(RefCell::new(Bool { value })))
     }
 }

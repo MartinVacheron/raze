@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::expr::{
     BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
 };
@@ -13,11 +11,14 @@ impl VisitExpr<Values> for Interpreter {
         let lhs = expr.left.accept(self)?;
         let rhs = expr.right.accept(self)?;
 
-        lhs.operate(&rhs, &expr.operator)
+        match lhs.operate(&rhs, &expr.operator) {
+            Ok(res) => Ok(res),
+            Err(e) => Err(PhyResult::interpreter_error(e.msg, expr.loc.clone()))
+        }
     }
 
     fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<Values, PhyResult> {
-        Ok(expr.expr.accept(self))?
+        expr.expr.accept(self)
     }
 
     fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<Values, PhyResult> {
