@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{borrow::Borrow, fmt::Display};
 use ecow::EcoString;
 use crate::{lexer::Loc, results::PhyResult};
 
@@ -24,6 +24,20 @@ impl Display for Expr {
             Expr::StrLiteral(e) => write!(f, "{}", e.value),
             Expr::Identifier(e) => write!(f, "{}", e.name),
             Expr::Unary(e) => write!(f, "{} {}", e.operator, e.right),
+        }
+    }
+}
+
+impl Expr {
+    pub fn get_loc(&self) -> Loc {
+        match self {
+            Self::Binary(b) => b.borrow().loc.clone(),
+            Self::Grouping(g) => g.borrow().loc.clone(),
+            Self::IntLiteral(i) => i.borrow().loc.clone(),
+            Self::RealLiteral(r) => r.borrow().loc.clone(),
+            Self::StrLiteral(s) => s.borrow().loc.clone(),
+            Self::Identifier(i) => i.borrow().loc.clone(),
+            Self::Unary(u) => u.borrow().loc.clone(),
         }
     }
 }

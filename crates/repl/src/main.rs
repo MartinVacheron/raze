@@ -6,7 +6,7 @@ use std::{
     process,
 };
 
-use frontend::{ast_pretty_print::AstPrinter, lexer::Lexer, parser::Parser};
+use frontend::{ast_pretty_print::AstPrinter, lexer::Lexer, parser::Parser, interpreter::Interpreter};
 
 // --------
 //   Cli
@@ -36,12 +36,14 @@ struct Cli {
 struct Repl {
     cli: Cli,
     ast_printer: AstPrinter,
+    interpreter: Interpreter,
 }
 
 fn main() {
     let mut repl = Repl {
         cli: Cli::parse(),
         ast_printer: AstPrinter {},
+        interpreter: Interpreter {},
     };
 
     repl.run();
@@ -115,9 +117,14 @@ impl Repl {
         };
 
         if self.cli.print_ast {
-            for n in nodes {
+            for n in &nodes {
                 println!("{}", self.ast_printer.print(&n).unwrap());
             }
+        }
+
+        match self.interpreter.interpret(&nodes) {
+            Ok(_) => {},
+            Err(e) => e.report(&"placeholder.rz".into(), &code)
         }
     }
 }

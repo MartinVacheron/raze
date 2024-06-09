@@ -1,10 +1,8 @@
-use std::{cell::RefCell, rc::Rc};
-
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 use ecow::EcoString;
-
 use crate::results::PhyResult;
 
-pub enum Values {
+pub enum RuntimeVal {
     IntVal(Rc<RefCell<Int>>),
     RealVal(Rc<RefCell<Real>>),
     StrVal(Rc<RefCell<Str>>),
@@ -12,12 +10,23 @@ pub enum Values {
     Null,
 }
 
-impl Values {
+trait Negate {
+    fn negate(&mut self);
+}
+
+trait Operate<Rhs> {
+    fn operate(&self, rhs: &Rhs, operator: &str) -> Result<RuntimeVal, PhyResult>;
+}
+
+
+impl RuntimeVal {
+    pub fn new_null() -> Self { RuntimeVal::Null }
+
     pub fn negate(&self) -> Result<(), PhyResult> {
         match self {
-            Values::IntVal(i) => i.borrow_mut().value *= -1,
-            Values::RealVal(r) => r.borrow_mut().value *= -1.,
-            Values::BoolVal(b) => b.borrow_mut().value = !b.borrow().value,
+            RuntimeVal::IntVal(i) => i.borrow_mut().negate(),
+            RuntimeVal::RealVal(r) => r.borrow_mut().negate(),
+            RuntimeVal::BoolVal(b) => b.borrow_mut().negate(),
             _ => {
                 return Err(PhyResult::value_error(
                     "Can't negate a value that isn't either: int, real or bool".into(),
@@ -29,121 +38,17 @@ impl Values {
     }
 
     // TODO: Error handling for other operation
-    pub fn operate(&self, rhs: &Values, operator: &str) -> Result<Values, PhyResult> {
+    pub fn operate(&self, rhs: &RuntimeVal, operator: &str) -> Result<RuntimeVal, PhyResult> {
         match (self, rhs) {
-            (Values::IntVal(i1), Values::IntVal(i2)) => match operator {
-                "+" => Ok((i1.borrow().value + i2.borrow().value).into()),
-                "-" => Ok((i1.borrow().value - i2.borrow().value).into()),
-                "*" => Ok((i1.borrow().value * i2.borrow().value).into()),
-                "/" => Ok((i1.borrow().value / i2.borrow().value).into()),
-                "<" => Ok((i1.borrow().value < i2.borrow().value).into()),
-                ">" => Ok((i1.borrow().value > i2.borrow().value).into()),
-                "<=" => Ok((i1.borrow().value <= i2.borrow().value).into()),
-                ">=" => Ok((i1.borrow().value >= i2.borrow().value).into()),
-                "==" => Ok((i1.borrow().value == i2.borrow().value).into()),
-                "!=" => Ok((i1.borrow().value != i2.borrow().value).into()),
-                op => Err(PhyResult::value_error(
-                    format!(
-                        "Operator '{}' is not supported for operations on int type",
-                        op
-                    )
-                    .into(),
-                )),
-            },
-            (Values::RealVal(r1), Values::RealVal(r2)) => match operator {
-                "+" => Ok((r1.borrow().value + r2.borrow().value).into()),
-                "-" => Ok((r1.borrow().value - r2.borrow().value).into()),
-                "*" => Ok((r1.borrow().value * r2.borrow().value).into()),
-                "/" => Ok((r1.borrow().value / r2.borrow().value).into()),
-                "<" => Ok((r1.borrow().value < r2.borrow().value).into()),
-                ">" => Ok((r1.borrow().value > r2.borrow().value).into()),
-                "<=" => Ok((r1.borrow().value <= r2.borrow().value).into()),
-                ">=" => Ok((r1.borrow().value >= r2.borrow().value).into()),
-                "==" => Ok((r1.borrow().value == r2.borrow().value).into()),
-                "!=" => Ok((r1.borrow().value != r2.borrow().value).into()),
-                op => Err(PhyResult::value_error(
-                    format!(
-                        "Operator '{}' is not supported for operations on real type",
-                        op
-                    )
-                    .into(),
-                )),
-            },
-            (Values::IntVal(i1), Values::RealVal(r1)) => match operator {
-                "+" => Ok((i1.borrow().value as f64 + r1.borrow().value).into()),
-                "-" => Ok((i1.borrow().value as f64 - r1.borrow().value).into()),
-                "*" => Ok((i1.borrow().value as f64 * r1.borrow().value).into()),
-                "/" => Ok((i1.borrow().value as f64 / r1.borrow().value).into()),
-                "<" => Ok(((i1.borrow().value as f64) < r1.borrow().value).into()),
-                ">" => Ok((i1.borrow().value as f64 > r1.borrow().value).into()),
-                "<=" => Ok((i1.borrow().value as f64 <= r1.borrow().value).into()),
-                ">=" => Ok((i1.borrow().value as f64 >= r1.borrow().value).into()),
-                "==" => Ok((i1.borrow().value as f64 == r1.borrow().value).into()),
-                "!=" => Ok((i1.borrow().value as f64 != r1.borrow().value).into()),
-                op => Err(PhyResult::value_error(
-                    format!(
-                        "Operator '{}' is not supported for operations on real type",
-                        op
-                    )
-                    .into(),
-                )),
-            },
-            (Values::RealVal(r1), Values::IntVal(i1)) => match operator {
-                "+" => Ok((r1.borrow().value + i1.borrow().value as f64).into()),
-                "-" => Ok((r1.borrow().value - i1.borrow().value as f64).into()),
-                "*" => Ok((r1.borrow().value * i1.borrow().value as f64).into()),
-                "/" => Ok((r1.borrow().value / i1.borrow().value as f64).into()),
-                "<" => Ok((r1.borrow().value < i1.borrow().value as f64).into()),
-                ">" => Ok((r1.borrow().value > i1.borrow().value as f64).into()),
-                "<=" => Ok((r1.borrow().value <= i1.borrow().value as f64).into()),
-                ">=" => Ok((r1.borrow().value >= i1.borrow().value as f64).into()),
-                "==" => Ok((r1.borrow().value == i1.borrow().value as f64).into()),
-                "!=" => Ok((r1.borrow().value != i1.borrow().value as f64).into()),
-                op => Err(PhyResult::value_error(
-                    format!(
-                        "Operator '{}' is not supported for operations on real type",
-                        op
-                    )
-                    .into(),
-                )),
-            },
-            (Values::StrVal(s1), Values::StrVal(s2)) => match operator {
-                "+" => Ok(
-                    EcoString::from(format!("{}{}", s1.borrow().value, s2.borrow().value)).into(),
-                ),
-                "==" => Ok((s1.borrow().value == s2.borrow().value).into()),
-                "!=" => Ok((s1.borrow().value != s2.borrow().value).into()),
-                op => Err(PhyResult::value_error(
-                    format!("Operator '{}' is not supported for string manipulation", op).into(),
-                )),
-            },
-            (Values::StrVal(s1), Values::IntVal(i1)) => match operator {
-                "*" => Ok(
-                    EcoString::from(s1.borrow().value.repeat(i1.borrow().value as usize)).into(),
-                ),
-                op => Err(PhyResult::value_error(
-                    format!("Operator '{}' is not supported for string repetition", op).into(),
-                )),
-            },
-            (Values::IntVal(i1), Values::StrVal(s1)) => match operator {
-                "*" => Ok(
-                    EcoString::from(s1.borrow().value.repeat(i1.borrow().value as usize)).into(),
-                ),
-                op => Err(PhyResult::value_error(
-                    format!("Operator '{}' is not supported for string repetition", op).into(),
-                )),
-            },
-            (Values::BoolVal(b1), Values::BoolVal(b2)) => match operator {
-                "and" => Ok((b1.borrow().value && b2.borrow().value).into()),
-                "or" => Ok((b1.borrow().value || b2.borrow().value).into()),
-                "==" => Ok((b1.borrow().value == b2.borrow().value).into()),
-                "!=" => Ok((b1.borrow().value != b2.borrow().value).into()),
-                op => Err(PhyResult::value_error(format!(
-                    "Operator '{}' is not supported for operations on bool type",
-                    op
-                ))),
-            },
-            (Values::Null, _) | (_, Values::Null) => {
+            (RuntimeVal::IntVal(i1), RuntimeVal::IntVal(i2)) => i1.borrow().operate(&*i2.borrow(), operator),
+            (RuntimeVal::RealVal(r1), RuntimeVal::RealVal(r2)) => r1.borrow().operate(&*r2.borrow(), operator),
+            (RuntimeVal::IntVal(i1), RuntimeVal::RealVal(r1)) => i1.borrow().operate(&*r1.borrow(), operator),
+            (RuntimeVal::RealVal(r1), RuntimeVal::IntVal(i1)) => r1.borrow().operate(&*i1.borrow(), operator),
+            (RuntimeVal::StrVal(s1), RuntimeVal::StrVal(s2)) => s1.borrow().operate(&*s2.borrow(), operator),
+            (RuntimeVal::StrVal(s1), RuntimeVal::IntVal(i1)) => s1.borrow().operate(&*i1.borrow(), operator),
+            (RuntimeVal::IntVal(i1), RuntimeVal::StrVal(s1)) => i1.borrow().operate(&*s1.borrow(), operator),
+            (RuntimeVal::BoolVal(b1), RuntimeVal::BoolVal(b2)) => b1.borrow().operate(&*b2.borrow(), operator),
+            (RuntimeVal::Null, _) | (_, RuntimeVal::Null) => {
                 Err(PhyResult::value_error("Can't use a null value in a binary operation".into()))
             }
             _ => Err(PhyResult::value_error("Operation not supported".into())),
@@ -151,41 +56,242 @@ impl Values {
     }
 }
 
+// -------
+//   Int
+// -------
 pub struct Int {
     pub value: i64,
 }
+
+impl Negate for Int {
+    fn negate(&mut self) {
+        self.value *= -1;
+    }
+}
+
+impl Operate<Int> for Int {
+    fn operate(&self, rhs: &Int, operator: &str) -> Result<RuntimeVal, PhyResult> {
+        match operator {
+            "+" => Ok((self.value + rhs.value).into()),
+            "-" => Ok((self.value - rhs.value).into()),
+            "*" => Ok((self.value * rhs.value).into()),
+            "/" => Ok((self.value / rhs.value).into()),
+            "<" => Ok((self.value < rhs.value).into()),
+            ">" => Ok((self.value > rhs.value).into()),
+            "<=" => Ok((self.value <= rhs.value).into()),
+            ">=" => Ok((self.value >= rhs.value).into()),
+            "==" => Ok((self.value == rhs.value).into()),
+            "!=" => Ok((self.value != rhs.value).into()),
+            op => Err(PhyResult::value_error(
+                format!(
+                    "Operator '{}' is not supported for operations on int type",
+                    op
+                )
+            )),
+        }
+    }
+}
+
+impl Operate<Real> for Int {
+    fn operate(&self, rhs: &Real, operator: &str) -> Result<RuntimeVal, PhyResult> {
+        match operator {
+            "+" => Ok((self.value as f64 + rhs.value).into()),
+            "-" => Ok((self.value as f64 - rhs.value).into()),
+            "*" => Ok((self.value as f64 * rhs.value).into()),
+            "/" => Ok((self.value as f64 / rhs.value).into()),
+            "<" => Ok(((self.value as f64) < rhs.value).into()),
+            ">" => Ok((self.value as f64 > rhs.value).into()),
+            "<=" => Ok((self.value as f64 <= rhs.value).into()),
+            ">=" => Ok((self.value as f64 >= rhs.value).into()),
+            "==" => Ok((self.value as f64 == rhs.value).into()),
+            "!=" => Ok((self.value as f64 != rhs.value).into()),
+            op => Err(PhyResult::value_error(
+                format!(
+                    "Operator '{}' is not supported for operations on int type",
+                    op
+                )
+            )),
+        }
+    }
+}
+
+impl Operate<Str> for Int {
+    fn operate(&self, rhs: &Str, operator: &str) -> Result<RuntimeVal, PhyResult> {
+        match operator {
+            "*" => Ok(
+                EcoString::from(rhs.value.repeat(self.value as usize)).into(),
+            ),
+            _ => Err(PhyResult::value_error(
+                format!("Can't use this operator for operations on string and int types").into(),
+            )),
+        }
+    }
+}
+
+
+// --------
+//   Real
+// --------
 pub struct Real {
     pub value: f64,
 }
+
+impl Negate for Real {
+    fn negate(&mut self) {
+        self.value *= -1.;
+    }
+}
+
+impl Operate<Int> for Real {
+    fn operate(&self, rhs: &Int, operator: &str) -> Result<RuntimeVal, PhyResult> {
+        match operator {
+            "+" => Ok((self.value + rhs.value as f64).into()),
+            "-" => Ok((self.value - rhs.value as f64).into()),
+            "*" => Ok((self.value * rhs.value as f64).into()),
+            "/" => Ok((self.value / rhs.value as f64).into()),
+            "<" => Ok((self.value < rhs.value as f64).into()),
+            ">" => Ok((self.value > rhs.value as f64).into()),
+            "<=" => Ok((self.value <= rhs.value as f64).into()),
+            ">=" => Ok((self.value >= rhs.value as f64).into()),
+            "==" => Ok((self.value == rhs.value as f64).into()),
+            "!=" => Ok((self.value != rhs.value as f64).into()),
+            op => Err(PhyResult::value_error(
+                format!(
+                    "Operator '{}' is not supported for operations on real type",
+                    op
+                )
+            )),
+        }
+    }
+}
+
+impl Operate<Real> for Real {
+    fn operate(&self, rhs: &Real, operator: &str) -> Result<RuntimeVal, PhyResult> {
+        match operator {
+            "+" => Ok((self.value + rhs.value).into()),
+            "-" => Ok((self.value - rhs.value).into()),
+            "*" => Ok((self.value * rhs.value).into()),
+            "/" => Ok((self.value / rhs.value).into()),
+            "<" => Ok((self.value < rhs.value).into()),
+            ">" => Ok((self.value > rhs.value).into()),
+            "<=" => Ok((self.value <= rhs.value).into()),
+            ">=" => Ok((self.value >= rhs.value).into()),
+            "==" => Ok((self.value == rhs.value).into()),
+            "!=" => Ok((self.value != rhs.value).into()),
+            op => Err(PhyResult::value_error(
+                format!(
+                    "Operator '{}' is not supported for operations on int type",
+                    op
+                )
+            )),
+        }
+    }
+}
+
+// ----------
+//   String
+// ----------
 pub struct Str {
     pub value: EcoString,
 }
+
+impl Operate<Str> for Str {
+    fn operate(&self, rhs: &Str, operator: &str) -> Result<RuntimeVal, PhyResult> {
+        match operator {
+            "+" => Ok(EcoString::from(format!("{}{}", self.value, rhs.value)).into(),),
+            "==" => Ok((self.value == rhs.value).into()),
+            "!=" => Ok((self.value != rhs.value).into()),
+            op => Err(PhyResult::value_error(
+                format!("Operator '{}' is not supported for string manipulation", op).into(),
+            )),
+        }
+    }
+}
+
+impl Operate<Int> for Str {
+    fn operate(&self, rhs: &Int, operator: &str) -> Result<RuntimeVal, PhyResult> {
+        match operator {
+            "*" => Ok(
+                EcoString::from(self.value.repeat(rhs.value as usize)).into(),
+            ),
+            _ => Err(PhyResult::value_error(
+                format!("Can't use this operator for operations on string and int types").into(),
+            )),
+        }
+    }
+}
+
+
+// --------
+//   Bool
+// --------
 pub struct Bool {
     pub value: bool,
 }
 
-impl From<i64> for Values {
+impl Negate for Bool {
+    fn negate(&mut self) {
+        self.value = !self.value;
+    }
+}
+
+impl Operate<Bool> for Bool {
+    fn operate(&self, rhs: &Bool, operator: &str) -> Result<RuntimeVal, PhyResult> {
+        match operator {
+            "and" => Ok((self.value && rhs.value).into()),
+            "or" => Ok((self.value || rhs.value).into()),
+            "==" => Ok((self.value == rhs.value).into()),
+            "!=" => Ok((self.value != rhs.value).into()),
+            op => Err(PhyResult::value_error(format!(
+                "Operator '{}' is not supported for operations on bool type",
+                op
+            ))),
+        }
+    }
+}
+
+
+// --------
+//   Into
+// --------
+impl From<i64> for RuntimeVal {
     fn from(value: i64) -> Self {
-        Values::IntVal(Rc::new(RefCell::new(Int { value })))
+        RuntimeVal::IntVal(Rc::new(RefCell::new(Int { value })))
     }
 }
 
-impl From<f64> for Values {
+impl From<f64> for RuntimeVal {
     fn from(value: f64) -> Self {
-        Values::RealVal(Rc::new(RefCell::new(Real { value })))
+        RuntimeVal::RealVal(Rc::new(RefCell::new(Real { value })))
     }
 }
 
-impl From<EcoString> for Values {
+impl From<EcoString> for RuntimeVal {
     fn from(value: EcoString) -> Self {
-        Values::StrVal(Rc::new(RefCell::new(Str {
+        RuntimeVal::StrVal(Rc::new(RefCell::new(Str {
             value: value.clone(),
         })))
     }
 }
 
-impl From<bool> for Values {
+impl From<bool> for RuntimeVal {
     fn from(value: bool) -> Self {
-        Values::BoolVal(Rc::new(RefCell::new(Bool { value })))
+        RuntimeVal::BoolVal(Rc::new(RefCell::new(Bool { value })))
+    }
+}
+
+
+// -----------
+//   Display
+// -----------
+impl Display for RuntimeVal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RuntimeVal::IntVal(i) => write!(f, "{}", i.borrow().value),
+            RuntimeVal::RealVal(r) => write!(f, "{}", r.borrow().value),
+            RuntimeVal::BoolVal(b) => write!(f, "{}", b.borrow().value),
+            RuntimeVal::StrVal(s) => write!(f, "\"{}\"", s.borrow().value),
+            RuntimeVal::Null => write!(f, "null"),
+        }
     }
 }

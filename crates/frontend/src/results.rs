@@ -28,6 +28,9 @@ pub enum PhyResultKind {
         loc: Loc,
     },
     ValueErr,
+    RuntimeErr {
+        loc: Loc,
+    },
     InternalErr,
 }
 
@@ -38,6 +41,7 @@ impl Display for PhyResultKind {
             PhyResultKind::ParserErr { .. } => write!(f, "{}", "Parser error".red()),
             PhyResultKind::InterpreterErr { .. } => write!(f, "{}", "Interpreter error".red()),
             PhyResultKind::ValueErr => write!(f, "{}", "Value error".red()),
+            PhyResultKind::RuntimeErr { .. } => write!(f, "{}", "Runtime error".red()),
             PhyResultKind::InternalErr => write!(f, "{}", "Internal error".red()),
         }
     }
@@ -72,6 +76,13 @@ impl<'a> PhyResult {
         }
     }
 
+    pub fn runtime_error(msg: String, loc: Loc) -> Self {
+        PhyResult {
+            kind: PhyResultKind::RuntimeErr { loc },
+            msg,
+        }
+    }
+
     pub fn internal_error(msg: String) -> Self {
         PhyResult {
             kind: PhyResultKind::InternalErr,
@@ -87,7 +98,8 @@ impl<'a> PhyResult {
         match &self.kind {
             PhyResultKind::LexerErr { loc }
             | PhyResultKind::ParserErr { loc }
-            | PhyResultKind::InterpreterErr { loc } => {
+            | PhyResultKind::InterpreterErr { loc }
+            | PhyResultKind::RuntimeErr { loc } => {
                 let cx = self.get_context(code, loc);
                 let deco = self.get_decorators(&cx, loc);
 
