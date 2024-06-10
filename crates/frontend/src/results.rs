@@ -14,34 +14,27 @@ struct ReportContext<'a> {
 pub struct PhyResult {
     pub kind: PhyResultKind,
     pub msg: String,
+    pub loc: Option<Loc>,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum PhyResultKind {
-    LexerErr {
-        loc: Loc
-    },
-    ParserErr {
-        loc: Loc
-    },
-    InterpreterErr {
-        loc: Loc,
-    },
+    LexerErr,
+    ParserErr,
+    InterpreterErr,
     ValueErr,
-    RuntimeErr {
-        loc: Loc,
-    },
+    RuntimeErr,
     InternalErr,
 }
 
 impl Display for PhyResultKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PhyResultKind::LexerErr { .. } => write!(f, "{}", "Lexer error".red()),
-            PhyResultKind::ParserErr { .. } => write!(f, "{}", "Parser error".red()),
-            PhyResultKind::InterpreterErr { .. } => write!(f, "{}", "Interpreter error".red()),
+            PhyResultKind::LexerErr => write!(f, "{}", "Lexer error".red()),
+            PhyResultKind::ParserErr => write!(f, "{}", "Parser error".red()),
+            PhyResultKind::InterpreterErr => write!(f, "{}", "Interpreter error".red()),
             PhyResultKind::ValueErr => write!(f, "{}", "Value error".red()),
-            PhyResultKind::RuntimeErr { .. } => write!(f, "{}", "Runtime error".red()),
+            PhyResultKind::RuntimeErr => write!(f, "{}", "Runtime error".red()),
             PhyResultKind::InternalErr => write!(f, "{}", "Internal error".red()),
         }
     }
@@ -50,22 +43,25 @@ impl Display for PhyResultKind {
 impl<'a> PhyResult {
     pub fn lexer_error(msg: String, loc: Loc) -> Self {
         PhyResult {
-            kind: PhyResultKind::LexerErr { loc },
+            kind: PhyResultKind::LexerErr,
             msg,
+            loc: Some(loc),
         }
     }
 
     pub fn parser_error(msg: String, loc: Loc) -> Self {
         PhyResult {
-            kind: PhyResultKind::ParserErr { loc },
+            kind: PhyResultKind::ParserErr,
             msg,
+            loc: Some(loc),
         }
     }
 
     pub fn interpreter_error(msg: String, loc: Loc) -> Self {
         PhyResult {
-            kind: PhyResultKind::InterpreterErr { loc },
+            kind: PhyResultKind::InterpreterErr,
             msg,
+            loc: Some(loc),
         }
     }
 
@@ -73,13 +69,15 @@ impl<'a> PhyResult {
         PhyResult {
             kind: PhyResultKind::ValueErr,
             msg,
+            loc: None
         }
     }
 
     pub fn runtime_error(msg: String, loc: Loc) -> Self {
         PhyResult {
-            kind: PhyResultKind::RuntimeErr { loc },
+            kind: PhyResultKind::RuntimeErr,
             msg,
+            loc: Some(loc)
         }
     }
 
@@ -87,6 +85,7 @@ impl<'a> PhyResult {
         PhyResult {
             kind: PhyResultKind::InternalErr,
             msg,
+            loc: None
         }
     }
     
@@ -95,29 +94,24 @@ impl<'a> PhyResult {
         println!("{}: {}", self.kind, self.msg);
 
         // Additional infos
-        match &self.kind {
-            PhyResultKind::LexerErr { loc }
-            | PhyResultKind::ParserErr { loc }
-            | PhyResultKind::InterpreterErr { loc }
-            | PhyResultKind::RuntimeErr { loc } => {
-                let cx = self.get_context(code, loc);
-                let deco = self.get_decorators(&cx, loc);
+        if let Some(loc) = &self.loc {
+            let cx = self.get_context(code, loc);
+            let deco = self.get_decorators(&cx, loc);
 
-                println!("  {} {} [line {}]", "-->".cyan(), file_name, cx.line);
+            println!("  {} {} [line {}]", "-->".cyan(), file_name, cx.line);
 
-                for (i, line) in cx.snippets {
-                    // If this line + 1 is % 10, the next one will be one digit
-                    // longer, so we add a space before the smallest
-                    let add_space = if (i + 1) % 10 == 0 { " " } else { "" };
+            for (i, line) in cx.snippets {
+                // If this line + 1 is % 10, the next one will be one digit
+                // longer, so we add a space before the smallest
+                let add_space = if (i + 1) % 10 == 0 { " " } else { "" };
 
-                    println!(" {} {}", format!("{}{} |", add_space, i).cyan(), line);
-                }
-
-                // Here, 4 is for space at the beginning and between line nb and '|' and space again
-                let margin = cx.line.to_string().len() + 4;
-                println!("{}{}\n", " ".repeat(margin), deco.red());
+                println!(" {} {}", format!("{}{} |", add_space, i).cyan(), line);
             }
-            _ => {}
+
+            // Here, 4 is for space at the beginning and between line nb and '|' and space again
+            let margin = cx.line.to_string().len() + 4;
+            println!("{}{}\n", " ".repeat(margin), deco.red());
+
         }
     }
 

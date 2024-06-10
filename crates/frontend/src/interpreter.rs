@@ -7,15 +7,17 @@ use crate::results::PhyResult;
 pub struct Interpreter {}
 
 impl Interpreter {
-    pub fn interpret(&self, nodes: &Vec<Expr>) -> Result<(), PhyResult> {
+    pub fn interpret(&self, nodes: &Vec<Expr>) -> Result<RuntimeVal, PhyResult> {
+        let mut res: RuntimeVal = RuntimeVal::Null;
+
         for node in nodes {
            match node.accept(self) {
-                Ok(r) => println!("{}", r),
+                Ok(r) => res = r,
                 Err(e) => return Err(PhyResult::runtime_error(e.msg, node.get_loc()))
             }
         }
 
-        Ok(())
+        Ok(res)
     }
 }
 
@@ -76,3 +78,76 @@ impl VisitExpr<RuntimeVal> for Interpreter {
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use ecow::EcoString;
+
+    use crate::utils::{lex_parse_interp, produce_runtime_error};
+
+    #[test]
+    fn interp_literals() {
+        let code = "1";
+        assert_eq!(lex_parse_interp(code).unwrap(), 1.into());
+
+        let code = "-45.";
+        assert_eq!(lex_parse_interp(code).unwrap(), (-45f64).into());
+
+        let code = "\"hello world!\"";
+        assert_eq!(lex_parse_interp(code).unwrap(), EcoString::from("hello world!").into());
+
+    }
+
+    #[test]
+    fn interp_binop() {
+        let code = "1 +2";
+        assert_eq!(lex_parse_interp(code).unwrap(), 3.into());
+
+        let code = "1. + -2 *24";
+        assert_eq!(lex_parse_interp(code).unwrap(), (-47f64).into());
+
+        let code = "5 + (6 * (2+3)) - (((6)))";
+        assert_eq!(lex_parse_interp(code).unwrap(), 29.into());
+    }
+
+    #[test]
+    fn interp_str_op() {
+        let code = "\"foo\" * 4";
+        assert_eq!(lex_parse_interp(code).unwrap(), EcoString::from("foofoofoofoo").into());
+
+        let code = "4 * \"foo\"";
+        assert_eq!(lex_parse_interp(code).unwrap(), EcoString::from("foofoofoofoo").into());
+
+        let code = "\"foo\" + \" \" + \"bar\"";
+        assert_eq!(lex_parse_interp(code).unwrap(), EcoString::from("foo bar").into());
+
+        // Errors
+        let code = "\"foo\" * 3.5";
+        assert!(produce_runtime_error(&code));
+
+        let code = "\"foo\" + 56";
+        assert!(produce_runtime_error(&code));
+    }
+    
+    #[test]
+    fn interp_negation() {
+        let code = "-3";
+        assert_eq!(lex_parse_interp(code).unwrap(), (-3).into());
+
+        let code = "-3.";
+        assert_eq!(lex_parse_interp(code).unwrap(), (-3f64).into());
+
+        let code = "!true";
+        assert_eq!(lex_parse_interp(code).unwrap(), false.into());
+
+        let code = "!false";
+        assert_eq!(lex_parse_interp(code).unwrap(), true.into());
+
+        // Errors
+        let code = "--3";
+        assert!(produce_runtime_error(&code));
+
+        let code = "- \"foo\"";
+        assert!(produce_runtime_error(&code));
+    }
+}

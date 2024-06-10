@@ -295,12 +295,11 @@ impl<'a> Parser<'a> {
 mod tests {
     use ecow::EcoString;
 
-    use super::Parser;
     use crate::{
-        lexer::{Lexer, Loc},
+        lexer::Loc,
         results::PhyResultKind,
-        test_parser::TestParser,
     };
+    use crate::utils::{get_nodes_infos, lex_and_parse};
 
     #[test]
     fn parse_primary() {
@@ -311,14 +310,8 @@ mod tests {
 (true)
 ( (null ))"
             .into();
-        let mut lexer = Lexer::new();
-        let tokens = lexer.tokenize(code.as_str()).unwrap();
-        let mut parser = Parser::default();
-        let nodes = parser.parse(tokens).unwrap();
 
-        let mut test_parser = TestParser::default();
-        let infos = test_parser.get_all_infos(&nodes).unwrap();
-
+        let infos = get_nodes_infos(&code);
         assert_eq!(infos.get_int_values(), vec![&12]);
         assert_eq!(infos.get_real_values(), vec![&24., &54.678]);
         assert_eq!(infos.get_str_values(), vec![EcoString::from("foo bar! 5-{6}")]);
@@ -340,13 +333,8 @@ mod tests {
 25. / 3 + 4
             "
         .into();
-        let mut lexer = Lexer::new();
-        let tokens = lexer.tokenize(code.as_str()).unwrap();
-        let mut parser = Parser::default();
-        let nodes = parser.parse(tokens).unwrap();
-        let mut test_parser = TestParser::default();
-        let infos = test_parser.get_all_infos(&nodes).unwrap();
 
+        let infos = get_nodes_infos(&code);
         let left = infos.get_binop_values()[0].0.get_real_values()[0];
         let right = infos.get_binop_values()[0].2.unary[0].expr.get_int_values()[0];
         assert_eq!(left, &14f64);
@@ -385,14 +373,8 @@ mod tests {
 -54.67
 !true"
             .into();
-        let mut lexer = Lexer::new();
-        let tokens = lexer.tokenize(code.as_str()).unwrap();
-        let mut parser = Parser::default();
-        let nodes = parser.parse(tokens).unwrap();
 
-        let mut test_parser = TestParser::default();
-        let infos = test_parser.get_all_infos(&nodes).unwrap();
-
+        let infos = get_nodes_infos(&code);
         assert_eq!(infos.unary[0].expr.get_int_values(), vec![&12]);
         assert_eq!(infos.unary[0].op, EcoString::from("-"));
 
@@ -419,14 +401,8 @@ mod tests {
   -24. + 6
 (a + foo)"
             .into();
-        let mut lexer = Lexer::new();
-        let tokens = lexer.tokenize(code.as_str()).unwrap();
-        let mut parser = Parser::default();
-        let nodes = parser.parse(tokens).unwrap();
 
-        let mut test_parser = TestParser::default();
-        let infos = test_parser.get_all_infos(&nodes).unwrap();
-
+        let infos = get_nodes_infos(&code);
         assert_eq!(
             infos.get_locations(),
             vec![
@@ -447,10 +423,8 @@ mod tests {
 5 +
 (art + "
             .into();
-        let mut lexer = Lexer::new();
-        let tokens = lexer.tokenize(code.as_str()).unwrap();
-        let mut parser = Parser::default();
-        let errs = parser.parse(tokens).err().unwrap();
+
+        let errs = lex_and_parse(&code).err().unwrap();
         assert_eq!(errs.len(), 6usize);
         // It must not be internal errors
         assert!(errs.iter().all(|e| e.kind != PhyResultKind::InternalErr));

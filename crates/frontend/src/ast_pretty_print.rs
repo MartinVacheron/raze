@@ -18,7 +18,7 @@ impl AstPrinter {
             final_str.push_str(expr.accept(self)?.as_str());
         }
 
-        final_str.push('(');
+        final_str.push(')');
 
         Ok(final_str)
     }

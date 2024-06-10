@@ -8,7 +8,7 @@ use crate::{
     results::PhyResult,
 };
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct ExprInfos {
     pub int: Vec<IntInfo>,
     pub real: Vec<RealInfo>,
@@ -69,7 +69,7 @@ impl ExprInfos {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct BinopInfo {
     pub left: ExprInfos,
     pub op: EcoString,
@@ -83,43 +83,43 @@ pub struct IntInfo {
     pub loc: Loc,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct RealInfo {
     pub value: f64,
     pub loc: Loc,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct StrInfo {
     pub value: EcoString,
     pub loc: Loc,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct BoolInfo {
     pub value: bool,
     pub loc: Loc,
 }
 
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq, Default, Clone)]
 pub struct GroupingInfo {
     pub expr: ExprInfos,
     pub loc: Loc,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct IdentifierInfo {
     pub name: EcoString,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct UnaryInfo {
     pub expr: ExprInfos,
     pub op: EcoString,
     pub loc: Loc,
 }
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct TestParser {
     pub infos: ExprInfos,
 }

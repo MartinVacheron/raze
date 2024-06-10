@@ -123,7 +123,7 @@ impl Repl {
         }
 
         match self.interpreter.interpret(&nodes) {
-            Ok(_) => {},
+            Ok(res) => println!("{}", res),
             Err(e) => e.report(&"placeholder.rz".into(), &code)
         }
     }

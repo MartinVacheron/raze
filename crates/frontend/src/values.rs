@@ -2,6 +2,7 @@ use std::{cell::RefCell, fmt::Display, rc::Rc};
 use ecow::EcoString;
 use crate::results::PhyResult;
 
+#[derive(Debug, PartialEq)]
 pub enum RuntimeVal {
     IntVal(Rc<RefCell<Int>>),
     RealVal(Rc<RefCell<Real>>),
@@ -59,6 +60,7 @@ impl RuntimeVal {
 // -------
 //   Int
 // -------
+#[derive(Debug, PartialEq)]
 pub struct Int {
     pub value: i64,
 }
@@ -132,6 +134,7 @@ impl Operate<Str> for Int {
 // --------
 //   Real
 // --------
+#[derive(Debug, PartialEq)]
 pub struct Real {
     pub value: f64,
 }
@@ -191,6 +194,7 @@ impl Operate<Real> for Real {
 // ----------
 //   String
 // ----------
+#[derive(Debug, PartialEq)]
 pub struct Str {
     pub value: EcoString,
 }
@@ -225,6 +229,7 @@ impl Operate<Int> for Str {
 // --------
 //   Bool
 // --------
+#[derive(Debug, PartialEq)]
 pub struct Bool {
     pub value: bool,
 }
