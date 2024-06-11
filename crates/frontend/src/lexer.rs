@@ -1,8 +1,44 @@
 use std::{collections::HashMap, fmt::Display};
 use ecow::EcoString;
+use thiserror::Error;
+use colored::*;
 
-use super::results::PhyResult;
+use super::results::{PhyResult, PhyReport};
 
+
+// ----------------
+// Error managment
+// ----------------
+#[derive(Error, Debug)]
+pub enum LexerErr {
+    //Tokens
+    #[error("Unexpected token found: '{0}'")]
+    UnexpectedToken(char),
+
+    // Strings
+    #[error("String literal never closed with '\"'")]
+    StringNeverClosed,
+
+    // Numbers
+    #[error("Expected nothing after real number declaration, found: '{0}'")]
+    NoSpaceAfterNumber(char),
+
+    #[error("Expected numbers or nothing after '.' in number literal, found: '{0}'")]
+    NonNumericDecimal(char),
+}
+
+impl PhyReport for LexerErr {
+    fn get_err_msg(&self) -> String {
+        format!("{} {}", "Lexer error:".red(), self)
+    }
+}
+
+type PhyResLex = PhyResult<LexerErr>;
+
+
+// --------
+//  Lexing
+// --------
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenKind {
     // Single character
@@ -124,10 +160,10 @@ impl Lexer {
         self.keywords = map;
     }
 
-    pub fn tokenize(&mut self, code: &str) -> Result<&Vec<Token>, Vec<PhyResult>> {
+    pub fn tokenize(&mut self, code: &str) -> Result<&Vec<Token>, Vec<PhyResLex>> {
         self.code = code.chars().collect();
 
-        let mut errors: Vec<PhyResult> = vec![];
+        let mut errors: Vec<PhyResLex> = vec![];
         
         while !self.eof() {
             self.start = self.current;
@@ -213,7 +249,7 @@ impl Lexer {
                             Err(e) => errors.push(e)
                         }
                     } else {
-                        errors.push(self.trigger_error(format!("Unexpected token found: '{}'", c)))
+                        errors.push(self.trigger_error(LexerErr::UnexpectedToken(c)))
                     }
                 }
             }
@@ -242,7 +278,7 @@ impl Lexer {
         }
     }
 
-    fn lex_string(&mut self) -> Result<(), PhyResult> {
+    fn lex_string(&mut self) -> Result<(), PhyResLex> {
         while !self.eof() && self.at() != '\"' {
             if self.at() == '\n' {
                 self.eat();
@@ -253,7 +289,7 @@ impl Lexer {
         }
 
         if self.eof() {
-            return Err(self.trigger_error("String literal never closed with '\"'".into()))
+            return Err(self.trigger_error(LexerErr::StringNeverClosed))
         }
 
         // We create the token without the surronding quotes
@@ -265,7 +301,7 @@ impl Lexer {
         Ok(())
     }
 
-    fn lex_number(&mut self) -> Result<(), PhyResult> {
+    fn lex_number(&mut self) -> Result<(), PhyResLex> {
         while self.at().is_numeric() {
             self.eat();
         }
@@ -274,14 +310,9 @@ impl Lexer {
             self.eat();
 
             if self.eof() || self.is_skippable() || self.at() == '\n' {
-                
+               // Nothing 
             } else if !self.at().is_numeric() {
-                return Err(self.trigger_error(
-                    format!(
-                        "Expected numbers or nothing after '.' in number literal, found: '{}'",
-                        self.at()
-                    )
-                ))
+                return Err(self.trigger_error(LexerErr::NonNumericDecimal(self.at())))
             } else {
                 while self.at().is_numeric() {
                     self.eat();
@@ -289,12 +320,7 @@ impl Lexer {
 
                 // After all the numbers, we expect a white space
                 if !self.eof() && !self.is_skippable() && self.at() != '\n' {
-                    return Err(self.trigger_error(
-                        format!(
-                            "Expected nothing after number literal, found: '{}'",
-                            self.at()
-                        )
-                    ))
+                    return Err(self.trigger_error(LexerErr::NoSpaceAfterNumber(self.at())))
                 }
             }
             self.add_token(TokenKind::Real);
@@ -306,7 +332,7 @@ impl Lexer {
         Ok(())
     }
 
-    fn lex_identifier(&mut self) -> Result<(), PhyResult> {
+    fn lex_identifier(&mut self) -> Result<(), PhyResLex> {
         while self.at().is_alphanumeric() || self.at() == '_' {
             self.eat();
         }
@@ -355,9 +381,9 @@ impl Lexer {
         true
     }
 
-    fn trigger_error(&mut self, msg: String) -> PhyResult {
+    fn trigger_error(&mut self, err: LexerErr) -> PhyResLex {
         self.synchronize();
-        PhyResult::lexer_error(msg, self.get_loc())
+        PhyResult::new(err, Some(self.get_loc()))
     }
 
     // Function used when an error is encountered. We skip until next
@@ -399,7 +425,7 @@ impl Lexer {
 mod tests {
     use ecow::EcoString;
 
-    use crate::lexer::{ TokenKind, Loc };
+    use crate::lexer::{ LexerErr, Loc, TokenKind };
 
     use super::Lexer;
 
@@ -492,19 +518,28 @@ mod tests {
         let mut lexer = Lexer::new(); 
         let tokens = lexer.tokenize(&code);
 
-        assert!(tokens.is_err());
+        assert!(matches!(
+            tokens.err().unwrap()[0].err,
+            LexerErr::NoSpaceAfterNumber(..)
+        ));
 
         let code: String = "12.534.45".into();
         let mut lexer = Lexer::new(); 
         let tokens = lexer.tokenize(&code);
 
-        assert!(tokens.is_err());
+        assert!(matches!(
+            tokens.err().unwrap()[0].err,
+            LexerErr::NoSpaceAfterNumber(..)
+        ));
 
         let code: String = "12.a".into();
         let mut lexer = Lexer::new(); 
         let tokens = lexer.tokenize(&code);
 
-        assert!(tokens.is_err());
+        assert!(matches!(
+            tokens.err().unwrap()[0].err,
+            LexerErr::NonNumericDecimal(..)
+        ));
     }
 
     #[test]
@@ -513,7 +548,10 @@ mod tests {
         let mut lexer = Lexer::new(); 
         let tokens = lexer.tokenize(&code);
 
-        assert!(tokens.is_err());
+        assert!(matches!(
+            tokens.err().unwrap()[0].err,
+            LexerErr::StringNeverClosed
+        ));
     }
 
     #[test]

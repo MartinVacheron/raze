@@ -1,8 +1,12 @@
-use std::{collections::VecDeque, fmt::Display};
+use std::collections::VecDeque;
 
 use colored::*;
 use super::lexer::Loc;
 
+
+pub trait PhyReport {
+    fn get_err_msg(&self) -> String;
+}
 
 struct ReportContext<'a> {
     line: usize,
@@ -11,89 +15,21 @@ struct ReportContext<'a> {
 }
 
 #[derive(Debug)]
-pub struct PhyResult {
-    pub kind: PhyResultKind,
-    pub msg: String,
+pub struct PhyResult<T: PhyReport> {
+    pub err: T,
     pub loc: Option<Loc>,
 }
 
-#[derive(Debug, PartialEq)]
-pub enum PhyResultKind {
-    LexerErr,
-    ParserErr,
-    InterpreterErr,
-    ValueErr,
-    RuntimeErr,
-    InternalErr,
-}
-
-impl Display for PhyResultKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PhyResultKind::LexerErr => write!(f, "{}", "Lexer error".red()),
-            PhyResultKind::ParserErr => write!(f, "{}", "Parser error".red()),
-            PhyResultKind::InterpreterErr => write!(f, "{}", "Interpreter error".red()),
-            PhyResultKind::ValueErr => write!(f, "{}", "Value error".red()),
-            PhyResultKind::RuntimeErr => write!(f, "{}", "Runtime error".red()),
-            PhyResultKind::InternalErr => write!(f, "{}", "Internal error".red()),
-        }
-    }
-}
-
-impl<'a> PhyResult {
-    pub fn lexer_error(msg: String, loc: Loc) -> Self {
-        PhyResult {
-            kind: PhyResultKind::LexerErr,
-            msg,
-            loc: Some(loc),
-        }
+impl<'a, T: PhyReport> PhyResult<T> {
+    pub fn new(err: T, loc: Option<Loc>) -> PhyResult<T> {
+        PhyResult { err, loc }
     }
 
-    pub fn parser_error(msg: String, loc: Loc) -> Self {
-        PhyResult {
-            kind: PhyResultKind::ParserErr,
-            msg,
-            loc: Some(loc),
-        }
-    }
-
-    pub fn interpreter_error(msg: String, loc: Loc) -> Self {
-        PhyResult {
-            kind: PhyResultKind::InterpreterErr,
-            msg,
-            loc: Some(loc),
-        }
-    }
-
-    pub fn value_error(msg: String) -> Self {
-        PhyResult {
-            kind: PhyResultKind::ValueErr,
-            msg,
-            loc: None
-        }
-    }
-
-    pub fn runtime_error(msg: String, loc: Loc) -> Self {
-        PhyResult {
-            kind: PhyResultKind::RuntimeErr,
-            msg,
-            loc: Some(loc)
-        }
-    }
-
-    pub fn internal_error(msg: String) -> Self {
-        PhyResult {
-            kind: PhyResultKind::InternalErr,
-            msg,
-            loc: None
-        }
-    }
-    
     pub fn report(&self, file_name: &String, code: &str) {
         // Error msg
-        println!("{}: {}", self.kind, self.msg);
+        println!("{}", self.err.get_err_msg());
 
-        // Additional infos
+        // Additional infos on location
         if let Some(loc) = &self.loc {
             let cx = self.get_context(code, loc);
             let deco = self.get_decorators(&cx, loc);
@@ -110,8 +46,7 @@ impl<'a> PhyResult {
 
             // Here, 4 is for space at the beginning and between line nb and '|' and space again
             let margin = cx.line.to_string().len() + 4;
-            println!("{}{}\n", " ".repeat(margin), deco.red());
-
+            print!("{}{}\n", " ".repeat(margin), deco.red());
         }
     }
 
@@ -134,7 +69,7 @@ impl<'a> PhyResult {
             }
         }
 
-        panic!("Code snippet not found while reporting error: {}", self.msg)
+        panic!("Code snippet not found while reporting error: {}", self.err.get_err_msg())
     }
     
     fn get_decorators(&self, cx: &ReportContext, loc: &Loc) -> String {

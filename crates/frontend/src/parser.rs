@@ -1,10 +1,56 @@
+use colored::*;
+use thiserror::Error;
+
 use crate::expr::{
-    BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr
+    BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr,
+    StrLiteralExpr, UnaryExpr,
 };
 use crate::lexer::{Loc, Token, TokenKind};
-use crate::results::PhyResult;
+use crate::results::{PhyReport, PhyResult};
 
+// ----------------
+// Error managment
+// ----------------
+#[derive(Debug, Error, PartialEq)]
+pub enum ParserErr {
+    // Primary
+    #[error("Unexpected end of line")]
+    UnexpectedEol,
 
+    #[error("Missing left hand side of binary expression")]
+    MissingLhsInBinop,
+
+    #[error("Unknown token to parse: '{0}'")]
+    UnknownToken(String),
+
+    #[error("Error parsing int")]
+    ParsingInt,
+
+    #[error("Error parsing real")]
+    ParsingReal,
+
+    #[error("Parenthesis group is never closed")]
+    ParenNeverClosed,
+
+    // Others
+    #[error("Unexpected end of file")]
+    UnexpectedEof,
+
+    #[error("Expected token type '{0:?}', found: {1:?}")]
+    UnexpextedToken(String, String),
+}
+
+impl PhyReport for ParserErr {
+    fn get_err_msg(&self) -> String {
+        format!("{} {}", "Parser error:".red(), self)
+    }
+}
+
+pub(crate) type PhyResParser = PhyResult<ParserErr>;
+
+// ---------
+//  Parsing
+// ---------
 #[derive(Default)]
 pub struct Parser<'a> {
     tokens: &'a [Token],
@@ -13,11 +59,11 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse(&mut self, tokens: &'a [Token]) -> Result<Vec<Expr>, Vec<PhyResult>> {
+    pub fn parse(&mut self, tokens: &'a [Token]) -> Result<Vec<Expr>, Vec<PhyResParser>> {
         self.tokens = tokens;
 
         let mut nodes: Vec<Expr> = vec![];
-        let mut errors: Vec<PhyResult> = vec![];
+        let mut errors: Vec<PhyResParser> = vec![];
 
         while !self.eof() {
             // If we have a new line to begin a statement/expr parsing,
@@ -46,11 +92,11 @@ impl<'a> Parser<'a> {
         Ok(nodes)
     }
 
-    fn parse_expr(&mut self) -> Result<Expr, PhyResult> {
+    fn parse_expr(&mut self) -> Result<Expr, PhyResParser> {
         self.parse_equality()
     }
 
-    fn parse_equality(&mut self) -> Result<Expr, PhyResult> {
+    fn parse_equality(&mut self) -> Result<Expr, PhyResParser> {
         let mut expr = self.parse_comparison()?;
 
         while self.is_at(TokenKind::EqualEqual) || self.is_at(TokenKind::BangEqual) {
@@ -67,7 +113,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_comparison(&mut self) -> Result<Expr, PhyResult> {
+    fn parse_comparison(&mut self) -> Result<Expr, PhyResParser> {
         let mut expr = self.parse_term()?;
 
         while self.is_at(TokenKind::Less)
@@ -88,7 +134,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_term(&mut self) -> Result<Expr, PhyResult> {
+    fn parse_term(&mut self) -> Result<Expr, PhyResParser> {
         let mut expr = self.parse_factor()?;
 
         while self.is_at(TokenKind::Minus) || self.is_at(TokenKind::Plus) {
@@ -105,7 +151,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_factor(&mut self) -> Result<Expr, PhyResult> {
+    fn parse_factor(&mut self) -> Result<Expr, PhyResParser> {
         let mut expr = self.parse_unary()?;
 
         while self.is_at(TokenKind::Star) || self.is_at(TokenKind::Slash) {
@@ -122,7 +168,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_unary(&mut self) -> Result<Expr, PhyResult> {
+    fn parse_unary(&mut self) -> Result<Expr, PhyResParser> {
         if self.is_at(TokenKind::Bang) || self.is_at(TokenKind::Minus) {
             let operator = self.eat()?.value.clone();
             let right = self.parse_primary()?;
@@ -137,7 +183,7 @@ impl<'a> Parser<'a> {
         self.parse_primary()
     }
 
-    fn parse_primary(&mut self) -> Result<Expr, PhyResult> {
+    fn parse_primary(&mut self) -> Result<Expr, PhyResParser> {
         match &self.eat()?.kind {
             TokenKind::Identifier | TokenKind::True | TokenKind::False | TokenKind::Null => {
                 Ok(Expr::Identifier(IdentifierExpr {
@@ -149,26 +195,24 @@ impl<'a> Parser<'a> {
             TokenKind::Real => self.parse_real_literal(),
             TokenKind::String => self.parse_str_literal(),
             TokenKind::OpenParen => self.parse_grouping(),
-            TokenKind::NewLine => Err(self.trigger_error("Unexpected end of line".into(), false)),
+            TokenKind::NewLine => Err(self.trigger_error(ParserErr::UnexpectedEol, false)),
             tk => match tk {
                 TokenKind::Star | TokenKind::Plus | TokenKind::Slash | TokenKind::Modulo => {
-                    Err(self
-                        .trigger_error("Missing left hand side of binary expression".into(), true))
+                    Err(self.trigger_error(ParserErr::MissingLhsInBinop, true))
                 }
                 _ => {
-                    Err(self
-                        .trigger_error(format!("Unknown token to parse: '{}'", self.prev()), true))
+                    Err(self.trigger_error(ParserErr::UnknownToken(self.prev().to_string()), true))
                 }
             },
         }
     }
 
-    fn parse_int_literal(&self) -> Result<Expr, PhyResult> {
+    fn parse_int_literal(&self) -> Result<Expr, PhyResParser> {
         let tk = self.prev();
         let value = tk
             .value
             .parse::<i64>()
-            .map_err(|_| PhyResult::internal_error("Error parsing int from string".into()))?;
+            .map_err(|_| PhyResult::new(ParserErr::ParsingInt, Some(self.get_loc())))?;
 
         Ok(Expr::IntLiteral(IntLiteralExpr {
             value,
@@ -176,33 +220,44 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_real_literal(&self) -> Result<Expr, PhyResult> {
+    fn parse_real_literal(&self) -> Result<Expr, PhyResParser> {
         let tk = self.prev();
         let value = tk
             .value
             .parse::<f64>()
-            .map_err(|_| PhyResult::internal_error("Error parsing real from string".into()))?;
+            .map_err(|_| PhyResult::new(ParserErr::ParsingReal, Some(self.get_loc())))?;
 
         Ok(Expr::RealLiteral(RealLiteralExpr {
             value,
             loc: self.get_loc(),
         }))
     }
-    
-    fn parse_str_literal(&self) -> Result<Expr, PhyResult> {
+
+    fn parse_str_literal(&self) -> Result<Expr, PhyResParser> {
         let tk = self.prev();
 
         Ok(Expr::StrLiteral(StrLiteralExpr {
             value: tk.value.clone(),
-            loc: self.get_loc()
+            loc: self.get_loc(),
         }))
     }
 
-    fn parse_grouping(&mut self) -> Result<Expr, PhyResult> {
-        let expr = self.parse_expr()?;
-        self.expect(TokenKind::CloseParen).map_err(|_| {
-            PhyResult::parser_error("Parenthesis group is never closed".into(), self.get_loc())
-        })?;
+    fn parse_grouping(&mut self) -> Result<Expr, PhyResParser> {
+        let expr = match self.parse_expr() {
+            Ok(expr) => expr,
+            Err(e) => match e.err {
+                ParserErr::UnexpectedEof | ParserErr::UnexpectedEol => {
+                    return Err(PhyResult::new(
+                        ParserErr::ParenNeverClosed,
+                        Some(self.get_loc()),
+                    ))
+                }
+                _ => return Err(e),
+            },
+        };
+
+        self.expect(TokenKind::CloseParen)
+            .map_err(|_| PhyResult::new(ParserErr::ParenNeverClosed, Some(self.get_loc())))?;
 
         Ok(Expr::Grouping(GroupingExpr {
             expr: Box::new(expr),
@@ -214,24 +269,27 @@ impl<'a> Parser<'a> {
         self.tokens.get(self.current).unwrap()
     }
 
-    fn eat(&mut self) -> Result<&Token, PhyResult> {
+    fn eat(&mut self) -> Result<&Token, PhyResParser> {
         if self.eof() {
-            return Err(PhyResult::parser_error("Unexpected end of file".into(), self.get_loc()))
+            return Err(PhyResult::new(
+                ParserErr::UnexpectedEof,
+                Some(self.get_loc()),
+            ));
         }
 
         self.current += 1;
         Ok(self.prev())
     }
 
-    fn expect(&mut self, kind: TokenKind) -> Result<(), PhyResult> {
+    fn expect(&mut self, kind: TokenKind) -> Result<(), PhyResParser> {
         let tk = self.eat()?;
 
         match tk.kind == kind {
             true => Ok(()),
-            false => {
-                let msg = format!("Expected token type '{:?}', found: {:?}", kind, tk.kind);
-                Err(self.trigger_error(msg, true))
-            }
+            false => Err(PhyResult::new(
+                ParserErr::UnexpextedToken(format!("{:?}", kind), format!("{:?}", tk.kind)),
+                Some(self.get_loc()),
+            )),
         }
     }
 
@@ -250,12 +308,12 @@ impl<'a> Parser<'a> {
     // We dont have to activate the synchro each time, if the error occured
     // because we ate a '\n' that wasn't supposed to be here, we are already
     // past the error, we are on the new line. No need to synchronize
-    fn trigger_error(&mut self, msg: String, synchro: bool) -> PhyResult {
+    fn trigger_error(&mut self, err: ParserErr, synchro: bool) -> PhyResParser {
         if synchro {
             self.synchronize();
         }
 
-        PhyResult::parser_error(msg, self.get_loc())
+        PhyResult::new(err, Some(self.get_loc()))
     }
 
     // TODO: For now, we are only looking for new line token as we
@@ -293,28 +351,27 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use ecow::EcoString;
-
-    use crate::{
-        lexer::Loc,
-        results::PhyResultKind,
-    };
+    use crate::lexer::Loc;
+    use crate::parser::ParserErr;
     use crate::utils::{get_nodes_infos, lex_and_parse};
+    use ecow::EcoString;
 
     #[test]
     fn parse_primary() {
-        let code: String = "12
+        let code = "12
 24.
 54.678
 \"foo bar! 5-{6}\"
 (true)
-( (null ))"
-            .into();
+( (null ))";
 
         let infos = get_nodes_infos(&code);
         assert_eq!(infos.get_int_values(), vec![&12]);
         assert_eq!(infos.get_real_values(), vec![&24., &54.678]);
-        assert_eq!(infos.get_str_values(), vec![EcoString::from("foo bar! 5-{6}")]);
+        assert_eq!(
+            infos.get_str_values(),
+            vec![EcoString::from("foo bar! 5-{6}")]
+        );
 
         assert_eq!(
             infos.get_grp_values()[0].get_ident_values(),
@@ -324,15 +381,22 @@ mod tests {
             infos.get_grp_values()[1].get_grp_values()[0].get_ident_values(),
             vec![EcoString::from("null")]
         );
+
+        // Errors
+        let code = "(art + 
+";
+
+        let errs = lex_and_parse(&code).err().unwrap();
+        let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
+
+        assert_eq!(e, vec![&ParserErr::ParenNeverClosed]);
     }
 
     #[test]
     fn parse_binop() {
-        let code: String = "14. + -67
+        let code = "14. + -67
 25. + 3 * 4
-25. / 3 + 4
-            "
-        .into();
+25. / 3 + 4";
 
         let infos = get_nodes_infos(&code);
         let left = infos.get_binop_values()[0].0.get_real_values()[0];
@@ -364,15 +428,23 @@ mod tests {
         assert_eq!(right_bis, &3i64);
         assert_eq!(op, EcoString::from("+"));
         assert_eq!(right, &4i64);
+
+        // Errors
+        let code = "5 +
+";
+
+        let errs = lex_and_parse(&code).err().unwrap();
+        let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
+
+        assert_eq!(e, vec![&ParserErr::UnexpectedEol]);
     }
 
     #[test]
     fn parse_unary() {
-        let code: String = "-12
+        let code = "-12
 -foo
 -54.67
-!true"
-            .into();
+!true";
 
         let infos = get_nodes_infos(&code);
         assert_eq!(infos.unary[0].expr.get_int_values(), vec![&12]);
@@ -392,15 +464,33 @@ mod tests {
             vec![EcoString::from("true")]
         );
         assert_eq!(infos.unary[3].op, EcoString::from("!"));
+
+        // Errors
+        let code = "+5
+*6
+/7
+%8";
+
+        let errs = lex_and_parse(&code).err().unwrap();
+        let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
+
+        assert_eq!(
+            e,
+            vec![
+                &ParserErr::MissingLhsInBinop,
+                &ParserErr::MissingLhsInBinop,
+                &ParserErr::MissingLhsInBinop,
+                &ParserErr::MissingLhsInBinop,
+            ]
+        );
     }
 
     #[test]
     fn location() {
-        let code: String = "-12
+        let code = "-12
     98
   -24. + 6
-(a + foo)"
-            .into();
+(a + foo)";
 
         let infos = get_nodes_infos(&code);
         assert_eq!(
@@ -412,21 +502,5 @@ mod tests {
                 &Loc::new(22, 31),
             ]
         );
-    }
-
-    #[test]
-    fn errors() {
-        let code: String = "+5
-*6
-/7
-%8
-5 +
-(art + "
-            .into();
-
-        let errs = lex_and_parse(&code).err().unwrap();
-        assert_eq!(errs.len(), 6usize);
-        // It must not be internal errors
-        assert!(errs.iter().all(|e| e.kind != PhyResultKind::InternalErr));
     }
 }

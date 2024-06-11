@@ -1,19 +1,54 @@
-use crate::expr::{
-    BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
-};
-use crate::values::RuntimeVal;
-use crate::results::PhyResult;
+use colored::Colorize;
+use thiserror::Error;
 
+use crate::expr::{
+    BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr,
+    StrLiteralExpr, UnaryExpr, VisitExpr,
+};
+use crate::results::{PhyReport, PhyResult};
+use crate::values::RuntimeVal;
+
+// ----------------
+// Error managment
+// ----------------
+#[derive(Debug, Error, PartialEq)]
+pub enum InterpErr {
+    // Binop
+    #[error("{0}")]
+    OperationEvaluation(String),
+
+    // Negate
+    #[error("Can't use '!' token on anything other than a bool value")]
+    BangOpOnNonBool,
+
+    #[error("Can't use '-' token on anything other than an int or a real value")]
+    NegateNonNumeric,
+
+    #[error("{0}")]
+    Negation(String),
+}
+
+impl PhyReport for InterpErr {
+    fn get_err_msg(&self) -> String {
+        format!("{} {}", "Interpreter error:".red(), self)
+    }
+}
+
+pub(crate) type PhyResInterp = PhyResult<InterpErr>;
+
+// --------------
+//  Interpreting
+// --------------
 pub struct Interpreter {}
 
 impl Interpreter {
-    pub fn interpret(&self, nodes: &Vec<Expr>) -> Result<RuntimeVal, PhyResult> {
+    pub fn interpret(&self, nodes: &Vec<Expr>) -> Result<RuntimeVal, PhyResInterp> {
         let mut res: RuntimeVal = RuntimeVal::Null;
 
         for node in nodes {
-           match node.accept(self) {
+            match node.accept(self) {
                 Ok(r) => res = r,
-                Err(e) => return Err(PhyResult::runtime_error(e.msg, node.get_loc()))
+                Err(e) => return Err(e),
             }
         }
 
@@ -21,69 +56,83 @@ impl Interpreter {
     }
 }
 
-impl VisitExpr<RuntimeVal> for Interpreter {
-    fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<RuntimeVal, PhyResult> {
+impl VisitExpr<RuntimeVal, InterpErr> for Interpreter {
+    fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<RuntimeVal, PhyResInterp> {
         let lhs = expr.left.accept(self)?;
         let rhs = expr.right.accept(self)?;
 
         match lhs.operate(&rhs, &expr.operator) {
             Ok(res) => Ok(res),
-            Err(e) => Err(PhyResult::interpreter_error(e.msg, expr.loc.clone()))
+            Err(e) => Err(PhyResult::new(
+                InterpErr::OperationEvaluation(e.err.to_string()),
+                Some(expr.loc.clone()),
+            )),
         }
     }
 
-    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<RuntimeVal, PhyResult> {
+    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<RuntimeVal, PhyResInterp> {
         expr.expr.accept(self)
     }
 
-    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<RuntimeVal, PhyResult> {
+    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<RuntimeVal, PhyResInterp> {
         Ok(expr.value.into())
     }
 
-    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<RuntimeVal, PhyResult> {
+    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<RuntimeVal, PhyResInterp> {
         Ok(expr.value.into())
     }
 
-    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<RuntimeVal, PhyResult> {
+    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<RuntimeVal, PhyResInterp> {
         Ok(expr.value.clone().into())
     }
 
-    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<RuntimeVal, PhyResult> {
+    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<RuntimeVal, PhyResInterp> {
         match expr.name.as_str() {
             "true" => Ok(true.into()),
             "false" => Ok(false.into()),
             "null" => Ok(RuntimeVal::new_null()),
-            _ => todo!()
+            _ => todo!(),
         }
     }
 
-    fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<RuntimeVal, PhyResult> {
+    fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<RuntimeVal, PhyResInterp> {
         let value = expr.right.accept(self)?;
 
         match (&value, expr.operator.as_str()) {
-            (RuntimeVal::IntVal(..) | RuntimeVal::RealVal(..), "!") => return Err(PhyResult::interpreter_error(
-                "Can't use '!' token on anything other than a bool value".into(),
-                expr.loc.clone(),
-            )),
-            (RuntimeVal::BoolVal(..), "-") => return Err(PhyResult::interpreter_error(
-                "Can't use '-' token on anything other than an int or a real value".into(),
-                expr.loc.clone(),
-            )),
+            (RuntimeVal::IntVal(..) | RuntimeVal::RealVal(..), "!") => {
+                return Err(PhyResult::new(
+                    InterpErr::BangOpOnNonBool,
+                    Some(expr.loc.clone()),
+                ))
+            }
+            (
+                RuntimeVal::BoolVal(..)
+                | RuntimeVal::StrVal(..)
+                | RuntimeVal::Null, "-") => {
+                return Err(PhyResult::new(
+                    InterpErr::NegateNonNumeric,
+                    Some(expr.loc.clone()),
+                ))
+            }
             _ => {}
         }
 
-        value.negate()?;
+        value.negate().map_err(|e| {
+            PhyResult::new(
+                InterpErr::Negation(e.err.to_string()),
+                Some(expr.loc.clone()),
+            )
+        })?;
 
         Ok(value)
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use ecow::EcoString;
 
-    use crate::utils::{lex_parse_interp, produce_runtime_error};
+    use crate::{interpreter::InterpErr, utils::lex_parse_interp};
 
     #[test]
     fn interp_literals() {
@@ -94,8 +143,10 @@ mod tests {
         assert_eq!(lex_parse_interp(code).unwrap(), (-45f64).into());
 
         let code = "\"hello world!\"";
-        assert_eq!(lex_parse_interp(code).unwrap(), EcoString::from("hello world!").into());
-
+        assert_eq!(
+            lex_parse_interp(code).unwrap(),
+            EcoString::from("hello world!").into()
+        );
     }
 
     #[test]
@@ -113,22 +164,37 @@ mod tests {
     #[test]
     fn interp_str_op() {
         let code = "\"foo\" * 4";
-        assert_eq!(lex_parse_interp(code).unwrap(), EcoString::from("foofoofoofoo").into());
+        assert_eq!(
+            lex_parse_interp(code).unwrap(),
+            EcoString::from("foofoofoofoo").into()
+        );
 
         let code = "4 * \"foo\"";
-        assert_eq!(lex_parse_interp(code).unwrap(), EcoString::from("foofoofoofoo").into());
+        assert_eq!(
+            lex_parse_interp(code).unwrap(),
+            EcoString::from("foofoofoofoo").into()
+        );
 
         let code = "\"foo\" + \" \" + \"bar\"";
-        assert_eq!(lex_parse_interp(code).unwrap(), EcoString::from("foo bar").into());
+        assert_eq!(
+            lex_parse_interp(code).unwrap(),
+            EcoString::from("foo bar").into()
+        );
 
         // Errors
         let code = "\"foo\" * 3.5";
-        assert!(produce_runtime_error(&code));
+        matches!(
+            lex_parse_interp(code).err().unwrap().err,
+            InterpErr::OperationEvaluation {..}
+        );
 
         let code = "\"foo\" + 56";
-        assert!(produce_runtime_error(&code));
+        matches!(
+            lex_parse_interp(code).err().unwrap().err,
+            InterpErr::OperationEvaluation {..}
+        );
     }
-    
+
     #[test]
     fn interp_negation() {
         let code = "-3";
@@ -144,10 +210,16 @@ mod tests {
         assert_eq!(lex_parse_interp(code).unwrap(), true.into());
 
         // Errors
-        let code = "--3";
-        assert!(produce_runtime_error(&code));
-
         let code = "- \"foo\"";
-        assert!(produce_runtime_error(&code));
+        assert_eq!(
+            lex_parse_interp(code).err().unwrap().err,
+            InterpErr::NegateNonNumeric
+        );
+
+        let code = "!8";
+        assert_eq!(
+            lex_parse_interp(code).err().unwrap().err,
+            InterpErr::BangOpOnNonBool
+        );
     }
 }

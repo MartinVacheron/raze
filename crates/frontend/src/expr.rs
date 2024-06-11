@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, fmt::Display};
 use ecow::EcoString;
-use crate::{lexer::Loc, results::PhyResult};
+use crate::{lexer::Loc, results::{PhyReport, PhyResult}};
 
 
 #[derive(Debug, PartialEq)]
@@ -88,7 +88,7 @@ pub struct UnaryExpr {
 }
 
 impl Expr {
-	pub fn accept<T>(&self, visitor: &dyn VisitExpr<T>) -> Result<T, PhyResult> {
+	pub fn accept<T, U: PhyReport>(&self, visitor: &dyn VisitExpr<T, U>) -> Result<T, PhyResult<U>> {
 		match self {
 			Expr::Binary(e) => visitor.visit_binary_expr(e),
 			Expr::Grouping(e) => visitor.visit_grouping_expr(e),
@@ -102,12 +102,12 @@ impl Expr {
 }
 
 
-pub trait VisitExpr<T> {
-	fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<T, PhyResult>;
-	fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<T, PhyResult>;
-	fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<T, PhyResult>;
-	fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<T, PhyResult>;
-	fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<T, PhyResult>;
-	fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<T, PhyResult>;
-	fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<T, PhyResult>;
+pub trait VisitExpr<T, U: PhyReport> {
+	fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<T, PhyResult<U>>;
+	fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<T, PhyResult<U>>;
+	fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<T, PhyResult<U>>;
+	fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<T, PhyResult<U>>;
+	fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<T, PhyResult<U>>;
+	fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<T, PhyResult<U>>;
+	fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<T, PhyResult<U>>;
 }
