@@ -12,18 +12,18 @@ use super::results::{PhyResult, PhyReport};
 #[derive(Error, Debug)]
 pub enum LexerErr {
     //Tokens
-    #[error("Unexpected token found: '{0}'")]
+    #[error("unexpected token found: '{0}'")]
     UnexpectedToken(char),
 
     // Strings
-    #[error("String literal never closed with '\"'")]
+    #[error("string literal never closed with '\"'")]
     StringNeverClosed,
 
     // Numbers
-    #[error("Expected nothing after real number declaration, found: '{0}'")]
+    #[error("expected nothing after real number declaration, found: '{0}'")]
     NoSpaceAfterNumber(char),
 
-    #[error("Expected numbers or nothing after '.' in number literal, found: '{0}'")]
+    #[error("expected numbers or nothing after '.' in number literal, found: '{0}'")]
     NonNumericDecimal(char),
 }
 
@@ -107,7 +107,7 @@ impl Loc {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Token {
     pub kind: TokenKind,
     pub value: EcoString,

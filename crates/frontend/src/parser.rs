@@ -7,6 +7,7 @@ use crate::expr::{
 };
 use crate::lexer::{Loc, Token, TokenKind};
 use crate::results::{PhyReport, PhyResult};
+use crate::stmt::{ExprStmt, PrintStmt, Stmt, VarDeclStmt};
 
 // ----------------
 // Error managment
@@ -14,29 +15,36 @@ use crate::results::{PhyReport, PhyResult};
 #[derive(Debug, Error, PartialEq)]
 pub enum ParserErr {
     // Primary
-    #[error("Unexpected end of line")]
+    #[error("unexpected end of line")]
     UnexpectedEol,
 
-    #[error("Missing left hand side of binary expression")]
+    #[error("missing left hand side of binary expression")]
     MissingLhsInBinop,
 
-    #[error("Unknown token to parse: '{0}'")]
+    #[error("unknown token to parse: '{0}'")]
     UnknownToken(String),
 
-    #[error("Error parsing int")]
+    #[error("error parsing int")]
     ParsingInt,
 
-    #[error("Error parsing real")]
+    #[error("error parsing real")]
     ParsingReal,
 
-    #[error("Parenthesis group is never closed")]
+    #[error("parenthesis group is never closed")]
     ParenNeverClosed,
 
+    // Variables
+    #[error("missing variable name after 'var' keyword in declaration")]
+    VarDeclNoName,
+
+    #[error("value assigned during declaration is incorrect: {0}")]
+    IncorrectVarDeclVal(String),
+
     // Others
-    #[error("Unexpected end of file")]
+    #[error("unexpected end of file")]
     UnexpectedEof,
 
-    #[error("Expected token type '{0:?}', found: {1:?}")]
+    #[error("expected token type '{0:?}', found: {1:?}")]
     UnexpextedToken(String, String),
 }
 
@@ -59,10 +67,10 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse(&mut self, tokens: &'a [Token]) -> Result<Vec<Expr>, Vec<PhyResParser>> {
+    pub fn parse(&mut self, tokens: &'a [Token]) -> Result<Vec<Stmt>, Vec<PhyResParser>> {
         self.tokens = tokens;
 
-        let mut nodes: Vec<Expr> = vec![];
+        let mut stmts: Vec<Stmt> = vec![];
         let mut errors: Vec<PhyResParser> = vec![];
 
         while !self.eof() {
@@ -79,8 +87,8 @@ impl<'a> Parser<'a> {
 
             self.start_loc = self.at().loc.start;
 
-            match self.parse_expr() {
-                Ok(expr) => nodes.push(expr),
+            match self.parse_declarations() {
+                Ok(stmt) => stmts.push(stmt),
                 Err(e) => errors.push(e),
             }
         }
@@ -89,7 +97,55 @@ impl<'a> Parser<'a> {
             return Err(errors);
         }
 
-        Ok(nodes)
+        Ok(stmts)
+    }
+
+    fn parse_declarations(&mut self) -> Result<Stmt, PhyResParser> {
+        match self.at().kind {
+            TokenKind::Var => self.parse_var_declaration(),
+            _ => self.parse_stmt(),
+        }
+    }
+
+    fn parse_var_declaration(&mut self) -> Result<Stmt, PhyResParser> {
+        self.expect(TokenKind::Var)?;
+        let name = self
+            .expect(TokenKind::Identifier)
+            .map_err(|_| self.trigger_error(ParserErr::VarDeclNoName, true))?
+            .value
+            .clone();
+
+        let mut value: Option<Expr> = None;
+
+        if self.at().kind == TokenKind::Equal {
+            self.eat()?;
+            value = Some(self.parse_expr().map_err(|e| {
+                self.trigger_error(ParserErr::IncorrectVarDeclVal(e.err.to_string()), true)
+            })?);
+        }
+
+        Ok(Stmt::VarDecl(VarDeclStmt { name, value }))
+    }
+
+    fn parse_stmt(&mut self) -> Result<Stmt, PhyResParser> {
+        match self.at().kind {
+            TokenKind::Print => self.parse_print_stmt(),
+            _ => self.parse_expr_stmt(),
+        }
+    }
+
+    fn parse_print_stmt(&mut self) -> Result<Stmt, PhyResParser> {
+        self.expect(TokenKind::Print)?;
+
+        let expr = self.parse_expr()?;
+
+        Ok(Stmt::Print(PrintStmt { expr }))
+    }
+
+    fn parse_expr_stmt(&mut self) -> Result<Stmt, PhyResParser> {
+        let expr = self.parse_expr()?;
+
+        Ok(Stmt::Expr(ExprStmt { expr }))
     }
 
     fn parse_expr(&mut self) -> Result<Expr, PhyResParser> {
@@ -281,11 +337,11 @@ impl<'a> Parser<'a> {
         Ok(self.prev())
     }
 
-    fn expect(&mut self, kind: TokenKind) -> Result<(), PhyResParser> {
+    fn expect(&mut self, kind: TokenKind) -> Result<Token, PhyResParser> {
         let tk = self.eat()?;
 
         match tk.kind == kind {
-            true => Ok(()),
+            true => Ok(self.prev().clone()),
             false => Err(PhyResult::new(
                 ParserErr::UnexpextedToken(format!("{:?}", kind), format!("{:?}", tk.kind)),
                 Some(self.get_loc()),
@@ -353,7 +409,7 @@ impl<'a> Parser<'a> {
 mod tests {
     use crate::lexer::Loc;
     use crate::parser::ParserErr;
-    use crate::utils::{get_nodes_infos, lex_and_parse};
+    use crate::utils::*;
     use ecow::EcoString;
 
     #[test]
@@ -365,7 +421,7 @@ mod tests {
 (true)
 ( (null ))";
 
-        let infos = get_nodes_infos(&code);
+        let infos = get_expr_nodes_infos(&code);
         assert_eq!(infos.get_int_values(), vec![&12]);
         assert_eq!(infos.get_real_values(), vec![&24., &54.678]);
         assert_eq!(
@@ -398,7 +454,7 @@ mod tests {
 25. + 3 * 4
 25. / 3 + 4";
 
-        let infos = get_nodes_infos(&code);
+        let infos = get_expr_nodes_infos(&code);
         let left = infos.get_binop_values()[0].0.get_real_values()[0];
         let right = infos.get_binop_values()[0].2.unary[0].expr.get_int_values()[0];
         assert_eq!(left, &14f64);
@@ -446,7 +502,7 @@ mod tests {
 -54.67
 !true";
 
-        let infos = get_nodes_infos(&code);
+        let infos = get_expr_nodes_infos(&code);
         assert_eq!(infos.unary[0].expr.get_int_values(), vec![&12]);
         assert_eq!(infos.unary[0].op, EcoString::from("-"));
 
@@ -486,13 +542,55 @@ mod tests {
     }
 
     #[test]
+    fn var_declaration() {
+        let code = "var a
+var b_cc = 4.
+var c34_U = 2 + 6 ";
+
+        let infos = get_nodes_infos(&code);
+        assert_eq!(infos.var_decl[0], ("a".into(), None));
+        assert_eq!(infos.var_decl[1].0, EcoString::from("b_cc"));
+        assert_eq!(
+            infos.var_decl[1].1.as_ref().unwrap().get_real_values(),
+            vec![&4f64]
+        );
+        assert_eq!(infos.var_decl[2].0, EcoString::from("c34_U"));
+        assert_eq!(
+            infos.var_decl[2].1.as_ref().unwrap().get_binop_values()[0]
+                .0
+                .get_int_values(),
+            vec![&2]
+        );
+        assert_eq!(
+            infos.var_decl[2].1.as_ref().unwrap().get_binop_values()[0].1,
+            EcoString::from("+")
+        );
+        assert_eq!(
+            infos.var_decl[2].1.as_ref().unwrap().get_binop_values()[0]
+                .2
+                .get_int_values(),
+            vec![&6]
+        );
+
+        // Errors
+        let code = "var 
+var b =
+var c = var";
+        let errs = lex_and_parse(code).err().unwrap();
+        let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
+        assert!(e[0] == &ParserErr::VarDeclNoName);
+        assert!(matches!(e[1], &ParserErr::IncorrectVarDeclVal{ .. }));
+        assert!(matches!(e[2], &ParserErr::IncorrectVarDeclVal{ .. }));
+    }
+
+    #[test]
     fn location() {
         let code = "-12
     98
   -24. + 6
 (a + foo)";
 
-        let infos = get_nodes_infos(&code);
+        let infos = get_expr_nodes_infos(&code);
         assert_eq!(
             infos.get_locations(),
             vec![

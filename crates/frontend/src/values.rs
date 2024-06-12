@@ -8,24 +8,24 @@ use crate::results::{PhyReport, PhyResult};
 #[derive(Debug, Error)]
 pub enum RuntimeValErr {
     // Negation
-    #[error("Can't negate a value that isn't either of type: int, real or bool")]
+    #[error("can't negate a value that isn't either of type: int, real or bool")]
     UnNegatable,
 
     // Types operations
-    #[error("Operator '{0}' is not supported for operations on {1} type")]
+    #[error("operator '{0}' is not supported for operations on {1} type")]
     UnsupportedOpOnType(String, String),
 
-    #[error("Can't use this operator for operations on string and int types")]
+    #[error("can't use this operator for operations on string and int types")]
     OpStrInt,
 
-    #[error("Operator '{0}' is not supported for string manipulation")]
+    #[error("operator '{0}' is not supported for string manipulation")]
     StringManip(String),
 
     // Others
-    #[error("Can't use a null value in a binary operation")]
+    #[error("can't use a null value in a binary operation")]
     OperationOnNull,
 
-    #[error("Operation not supported")]
+    #[error("operation not supported")]
     UnknownOperation,
 }
 
@@ -37,7 +37,7 @@ impl PhyReport for RuntimeValErr {
 
 type PhyResRuntimeVal = PhyResult<RuntimeValErr>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum RuntimeVal {
     IntVal(Rc<RefCell<Int>>),
     RealVal(Rc<RefCell<Real>>),
@@ -279,6 +279,14 @@ impl From<EcoString> for RuntimeVal {
     fn from(value: EcoString) -> Self {
         RuntimeVal::StrVal(Rc::new(RefCell::new(Str {
             value: value.clone(),
+        })))
+    }
+}
+
+impl From<String> for RuntimeVal {
+    fn from(value: String) -> Self {
+        RuntimeVal::StrVal(Rc::new(RefCell::new(Str {
+            value: value.into(),
         })))
     }
 }

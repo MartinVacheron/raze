@@ -6,6 +6,7 @@ use crate::expr::{
     StrLiteralExpr, UnaryExpr, VisitExpr,
 };
 use crate::results::{PhyReport, PhyResult};
+use crate::stmt::{ExprStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt};
 use crate::values::RuntimeVal;
 
 // ----------------
@@ -18,10 +19,10 @@ pub enum InterpErr {
     OperationEvaluation(String),
 
     // Negate
-    #[error("Can't use '!' token on anything other than a bool value")]
+    #[error("can't use '!' token on anything other than a bool value")]
     BangOpOnNonBool,
 
-    #[error("Can't use '-' token on anything other than an int or a real value")]
+    #[error("can't use '-' token on anything other than an int or a real value")]
     NegateNonNumeric,
 
     #[error("{0}")]
@@ -42,7 +43,7 @@ pub(crate) type PhyResInterp = PhyResult<InterpErr>;
 pub struct Interpreter {}
 
 impl Interpreter {
-    pub fn interpret(&self, nodes: &Vec<Expr>) -> Result<RuntimeVal, PhyResInterp> {
+    pub fn interpret(&self, nodes: &Vec<Stmt>) -> Result<RuntimeVal, PhyResInterp> {
         let mut res: RuntimeVal = RuntimeVal::Null;
 
         for node in nodes {
@@ -54,6 +55,19 @@ impl Interpreter {
 
         Ok(res)
     }
+}
+
+impl VisitStmt<RuntimeVal, InterpErr> for Interpreter {
+    fn visit_expr_stmt(&self, stmt: &ExprStmt) -> Result<RuntimeVal, PhyResult<InterpErr>> {
+        Ok(stmt.expr.accept(self)?)
+    }
+
+    fn visit_print_stmt(&self, stmt: &PrintStmt) -> Result<RuntimeVal, PhyResult<InterpErr>> {
+        Ok(stmt.expr.accept(self)?.into())
+    }
+     fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt) -> Result<RuntimeVal, PhyResult<InterpErr>> {
+         todo!()
+     }
 }
 
 impl VisitExpr<RuntimeVal, InterpErr> for Interpreter {

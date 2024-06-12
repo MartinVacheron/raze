@@ -1,9 +1,10 @@
 use crate::expr::{
-    BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
+    BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, StrLiteralExpr,
+    UnaryExpr, VisitExpr,
 };
 use crate::results::PhyReport;
+use crate::stmt::{ExprStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt};
 use crate::{expr::Expr, results::PhyResult};
-
 
 #[derive(Debug)]
 pub enum AstPrinterErr {}
@@ -19,7 +20,7 @@ impl PhyReport for AstPrinterErr {
 pub struct AstPrinter {}
 
 impl AstPrinter {
-    pub fn print(&self, expr: &Expr) -> Result<String, PhyResAstPrint> {
+    pub fn print(&self, expr: &Stmt) -> Result<String, PhyResAstPrint> {
         expr.accept(self)
     }
 
@@ -34,6 +35,22 @@ impl AstPrinter {
         final_str.push(')');
 
         Ok(final_str)
+    }
+}
+
+impl VisitStmt<String, AstPrinterErr> for AstPrinter {
+    fn visit_expr_stmt(&self, stmt: &ExprStmt) -> Result<String, PhyResult<AstPrinterErr>> {
+        Ok(stmt.expr.accept(self)?)
+    }
+
+    fn visit_print_stmt(&self, stmt: &PrintStmt) -> Result<String, PhyResult<AstPrinterErr>> {
+        self.parenthesize("print", &[&stmt.expr])
+    }
+
+    fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt) -> Result<String, PhyResult<AstPrinterErr>> {
+        let val_str = if let Some(v) = &stmt.value { format!("{}", v) } else { "None".to_string() };
+        let decl_str = format!("decl {} = {}", stmt.name, val_str);
+        self.parenthesize(&decl_str, &[])
     }
 }
 
@@ -55,7 +72,7 @@ impl VisitExpr<String, AstPrinterErr> for AstPrinter {
     }
 
     fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<String, PhyResAstPrint> {
-        Ok(format!("{}", expr.value))
+        Ok(format!("\"{}\"", expr.value))
     }
 
     fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<String, PhyResAstPrint> {
@@ -64,41 +81,5 @@ impl VisitExpr<String, AstPrinterErr> for AstPrinter {
 
     fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<String, PhyResAstPrint> {
         self.parenthesize(expr.operator.as_str(), &[&expr.right])
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use ecow::EcoString;
-
-    use crate::ast_pretty_print::AstPrinter;
-    use crate::expr::Expr;
-    use crate::expr::{BinaryExpr, GroupingExpr, IntLiteralExpr, RealLiteralExpr, UnaryExpr};
-    use crate::lexer::Loc;
-
-    #[test]
-    fn test_print() {
-        let expr = Expr::Binary(BinaryExpr {
-            left: Box::new(Expr::Unary(UnaryExpr {
-                operator: EcoString::from("-"),
-                right: Box::new(Expr::IntLiteral(IntLiteralExpr {
-                    value: 98,
-                    loc: Loc::new(0, 0),
-                })),
-                loc: Loc::new(0, 0)
-            })),
-            operator: EcoString::from("*"),
-            right: Box::new(Expr::Grouping(GroupingExpr {
-                expr: Box::new(Expr::RealLiteral(RealLiteralExpr {
-                    value: 13.45,
-                    loc: Loc::new(0, 0),
-                })),
-                loc: Loc::new(0, 0),
-            })),
-            loc: Loc::new(0, 0),
-        });
-
-        let app = AstPrinter {};
-        assert_eq!("(* (- 98) (group 13.45))", app.print(&expr).unwrap())
     }
 }

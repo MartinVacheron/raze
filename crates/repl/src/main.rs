@@ -81,7 +81,7 @@ impl Repl {
                 process::exit(0);
             }
 
-            if input.is_empty() {
+            if trimmed_input.is_empty() {
                 continue;
             }
 
