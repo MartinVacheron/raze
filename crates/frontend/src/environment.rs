@@ -6,7 +6,7 @@ use ecow::EcoString;
 use thiserror::Error;
 use colored::*;
 
-use crate::{results::{PhyReport, PhyResult}, values::RuntimeVal};
+use crate::{results::{PhyReport, PhyResult}, values::RtVal};
 
 
 // -----------------
@@ -35,11 +35,11 @@ pub type PhyResEnv = PhyResult<EnvErr>;
 // -------------
 #[derive(Default)]
 pub struct Env {
-    pub vars: HashMap<EcoString, RuntimeVal>,
+    pub vars: HashMap<EcoString, RtVal>,
 }
 
 impl Env {
-    pub fn declare_var(&mut self, var_name: EcoString, value: RuntimeVal) -> Result<(), PhyResEnv> {
+    pub fn declare_var(&mut self, var_name: EcoString, value: RtVal) -> Result<(), PhyResEnv> {
         if let Vacant(v) = self.vars.entry(var_name.clone()) {
             v.insert(value);
         } else {
@@ -49,7 +49,7 @@ impl Env {
         Ok(())
     }
 
-    pub fn get_var(&self, var_name: EcoString) -> Result<RuntimeVal, PhyResEnv> {
+    pub fn get_var(&self, var_name: EcoString) -> Result<RtVal, PhyResEnv> {
         match self.vars.get(&var_name) {
             Some(v) => Ok(v.clone()),
             None => Err(PhyResult::new(EnvErr::UndeclaredVar(var_name.into()), None))
@@ -61,15 +61,15 @@ impl Env {
 #[cfg(test)]
 mod tests {
     use ecow::EcoString;
-    use crate::{environment::EnvErr, values::RuntimeVal};
+    use crate::{environment::EnvErr, values::RtVal};
     use super::Env;
 
     #[test]
     fn var_declaration() {
         let mut env = Env::default();
-        assert!(env.declare_var(EcoString::from("foo"), RuntimeVal::Null).is_ok());
+        assert!(env.declare_var(EcoString::from("foo"), RtVal::new_null()).is_ok());
         assert!(matches!(
-            env.declare_var(EcoString::from("foo"), RuntimeVal::Null).err().unwrap().err,
+            env.declare_var(EcoString::from("foo"), RtVal::new_null()).err().unwrap().err,
             EnvErr::AlreadyDeclaredVar { .. }
         ));
     }

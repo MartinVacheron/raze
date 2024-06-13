@@ -4,7 +4,7 @@ use crate::{
     lexer::Lexer,
     parser::{Parser, PhyResParser},
     test_parser::{StmtInfos, ExprInfos, TestParser},
-    values::RuntimeVal,
+    values::RtVal,
 };
 
 pub fn lex_and_parse(code: &str) -> Result<Vec<Stmt>, Vec<PhyResParser>> {
@@ -26,7 +26,7 @@ pub fn get_expr_nodes_infos(code: &str) -> ExprInfos {
     test_parser.get_all_infos(&nodes).unwrap().expr.clone()
 }
 
-pub fn lex_parse_interp(code: &str) -> Result<RuntimeVal, PhyResInterp> {
+pub fn lex_parse_interp(code: &str) -> Result<RtVal, PhyResInterp> {
     let nodes = lex_and_parse(code).unwrap();
     let interp = Interpreter {};
     interp.interpret(&nodes)

@@ -2,12 +2,12 @@ use colored::Colorize;
 use thiserror::Error;
 
 use crate::expr::{
-    BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr,
+    BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr,
     StrLiteralExpr, UnaryExpr, VisitExpr,
 };
 use crate::results::{PhyReport, PhyResult};
 use crate::stmt::{ExprStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt};
-use crate::values::RuntimeVal;
+use crate::values::{RtVal, RtValKind};
 
 // ----------------
 // Error managment
@@ -43,8 +43,8 @@ pub(crate) type PhyResInterp = PhyResult<InterpErr>;
 pub struct Interpreter {}
 
 impl Interpreter {
-    pub fn interpret(&self, nodes: &Vec<Stmt>) -> Result<RuntimeVal, PhyResInterp> {
-        let mut res: RuntimeVal = RuntimeVal::Null;
+    pub fn interpret(&self, nodes: &Vec<Stmt>) -> Result<RtVal, PhyResInterp> {
+        let mut res: RtVal = RtVal::new_null();
 
         for node in nodes {
             match node.accept(self) {
@@ -57,21 +57,21 @@ impl Interpreter {
     }
 }
 
-impl VisitStmt<RuntimeVal, InterpErr> for Interpreter {
-    fn visit_expr_stmt(&self, stmt: &ExprStmt) -> Result<RuntimeVal, PhyResult<InterpErr>> {
+impl VisitStmt<RtVal, InterpErr> for Interpreter {
+    fn visit_expr_stmt(&self, stmt: &ExprStmt) -> Result<RtVal, PhyResult<InterpErr>> {
         Ok(stmt.expr.accept(self)?)
     }
 
-    fn visit_print_stmt(&self, stmt: &PrintStmt) -> Result<RuntimeVal, PhyResult<InterpErr>> {
+    fn visit_print_stmt(&self, stmt: &PrintStmt) -> Result<RtVal, PhyResult<InterpErr>> {
         Ok(stmt.expr.accept(self)?.into())
     }
-     fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt) -> Result<RuntimeVal, PhyResult<InterpErr>> {
+     fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt) -> Result<RtVal, PhyResult<InterpErr>> {
          todo!()
      }
 }
 
-impl VisitExpr<RuntimeVal, InterpErr> for Interpreter {
-    fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<RuntimeVal, PhyResInterp> {
+impl VisitExpr<RtVal, InterpErr> for Interpreter {
+    fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<RtVal, PhyResInterp> {
         let lhs = expr.left.accept(self)?;
         let rhs = expr.right.accept(self)?;
 
@@ -84,45 +84,45 @@ impl VisitExpr<RuntimeVal, InterpErr> for Interpreter {
         }
     }
 
-    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<RuntimeVal, PhyResInterp> {
+    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<RtVal, PhyResInterp> {
         expr.expr.accept(self)
     }
 
-    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<RuntimeVal, PhyResInterp> {
+    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<RtVal, PhyResInterp> {
         Ok(expr.value.into())
     }
 
-    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<RuntimeVal, PhyResInterp> {
+    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<RtVal, PhyResInterp> {
         Ok(expr.value.into())
     }
 
-    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<RuntimeVal, PhyResInterp> {
+    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<RtVal, PhyResInterp> {
         Ok(expr.value.clone().into())
     }
 
-    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<RuntimeVal, PhyResInterp> {
+    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<RtVal, PhyResInterp> {
         match expr.name.as_str() {
             "true" => Ok(true.into()),
             "false" => Ok(false.into()),
-            "null" => Ok(RuntimeVal::new_null()),
+            "null" => Ok(RtVal::new_null()),
             _ => todo!(),
         }
     }
 
-    fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<RuntimeVal, PhyResInterp> {
+    fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<RtVal, PhyResInterp> {
         let value = expr.right.accept(self)?;
 
-        match (&value, expr.operator.as_str()) {
-            (RuntimeVal::IntVal(..) | RuntimeVal::RealVal(..), "!") => {
+        match (&value.value, expr.operator.as_str()) {
+            (RtValKind::IntVal(..) | RtValKind::RealVal(..), "!") => {
                 return Err(PhyResult::new(
                     InterpErr::BangOpOnNonBool,
                     Some(expr.loc.clone()),
                 ))
             }
             (
-                RuntimeVal::BoolVal(..)
-                | RuntimeVal::StrVal(..)
-                | RuntimeVal::Null, "-") => {
+                RtValKind::BoolVal(..)
+                | RtValKind::StrVal(..)
+                | RtValKind::Null, "-") => {
                 return Err(PhyResult::new(
                     InterpErr::NegateNonNumeric,
                     Some(expr.loc.clone()),
