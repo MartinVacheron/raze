@@ -5,8 +5,12 @@ use std::{
     io::{self, Write},
     process,
 };
+use colored::*;
 
-use frontend::{ast_pretty_print::AstPrinter, lexer::Lexer, parser::Parser, interpreter::Interpreter};
+use frontend::{
+    ast_pretty_print::AstPrinter, interpreter::Interpreter, lexer::Lexer, parser::Parser,
+    values::RtValKind,
+};
 
 // --------
 //   Cli
@@ -33,23 +37,23 @@ struct Cli {
     print_ast: bool,
 }
 
-struct Repl {
+struct Repl<'env> {
     cli: Cli,
     ast_printer: AstPrinter,
-    interpreter: Interpreter,
+    interpreter: Interpreter<'env>,
 }
 
 fn main() {
     let mut repl = Repl {
         cli: Cli::parse(),
         ast_printer: AstPrinter {},
-        interpreter: Interpreter {},
+        interpreter: Interpreter::default(),
     };
 
     repl.run();
 }
 
-impl Repl {
+impl<'env> Repl<'env> {
     pub fn run(&mut self) {
         let _ = match &self.cli.file {
             Some(f) => self.run_file(f.clone()),
@@ -68,6 +72,8 @@ impl Repl {
         let stdin = io::stdin();
         let mut stdout = io::stdout();
         let mut input = String::new();
+
+        println!("\n  {}", "Phy language interpreter v0.0".yellow());
 
         loop {
             input.clear();
@@ -97,7 +103,8 @@ impl Repl {
         let tokens = match lexer.tokenize(&code) {
             Ok(tk) => tk,
             Err(e) => {
-                e.iter() .for_each(|e| e.report(&"placeholder.rz".into(), &code));
+                e.iter()
+                    .for_each(|e| e.report(&"placeholder.rz".into(), &code));
 
                 return;
             }
@@ -123,8 +130,12 @@ impl Repl {
         }
 
         match self.interpreter.interpret(&nodes) {
-            Ok(res) => println!("{}", res),
-            Err(e) => e.report(&"placeholder.rz".into(), &code)
+            Ok(res) => {
+                if res.value != RtValKind::Null {
+                    println!("{}", res);
+                }
+            }
+            Err(e) => e.report(&"placeholder.rz".into(), &code),
         }
     }
 }

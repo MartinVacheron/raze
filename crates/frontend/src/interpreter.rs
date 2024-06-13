@@ -1,8 +1,11 @@
+use std::cell::RefCell;
+
 use colored::Colorize;
 use thiserror::Error;
 
+use crate::environment::Env;
 use crate::expr::{
-    BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr,
+    AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr,
     StrLiteralExpr, UnaryExpr, VisitExpr,
 };
 use crate::results::{PhyReport, PhyResult};
@@ -27,6 +30,16 @@ pub enum InterpErr {
 
     #[error("{0}")]
     Negation(String),
+
+    // Variables
+    #[error("{0}")]
+    VarDeclEnv(String),
+
+    #[error("{0}")]
+    GetVarEnv(String),
+
+    #[error("{0}")]
+    AssignEnv(String),
 }
 
 impl PhyReport for InterpErr {
@@ -40,9 +53,12 @@ pub(crate) type PhyResInterp = PhyResult<InterpErr>;
 // --------------
 //  Interpreting
 // --------------
-pub struct Interpreter {}
+#[derive(Default)]
+pub struct Interpreter<'env> {
+    env: RefCell<Env<'env>>,
+}
 
-impl Interpreter {
+impl<'env> Interpreter<'env> {
     pub fn interpret(&self, nodes: &Vec<Stmt>) -> Result<RtVal, PhyResInterp> {
         let mut res: RtVal = RtVal::new_null();
 
@@ -57,7 +73,7 @@ impl Interpreter {
     }
 }
 
-impl VisitStmt<RtVal, InterpErr> for Interpreter {
+impl<'env> VisitStmt<RtVal, InterpErr> for Interpreter<'env> {
     fn visit_expr_stmt(&self, stmt: &ExprStmt) -> Result<RtVal, PhyResult<InterpErr>> {
         Ok(stmt.expr.accept(self)?)
     }
@@ -65,12 +81,24 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
     fn visit_print_stmt(&self, stmt: &PrintStmt) -> Result<RtVal, PhyResult<InterpErr>> {
         Ok(stmt.expr.accept(self)?.into())
     }
-     fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt) -> Result<RtVal, PhyResult<InterpErr>> {
-         todo!()
-     }
+    fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt) -> Result<RtVal, PhyResult<InterpErr>> {
+        let value = match &stmt.value {
+            Some(v) => v.accept(self)?,
+            None => RtVal::new_null(),
+        };
+
+        self.env
+            .borrow_mut()
+            .declare_var(stmt.name.clone(), value)
+            .map_err(|e| {
+                PhyResult::new(InterpErr::VarDeclEnv(e.to_string()), Some(stmt.loc.clone()))
+            })?;
+
+        Ok(RtVal::new_null())
+    }
 }
 
-impl VisitExpr<RtVal, InterpErr> for Interpreter {
+impl<'env> VisitExpr<RtVal, InterpErr> for Interpreter<'env> {
     fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<RtVal, PhyResInterp> {
         let lhs = expr.left.accept(self)?;
         let rhs = expr.right.accept(self)?;
@@ -78,10 +106,22 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
         match lhs.operate(&rhs, &expr.operator) {
             Ok(res) => Ok(res),
             Err(e) => Err(PhyResult::new(
-                InterpErr::OperationEvaluation(e.err.to_string()),
+                InterpErr::OperationEvaluation(e.to_string()),
                 Some(expr.loc.clone()),
             )),
         }
+    }
+
+    fn visit_assign_expr(&self, expr: &AssignExpr) -> Result<RtVal, PhyResult<InterpErr>> {
+        let value = expr.value.accept(self)?;
+        self.env
+            .borrow_mut()
+            .assign(expr.name.clone(), value)
+            .map_err(|e| {
+                PhyResult::new(InterpErr::AssignEnv(e.to_string()), Some(expr.loc.clone()))
+            })?;
+
+        Ok(RtVal::new_null())
     }
 
     fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<RtVal, PhyResInterp> {
@@ -105,7 +145,9 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
             "true" => Ok(true.into()),
             "false" => Ok(false.into()),
             "null" => Ok(RtVal::new_null()),
-            _ => todo!(),
+            _ => self.env.borrow().get_var(expr.name.clone()).map_err(|e| {
+                PhyResult::new(InterpErr::GetVarEnv(e.to_string()), Some(expr.loc.clone()))
+            }),
         }
     }
 
@@ -119,10 +161,7 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
                     Some(expr.loc.clone()),
                 ))
             }
-            (
-                RtValKind::BoolVal(..)
-                | RtValKind::StrVal(..)
-                | RtValKind::Null, "-") => {
+            (RtValKind::BoolVal(..) | RtValKind::StrVal(..) | RtValKind::Null, "-") => {
                 return Err(PhyResult::new(
                     InterpErr::NegateNonNumeric,
                     Some(expr.loc.clone()),
@@ -132,10 +171,7 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
         }
 
         value.negate().map_err(|e| {
-            PhyResult::new(
-                InterpErr::Negation(e.err.to_string()),
-                Some(expr.loc.clone()),
-            )
+            PhyResult::new(InterpErr::Negation(e.to_string()), Some(expr.loc.clone()))
         })?;
 
         Ok(value)
@@ -199,13 +235,13 @@ mod tests {
         let code = "\"foo\" * 3.5";
         matches!(
             lex_parse_interp(code).err().unwrap().err,
-            InterpErr::OperationEvaluation {..}
+            InterpErr::OperationEvaluation { .. }
         );
 
         let code = "\"foo\" + 56";
         matches!(
             lex_parse_interp(code).err().unwrap().err,
-            InterpErr::OperationEvaluation {..}
+            InterpErr::OperationEvaluation { .. }
         );
     }
 

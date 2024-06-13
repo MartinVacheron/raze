@@ -1,8 +1,6 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
-use colored::Colorize;
 use ecow::EcoString;
 use thiserror::Error;
-use crate::results::{PhyReport, PhyResult};
 
 
 // -----------------
@@ -32,14 +30,6 @@ pub enum RtValErr {
     UnknownOperation,
 }
 
-impl PhyReport for RtValErr {
-    fn get_err_msg(&self) -> String {
-        format!("{}", "Runtime value error: ".red())
-    }
-}
-
-type PhyResRtVal = PhyResult<RtValErr>;
-
 
 // ----------------
 //  Runtime Values
@@ -56,7 +46,7 @@ pub enum RtValKind {
 #[derive(Debug, PartialEq, Clone)]
 pub enum RtType {
     None,
-    Defined,
+    Defined(String),
     Infered,
     Any,
 }
@@ -72,7 +62,7 @@ trait Negate {
 }
 
 trait Operate<Rhs> {
-    fn operate(&self, rhs: &Rhs, operator: &str) -> Result<RtVal, PhyResRtVal>;
+    fn operate(&self, rhs: &Rhs, operator: &str) -> Result<RtVal, RtValErr>;
 }
 
 
@@ -80,17 +70,17 @@ impl RtVal {
     pub fn new_null() -> Self {
         Self {
             value: RtValKind::Null,
-            typ: RtType::Defined,
+            typ: RtType::Defined("null".into()),
         }
     }
 
-    pub fn negate(&self) -> Result<(), PhyResRtVal> {
+    pub fn negate(&self) -> Result<(), RtValErr> {
         match &self.value {
             RtValKind::IntVal(i) => i.borrow_mut().negate(),
             RtValKind::RealVal(r) => r.borrow_mut().negate(),
             RtValKind::BoolVal(b) => b.borrow_mut().negate(),
             _ => {
-                return Err(PhyResult::new(RtValErr::UnNegatable, None))
+                return Err(RtValErr::UnNegatable)
             }
         }
 
@@ -98,7 +88,7 @@ impl RtVal {
     }
 
     // TODO: Error handling for other operation
-    pub fn operate(&self, rhs: &RtVal, operator: &str) -> Result<RtVal, PhyResRtVal> {
+    pub fn operate(&self, rhs: &RtVal, operator: &str) -> Result<RtVal, RtValErr> {
         match (&self.value, &rhs.value) {
             (RtValKind::IntVal(i1), RtValKind::IntVal(i2)) => i1.borrow().operate(&*i2.borrow(), operator),
             (RtValKind::RealVal(r1), RtValKind::RealVal(r2)) => r1.borrow().operate(&*r2.borrow(), operator),
@@ -109,9 +99,9 @@ impl RtVal {
             (RtValKind::IntVal(i1), RtValKind::StrVal(s1)) => i1.borrow().operate(&*s1.borrow(), operator),
             (RtValKind::BoolVal(b1), RtValKind::BoolVal(b2)) => b1.borrow().operate(&*b2.borrow(), operator),
             (RtValKind::Null, _) | (_, RtValKind::Null) => {
-                Err(PhyResult::new(RtValErr::OperationOnNull, None))
+                Err(RtValErr::OperationOnNull)
             }
-            _ => Err(PhyResult::new(RtValErr::UnknownOperation, None)),
+            _ => Err(RtValErr::UnknownOperation),
         }
     }
 }
@@ -131,48 +121,50 @@ impl Negate for Int {
 }
 
 impl Operate<Int> for Int {
-    fn operate(&self, rhs: &Int, operator: &str) -> Result<RtVal, PhyResRtVal> {
+    fn operate(&self, rhs: &Int, operator: &str) -> Result<RtVal, RtValErr> {
         match operator {
             "+" => Ok((self.value + rhs.value).into()),
             "-" => Ok((self.value - rhs.value).into()),
             "*" => Ok((self.value * rhs.value).into()),
             "/" => Ok((self.value / rhs.value).into()),
+            "%" => Ok((self.value % rhs.value).into()),
             "<" => Ok((self.value < rhs.value).into()),
             ">" => Ok((self.value > rhs.value).into()),
             "<=" => Ok((self.value <= rhs.value).into()),
             ">=" => Ok((self.value >= rhs.value).into()),
             "==" => Ok((self.value == rhs.value).into()),
             "!=" => Ok((self.value != rhs.value).into()),
-            op => Err(PhyResult::new(RtValErr::UnsupportedOpOnType(op.to_string(), "int".into()), None)),
+            op => Err(RtValErr::UnsupportedOpOnType(op.to_string(), "int".into())),
         }
     }
 }
 
 impl Operate<Real> for Int {
-    fn operate(&self, rhs: &Real, operator: &str) -> Result<RtVal, PhyResRtVal> {
+    fn operate(&self, rhs: &Real, operator: &str) -> Result<RtVal, RtValErr> {
         match operator {
             "+" => Ok((self.value as f64 + rhs.value).into()),
             "-" => Ok((self.value as f64 - rhs.value).into()),
             "*" => Ok((self.value as f64 * rhs.value).into()),
             "/" => Ok((self.value as f64 / rhs.value).into()),
+            "%" => Ok((self.value as f64 % rhs.value).into()),
             "<" => Ok(((self.value as f64) < rhs.value).into()),
             ">" => Ok((self.value as f64 > rhs.value).into()),
             "<=" => Ok((self.value as f64 <= rhs.value).into()),
             ">=" => Ok((self.value as f64 >= rhs.value).into()),
             "==" => Ok((self.value as f64 == rhs.value).into()),
             "!=" => Ok((self.value as f64 != rhs.value).into()),
-            op => Err(PhyResult::new(RtValErr::UnsupportedOpOnType(op.to_string(), "int".into()), None)),
+            op => Err(RtValErr::UnsupportedOpOnType(op.to_string(), "int".into())),
         }
     }
 }
 
 impl Operate<Str> for Int {
-    fn operate(&self, rhs: &Str, operator: &str) -> Result<RtVal, PhyResRtVal> {
+    fn operate(&self, rhs: &Str, operator: &str) -> Result<RtVal, RtValErr> {
         match operator {
             "*" => Ok(
                 EcoString::from(rhs.value.repeat(self.value as usize)).into(),
             ),
-            _ => Err(PhyResult::new(RtValErr::OpStrInt, None)),
+            _ => Err(RtValErr::OpStrInt),
         }
     }
 }
@@ -193,37 +185,39 @@ impl Negate for Real {
 }
 
 impl Operate<Int> for Real {
-    fn operate(&self, rhs: &Int, operator: &str) -> Result<RtVal, PhyResRtVal> {
+    fn operate(&self, rhs: &Int, operator: &str) -> Result<RtVal, RtValErr> {
         match operator {
             "+" => Ok((self.value + rhs.value as f64).into()),
             "-" => Ok((self.value - rhs.value as f64).into()),
             "*" => Ok((self.value * rhs.value as f64).into()),
             "/" => Ok((self.value / rhs.value as f64).into()),
+            "%" => Ok((self.value % rhs.value as f64).into()),
             "<" => Ok((self.value < rhs.value as f64).into()),
             ">" => Ok((self.value > rhs.value as f64).into()),
             "<=" => Ok((self.value <= rhs.value as f64).into()),
             ">=" => Ok((self.value >= rhs.value as f64).into()),
             "==" => Ok((self.value == rhs.value as f64).into()),
             "!=" => Ok((self.value != rhs.value as f64).into()),
-            op => Err(PhyResult::new(RtValErr::UnsupportedOpOnType(op.to_string(), "real".into()), None)),
+            op => Err(RtValErr::UnsupportedOpOnType(op.to_string(), "real".into())),
         }
     }
 }
 
 impl Operate<Real> for Real {
-    fn operate(&self, rhs: &Real, operator: &str) -> Result<RtVal, PhyResRtVal> {
+    fn operate(&self, rhs: &Real, operator: &str) -> Result<RtVal, RtValErr> {
         match operator {
             "+" => Ok((self.value + rhs.value).into()),
             "-" => Ok((self.value - rhs.value).into()),
             "*" => Ok((self.value * rhs.value).into()),
             "/" => Ok((self.value / rhs.value).into()),
+            "%" => Ok((self.value % rhs.value).into()),
             "<" => Ok((self.value < rhs.value).into()),
             ">" => Ok((self.value > rhs.value).into()),
             "<=" => Ok((self.value <= rhs.value).into()),
             ">=" => Ok((self.value >= rhs.value).into()),
             "==" => Ok((self.value == rhs.value).into()),
             "!=" => Ok((self.value != rhs.value).into()),
-            op => Err(PhyResult::new(RtValErr::UnsupportedOpOnType(op.to_string(), "real".into()), None)),
+            op => Err(RtValErr::UnsupportedOpOnType(op.to_string(), "real".into())),
         }
     }
 }
@@ -237,23 +231,23 @@ pub struct Str {
 }
 
 impl Operate<Str> for Str {
-    fn operate(&self, rhs: &Str, operator: &str) -> Result<RtVal, PhyResRtVal> {
+    fn operate(&self, rhs: &Str, operator: &str) -> Result<RtVal, RtValErr> {
         match operator {
             "+" => Ok(EcoString::from(format!("{}{}", self.value, rhs.value)).into(),),
             "==" => Ok((self.value == rhs.value).into()),
             "!=" => Ok((self.value != rhs.value).into()),
-            op => Err(PhyResult::new(RtValErr::StringManip(op.to_string()), None)),
+            op => Err(RtValErr::StringManip(op.to_string())),
         }
     }
 }
 
 impl Operate<Int> for Str {
-    fn operate(&self, rhs: &Int, operator: &str) -> Result<RtVal, PhyResRtVal> {
+    fn operate(&self, rhs: &Int, operator: &str) -> Result<RtVal, RtValErr> {
         match operator {
             "*" => Ok(
                 EcoString::from(self.value.repeat(rhs.value as usize)).into(),
             ),
-            _ => Err(PhyResult::new(RtValErr::OpStrInt, None)),
+            _ => Err(RtValErr::OpStrInt),
         }
     }
 }
@@ -274,13 +268,13 @@ impl Negate for Bool {
 }
 
 impl Operate<Bool> for Bool {
-    fn operate(&self, rhs: &Bool, operator: &str) -> Result<RtVal, PhyResRtVal> {
+    fn operate(&self, rhs: &Bool, operator: &str) -> Result<RtVal, RtValErr> {
         match operator {
             "and" => Ok((self.value && rhs.value).into()),
             "or" => Ok((self.value || rhs.value).into()),
             "==" => Ok((self.value == rhs.value).into()),
             "!=" => Ok((self.value != rhs.value).into()),
-            op => Err(PhyResult::new(RtValErr::UnsupportedOpOnType(op.to_string(), "bool".into()), None)),
+            op => Err(RtValErr::UnsupportedOpOnType(op.to_string(), "bool".into())),
         }
     }
 }
@@ -293,7 +287,7 @@ impl From<i64> for RtVal {
     fn from(value: i64) -> Self {
         Self {
             value: RtValKind::IntVal(Rc::new(RefCell::new(Int { value }))),
-            typ: RtType::Defined,
+            typ: RtType::Defined("int".into()),
         }
     }
 }
@@ -302,7 +296,7 @@ impl From<f64> for RtVal {
     fn from(value: f64) -> Self {
         Self {
             value: RtValKind::RealVal(Rc::new(RefCell::new(Real { value }))),
-            typ: RtType::Defined,
+            typ: RtType::Defined("real".into()),
         }
     }
 }
@@ -311,7 +305,7 @@ impl From<EcoString> for RtVal {
     fn from(value: EcoString) -> Self {
         Self {
             value: RtValKind::StrVal(Rc::new(RefCell::new(Str { value: value.clone() }))),
-            typ: RtType::Defined,
+            typ: RtType::Defined("str".into()),
         }
     }
 }
@@ -320,7 +314,7 @@ impl From<String> for RtVal {
     fn from(value: String) -> Self {
         Self {
             value: RtValKind::StrVal(Rc::new(RefCell::new(Str { value: value.into() }))),
-            typ: RtType::Defined,
+            typ: RtType::Defined("str".into()),
         }
     }
 }
@@ -329,7 +323,7 @@ impl From<bool> for RtVal {
     fn from(value: bool) -> Self {
         Self {
             value: RtValKind::BoolVal(Rc::new(RefCell::new(Bool { value }))),
-            typ: RtType::Defined,
+            typ: RtType::Defined("bool".into()),
 
         }
     }

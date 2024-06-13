@@ -2,7 +2,7 @@ use colored::*;
 use thiserror::Error;
 
 use crate::expr::{
-    BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr,
+    AssignExpr, BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr,
     StrLiteralExpr, UnaryExpr,
 };
 use crate::lexer::{Loc, Token, TokenKind};
@@ -39,6 +39,16 @@ pub enum ParserErr {
 
     #[error("value assigned during declaration is incorrect: {0}")]
     IncorrectVarDeclVal(String),
+
+    #[error("expected an assignment or nothing in variable declaration")]
+    WrongRhsVarDecl,
+
+    #[error("expected expression for variable assignment")]
+    NoExprAssign,
+
+    // Assignment
+    #[error("invalid assignment target")]
+    InvalidAssignTarget,
 
     // Others
     #[error("unexpected end of file")]
@@ -117,14 +127,35 @@ impl<'a> Parser<'a> {
 
         let mut value: Option<Expr> = None;
 
-        if self.at().kind == TokenKind::Equal {
-            self.eat()?;
-            value = Some(self.parse_expr().map_err(|e| {
-                self.trigger_error(ParserErr::IncorrectVarDeclVal(e.err.to_string()), true)
-            })?);
+        match self.at().kind {
+            TokenKind::Equal => {
+                self.eat()?;
+                let v = self.parse_expr();
+
+                match v {
+                    Ok(e) => value = Some(e),
+                    Err(e) => match e.err {
+                        ParserErr::UnexpectedEol | ParserErr::UnexpectedEof => {
+                            return Err(self.trigger_error(ParserErr::NoExprAssign, true))
+                        }
+                        e => {
+                            return Err(self.trigger_error(
+                                ParserErr::IncorrectVarDeclVal(e.to_string()),
+                                true,
+                            ))
+                        }
+                    },
+                }
+            }
+            TokenKind::NewLine | TokenKind::Eof => {}
+            _ => return Err(self.trigger_error(ParserErr::WrongRhsVarDecl, true)),
         }
 
-        Ok(Stmt::VarDecl(VarDeclStmt { name, value }))
+        Ok(Stmt::VarDecl(VarDeclStmt {
+            name,
+            value,
+            loc: self.get_loc(),
+        }))
     }
 
     fn parse_stmt(&mut self) -> Result<Stmt, PhyResParser> {
@@ -139,17 +170,44 @@ impl<'a> Parser<'a> {
 
         let expr = self.parse_expr()?;
 
-        Ok(Stmt::Print(PrintStmt { expr }))
+        Ok(Stmt::Print(PrintStmt {
+            expr,
+            loc: self.get_loc(),
+        }))
     }
 
     fn parse_expr_stmt(&mut self) -> Result<Stmt, PhyResParser> {
         let expr = self.parse_expr()?;
 
-        Ok(Stmt::Expr(ExprStmt { expr }))
+        Ok(Stmt::Expr(ExprStmt {
+            expr,
+            loc: self.get_loc(),
+        }))
     }
 
     fn parse_expr(&mut self) -> Result<Expr, PhyResParser> {
-        self.parse_equality()
+        self.parse_assign()
+    }
+
+    fn parse_assign(&mut self) -> Result<Expr, PhyResParser> {
+        let assigne = self.parse_equality()?;
+
+        if self.is_at(TokenKind::Equal) {
+            self.eat()?;
+            let value = self.parse_assign()?;
+
+            if let Expr::Identifier(e) = assigne {
+                return Ok(Expr::Assign(AssignExpr {
+                    name: e.name.clone(),
+                    value: Box::new(value),
+                    loc: self.get_loc(),
+                }));
+            } else {
+                return Err(self.trigger_error(ParserErr::InvalidAssignTarget, true));
+            }
+        }
+
+        Ok(assigne)
     }
 
     fn parse_equality(&mut self) -> Result<Expr, PhyResParser> {
@@ -210,7 +268,10 @@ impl<'a> Parser<'a> {
     fn parse_factor(&mut self) -> Result<Expr, PhyResParser> {
         let mut expr = self.parse_unary()?;
 
-        while self.is_at(TokenKind::Star) || self.is_at(TokenKind::Slash) {
+        while self.is_at(TokenKind::Star)
+            || self.is_at(TokenKind::Slash)
+            || self.is_at(TokenKind::Modulo)
+        {
             let operator = self.eat()?.value.clone();
             let right = self.parse_unary()?;
             expr = Expr::Binary(BinaryExpr {
@@ -376,23 +437,28 @@ impl<'a> Parser<'a> {
     // don't have ';' to clearly know where the current statement stops.
     // It would be great to have an argument to this function that let
     // us know where we were when we got the error to know which corresponding
-    // token to look for.
+    // token to look for. In a struct def, we go for a closing '}', ...
 
     // We are here in panic mode
     fn synchronize(&mut self) {
+        // If the error occured because unexpected Eol, we are synchro
+        if self.prev().kind == TokenKind::NewLine {
+            return;
+        }
+
         // We parse potential other errors in statements
         while !self.eof() {
             match self.at().kind {
-                TokenKind::NewLine
-                | TokenKind::Struct
-                | TokenKind::Fn
-                | TokenKind::Var
-                | TokenKind::Const
-                | TokenKind::For
-                | TokenKind::If
-                | TokenKind::While
-                | TokenKind::Print
-                | TokenKind::Return => return,
+                TokenKind::NewLine => return,
+                //| TokenKind::Struct
+                //| TokenKind::Fn
+                //| TokenKind::Var
+                //| TokenKind::Const
+                //| TokenKind::For
+                //| TokenKind::If
+                //| TokenKind::While
+                //| TokenKind::Print
+                //| TokenKind::Return => return,
                 _ => {
                     let _ = self.eat();
                 }
@@ -574,13 +640,16 @@ var c34_U = 2 + 6 ";
 
         // Errors
         let code = "var 
+var b if
 var b =
 var c = var";
         let errs = lex_and_parse(code).err().unwrap();
         let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
+        println!("All: {:?}", e);
         assert!(e[0] == &ParserErr::VarDeclNoName);
-        assert!(matches!(e[1], &ParserErr::IncorrectVarDeclVal{ .. }));
-        assert!(matches!(e[2], &ParserErr::IncorrectVarDeclVal{ .. }));
+        assert!(e[1] == &ParserErr::WrongRhsVarDecl);
+        assert!(e[2] == &ParserErr::NoExprAssign, "it was: {}", e[2]);
+        assert!(matches!(e[3], &ParserErr::IncorrectVarDeclVal { .. }));
     }
 
     #[test]
@@ -600,5 +669,33 @@ var c = var";
                 &Loc::new(22, 31),
             ]
         );
+    }
+
+    #[test]
+    fn assignment() {
+        let code = "var a
+a = 6
+
+var foo_b4r = 8
+foo_b4r = 65 % 6.";
+
+        let infos = get_expr_nodes_infos(&code);
+        let assign_infos = infos.get_assign_values();
+        assert_eq!(assign_infos[0].0, EcoString::from("a"));
+        assert_eq!(assign_infos[0].1.get_int_values()[0], &6i64);
+
+        println!("Assign info: {:?}", assign_infos[1]);
+        let assign2_binop = assign_infos[1].1.get_binop_values();
+        assert_eq!(assign_infos[1].0, EcoString::from("foo_b4r"));
+        assert_eq!(assign2_binop[0].0.get_int_values()[0], &65i64);
+        assert_eq!(assign2_binop[0].1, EcoString::from("%"));
+        assert_eq!(assign2_binop[0].2.get_real_values()[0], &6f64);
+
+        let code = "var a
+7 = 6";
+
+        let errs = lex_and_parse(&code).err().unwrap();
+        let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
+        assert!(e[0] == &ParserErr::InvalidAssignTarget);
     }
 }

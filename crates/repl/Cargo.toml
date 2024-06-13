@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 frontend = { path = "../frontend" }
 clap = { workspace = true }
+colored = { workspace = true }

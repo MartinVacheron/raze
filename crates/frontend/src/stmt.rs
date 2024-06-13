@@ -1,8 +1,7 @@
 use ecow::EcoString;
 
 use crate::{
-    expr::Expr,
-    results::{PhyReport, PhyResult},
+    expr::Expr, lexer::Loc, results::{PhyReport, PhyResult}
 };
 
 pub enum Stmt {
@@ -13,15 +12,18 @@ pub enum Stmt {
 
 pub struct ExprStmt {
     pub expr: Expr,
+    pub loc: Loc,
 }
 
 pub struct PrintStmt {
     pub expr: Expr,
+    pub loc: Loc,
 }
 
 pub struct VarDeclStmt {
     pub name: EcoString,
     pub value: Option<Expr>,
+    pub loc: Loc,
 }
 
 impl Stmt {
