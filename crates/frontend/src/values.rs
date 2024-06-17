@@ -162,7 +162,7 @@ impl Operate<Str> for Int {
     fn operate(&self, rhs: &Str, operator: &str) -> Result<RtVal, RtValErr> {
         match operator {
             "*" => Ok(
-                EcoString::from(rhs.value.repeat(self.value as usize)).into(),
+                rhs.value.repeat(self.value as usize).into(),
             ),
             _ => Err(RtValErr::OpStrInt),
         }
@@ -245,7 +245,7 @@ impl Operate<Int> for Str {
     fn operate(&self, rhs: &Int, operator: &str) -> Result<RtVal, RtValErr> {
         match operator {
             "*" => Ok(
-                EcoString::from(self.value.repeat(rhs.value as usize)).into(),
+                self.value.repeat(rhs.value as usize).into(),
             ),
             _ => Err(RtValErr::OpStrInt),
         }

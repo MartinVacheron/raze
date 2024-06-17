@@ -1,6 +1,7 @@
 use std::fmt::Display;
+
 use ecow::EcoString;
-use crate::{lexer::Loc, results::{PhyReport, PhyResult}};
+use crate::{environment::EnvWrapper, lexer::Loc, results::{PhyReport, PhyResult}};
 
 
 #[derive(Debug, PartialEq)]
@@ -98,28 +99,28 @@ pub struct AssignExpr {
 }
 
 impl Expr {
-	pub fn accept<T, U: PhyReport>(&self, visitor: &dyn VisitExpr<T, U>) -> Result<T, PhyResult<U>> {
+	pub fn accept<T, U: PhyReport>(&self, visitor: &dyn VisitExpr<T, U>, env: EnvWrapper) -> Result<T, PhyResult<U>> {
 		match self {
-			Expr::Binary(e) => visitor.visit_binary_expr(e),
-			Expr::Grouping(e) => visitor.visit_grouping_expr(e),
-			Expr::IntLiteral(e) => visitor.visit_int_literal_expr(e),
-			Expr::RealLiteral(e) => visitor.visit_real_literal_expr(e),
-			Expr::StrLiteral(e) => visitor.visit_str_literal_expr(e),
-			Expr::Identifier(e) => visitor.visit_identifier_expr(e),
-			Expr::Unary(e) => visitor.visit_unary_expr(e),
-			Expr::Assign(e) => visitor.visit_assign_expr(e),
+			Expr::Binary(e) => visitor.visit_binary_expr(e, env),
+			Expr::Grouping(e) => visitor.visit_grouping_expr(e, env),
+			Expr::IntLiteral(e) => visitor.visit_int_literal_expr(e, env),
+			Expr::RealLiteral(e) => visitor.visit_real_literal_expr(e, env),
+			Expr::StrLiteral(e) => visitor.visit_str_literal_expr(e, env),
+			Expr::Identifier(e) => visitor.visit_identifier_expr(e, env),
+			Expr::Unary(e) => visitor.visit_unary_expr(e, env),
+			Expr::Assign(e) => visitor.visit_assign_expr(e, env),
 		}
 	}
 }
 
 
 pub trait VisitExpr<T, U: PhyReport> {
-	fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<T, PhyResult<U>>;
-	fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<T, PhyResult<U>>;
-	fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<T, PhyResult<U>>;
-	fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<T, PhyResult<U>>;
-	fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<T, PhyResult<U>>;
-	fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<T, PhyResult<U>>;
-	fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<T, PhyResult<U>>;
-	fn visit_assign_expr(&self, expr: &AssignExpr) -> Result<T, PhyResult<U>>;
+	fn visit_binary_expr(&self, expr: &BinaryExpr, env: EnvWrapper) -> Result<T, PhyResult<U>>;
+	fn visit_grouping_expr(&self, expr: &GroupingExpr, env: EnvWrapper) -> Result<T, PhyResult<U>>;
+	fn visit_int_literal_expr(&self, expr: &IntLiteralExpr, env: EnvWrapper) -> Result<T, PhyResult<U>>;
+	fn visit_real_literal_expr(&self, expr: &RealLiteralExpr, env: EnvWrapper) -> Result<T, PhyResult<U>>;
+	fn visit_str_literal_expr(&self, expr: &StrLiteralExpr, env: EnvWrapper) -> Result<T, PhyResult<U>>;
+	fn visit_identifier_expr(&self, expr: &IdentifierExpr, env: EnvWrapper) -> Result<T, PhyResult<U>>;
+	fn visit_unary_expr(&self, expr: &UnaryExpr, env: EnvWrapper) -> Result<T, PhyResult<U>>;
+	fn visit_assign_expr(&self, expr: &AssignExpr, env: EnvWrapper) -> Result<T, PhyResult<U>>;
 }

@@ -1,7 +1,6 @@
-use std::collections::{
-    HashMap,
-    hash_map::Entry::{Vacant, Occupied},
-};
+use std::{cell::RefCell, collections::{
+    hash_map::Entry::{Occupied, Vacant}, HashMap
+}, rc::Rc};
 use ecow::EcoString;
 use thiserror::Error;
 
@@ -24,13 +23,22 @@ pub enum EnvErr {
 // -------------
 //  Environment
 // -------------
-#[derive(Default)]
-pub struct Env<'a> {
-    enclosing: Option<&'a mut Env<'a>>,
+#[derive(Debug, Default)]
+pub struct Env {
+    pub enclosing: Option<Rc<RefCell<Env>>>,
     pub vars: HashMap<EcoString, RtVal>,
 }
 
-impl<'a> Env<'a> {
+pub type EnvWrapper = Rc<RefCell<Env>>;
+
+impl Env {
+    pub fn new(enclosing: Option<EnvWrapper>) -> Self {
+        Self {
+            enclosing,
+            vars: HashMap::new()
+        }
+    }
+
     pub fn declare_var(&mut self, var_name: EcoString, value: RtVal) -> Result<(), EnvErr> {
         if let Vacant(v) = self.vars.entry(var_name.clone()) {
             v.insert(value);
@@ -46,7 +54,7 @@ impl<'a> Env<'a> {
             Some(v) => Ok(v.clone()),
             None => {
                 if let Some(enclo) = &self.enclosing {
-                    enclo.get_var(var_name)
+                    enclo.borrow().get_var(var_name)
                 } else {
                     Err(EnvErr::UndeclaredVar(var_name.into()))
                 }
@@ -58,12 +66,10 @@ impl<'a> Env<'a> {
         if let Occupied(mut v) = self.vars.entry(var_name.clone()) {
             v.insert(value);
             Ok(())
+        } else if let Some(enclo) = &self.enclosing {
+            enclo.borrow_mut().assign(var_name, value)
         } else {
-            if let Some(enclo) = &mut self.enclosing {
-                enclo.assign(var_name, value)
-            } else {
-                Err(EnvErr::UndeclaredVar(var_name.into()))
-            }
+            Err(EnvErr::UndeclaredVar(var_name.into()))
         }
     }
 }

@@ -6,7 +6,10 @@ declaration    → varDecl
 varDecl        → "var" IDENTIFIER ( "=" expression )? ;
 
 statement      → exprStmt
+               | block
                | printStmt ;
+
+block          → "{" declaration* "}" ;
 
 exprStmt       → expression ;
 printStmt      → "print" expression ;

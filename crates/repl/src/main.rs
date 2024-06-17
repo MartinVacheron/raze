@@ -37,10 +37,10 @@ struct Cli {
     print_ast: bool,
 }
 
-struct Repl<'env> {
+struct Repl {
     cli: Cli,
     ast_printer: AstPrinter,
-    interpreter: Interpreter<'env>,
+    interpreter: Interpreter,
 }
 
 fn main() {
@@ -53,7 +53,7 @@ fn main() {
     repl.run();
 }
 
-impl<'env> Repl<'env> {
+impl Repl {
     pub fn run(&mut self) {
         let _ = match &self.cli.file {
             Some(f) => self.run_file(f.clone()),
@@ -125,7 +125,7 @@ impl<'env> Repl<'env> {
 
         if self.cli.print_ast {
             for n in &nodes {
-                println!("{}", self.ast_printer.print(&n).unwrap());
+                println!("{}", self.ast_printer.print(n).unwrap());
             }
         }
 

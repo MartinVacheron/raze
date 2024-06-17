@@ -7,7 +7,7 @@ use crate::expr::{
 };
 use crate::lexer::{Loc, Token, TokenKind};
 use crate::results::{PhyReport, PhyResult};
-use crate::stmt::{ExprStmt, PrintStmt, Stmt, VarDeclStmt};
+use crate::stmt::{BlockStmt, ExprStmt, PrintStmt, Stmt, VarDeclStmt};
 
 // ----------------
 // Error managment
@@ -50,6 +50,10 @@ pub enum ParserErr {
     #[error("invalid assignment target")]
     InvalidAssignTarget,
 
+    // Assignment
+    #[error("expected '}}' after block statement")]
+    UnclosedBlock,
+
     // Others
     #[error("unexpected end of file")]
     UnexpectedEof,
@@ -76,6 +80,11 @@ pub struct Parser<'a> {
     current: usize,
 }
 
+// TODO: Faire des localisation plus specifique. PAr exemple, si on parse :
+//          print a + 2
+//  la localisation de la variable "a" est en réalité celle de "print a".
+//  Il faudrait faire une stack d'appel avec des localisations locales et
+//  remonter.
 impl<'a> Parser<'a> {
     pub fn parse(&mut self, tokens: &'a [Token]) -> Result<Vec<Stmt>, Vec<PhyResParser>> {
         self.tokens = tokens;
@@ -84,18 +93,12 @@ impl<'a> Parser<'a> {
         let mut errors: Vec<PhyResParser> = vec![];
 
         while !self.eof() {
-            // If we have a new line to begin a statement/expr parsing,
-            // we skip it. There are important only in parsing steps
-            while !self.eof() && self.is_at(TokenKind::NewLine) {
-                self.current += 1;
-            }
+            self.skip_new_lines();
 
             // We could have reached EOF while skipping new lines
             if self.eof() {
-                break;
+                break
             }
-
-            self.start_loc = self.at().loc.start;
 
             match self.parse_declarations() {
                 Ok(stmt) => stmts.push(stmt),
@@ -161,6 +164,7 @@ impl<'a> Parser<'a> {
     fn parse_stmt(&mut self) -> Result<Stmt, PhyResParser> {
         match self.at().kind {
             TokenKind::Print => self.parse_print_stmt(),
+            TokenKind::OpenBrace => self.parse_block_stmt(),
             _ => self.parse_expr_stmt(),
         }
     }
@@ -172,6 +176,25 @@ impl<'a> Parser<'a> {
 
         Ok(Stmt::Print(PrintStmt {
             expr,
+            loc: self.get_loc(),
+        }))
+    }
+
+    fn parse_block_stmt(&mut self) -> Result<Stmt, PhyResParser> {
+        self.expect(TokenKind::OpenBrace)?;
+        self.skip_new_lines();
+
+        let mut stmts: Vec<Stmt> = vec![];
+
+        while !self.is_at(TokenKind::CloseBrace) && !self.eof() {
+            stmts.push(self.parse_declarations()?);
+            self.skip_new_lines();
+        }
+
+        self.expect(TokenKind::CloseBrace).map_err(|_| self.trigger_error(ParserErr::UnclosedBlock, true))?;
+
+        Ok(Stmt::Block(BlockStmt {
+            stmts,
             loc: self.get_loc(),
         }))
     }
@@ -422,6 +445,16 @@ impl<'a> Parser<'a> {
         self.is_at(TokenKind::Eof)
     }
 
+    fn skip_new_lines(&mut self) {
+        // If we have a new line to begin a statement/expr parsing,
+        // we skip it. There are important only in parsing steps
+        while !self.eof() && self.is_at(TokenKind::NewLine) {
+            self.current += 1;
+        }
+
+        self.start_loc = self.at().loc.start;
+    }
+
     // We dont have to activate the synchro each time, if the error occured
     // because we ate a '\n' that wasn't supposed to be here, we are already
     // past the error, we are on the new line. No need to synchronize
@@ -487,7 +520,7 @@ mod tests {
 (true)
 ( (null ))";
 
-        let infos = get_expr_nodes_infos(&code);
+        let infos = get_expr_nodes_infos(code);
         assert_eq!(infos.get_int_values(), vec![&12]);
         assert_eq!(infos.get_real_values(), vec![&24., &54.678]);
         assert_eq!(
@@ -508,7 +541,7 @@ mod tests {
         let code = "(art + 
 ";
 
-        let errs = lex_and_parse(&code).err().unwrap();
+        let errs = lex_and_parse(code).err().unwrap();
         let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
 
         assert_eq!(e, vec![&ParserErr::ParenNeverClosed]);
@@ -520,7 +553,7 @@ mod tests {
 25. + 3 * 4
 25. / 3 + 4";
 
-        let infos = get_expr_nodes_infos(&code);
+        let infos = get_expr_nodes_infos(code);
         let left = infos.get_binop_values()[0].0.get_real_values()[0];
         let right = infos.get_binop_values()[0].2.unary[0].expr.get_int_values()[0];
         assert_eq!(left, &14f64);
@@ -555,7 +588,7 @@ mod tests {
         let code = "5 +
 ";
 
-        let errs = lex_and_parse(&code).err().unwrap();
+        let errs = lex_and_parse(code).err().unwrap();
         let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
 
         assert_eq!(e, vec![&ParserErr::UnexpectedEol]);
@@ -568,7 +601,7 @@ mod tests {
 -54.67
 !true";
 
-        let infos = get_expr_nodes_infos(&code);
+        let infos = get_expr_nodes_infos(code);
         assert_eq!(infos.unary[0].expr.get_int_values(), vec![&12]);
         assert_eq!(infos.unary[0].op, EcoString::from("-"));
 
@@ -593,7 +626,7 @@ mod tests {
 /7
 %8";
 
-        let errs = lex_and_parse(&code).err().unwrap();
+        let errs = lex_and_parse(code).err().unwrap();
         let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
 
         assert_eq!(
@@ -613,7 +646,7 @@ mod tests {
 var b_cc = 4.
 var c34_U = 2 + 6 ";
 
-        let infos = get_nodes_infos(&code);
+        let infos = get_nodes_infos(code);
         assert_eq!(infos.var_decl[0], ("a".into(), None));
         assert_eq!(infos.var_decl[1].0, EcoString::from("b_cc"));
         assert_eq!(
@@ -659,7 +692,7 @@ var c = var";
   -24. + 6
 (a + foo)";
 
-        let infos = get_expr_nodes_infos(&code);
+        let infos = get_expr_nodes_infos(code);
         assert_eq!(
             infos.get_locations(),
             vec![
@@ -679,7 +712,7 @@ a = 6
 var foo_b4r = 8
 foo_b4r = 65 % 6.";
 
-        let infos = get_expr_nodes_infos(&code);
+        let infos = get_expr_nodes_infos(code);
         let assign_infos = infos.get_assign_values();
         assert_eq!(assign_infos[0].0, EcoString::from("a"));
         assert_eq!(assign_infos[0].1.get_int_values()[0], &6i64);
@@ -694,8 +727,33 @@ foo_b4r = 65 % 6.";
         let code = "var a
 7 = 6";
 
-        let errs = lex_and_parse(&code).err().unwrap();
+        let errs = lex_and_parse(code).err().unwrap();
         let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
         assert!(e[0] == &ParserErr::InvalidAssignTarget);
+    }
+
+    #[test]
+    fn block() {
+        let code = "
+{
+    var a = 3
+    print 8
+}
+";
+        let infos = get_stmt_nodes_infos(code);
+        println!("Infos: {:?}", infos);
+        let block = &infos.block[0];
+        assert_eq!(block.var_decl[0].0, EcoString::from("a"), "block: {:?}", block);
+        assert_eq!(block.var_decl[0].1.as_ref().unwrap().get_int_values()[0], &3);
+        assert_eq!(&block.print[0], &String::from("8"));
+
+        let code = "
+{
+    var a = 3
+";
+
+        let errs = lex_and_parse(code).err().unwrap();
+        let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
+        assert!(e[0] == &ParserErr::UnclosedBlock);
     }
 }

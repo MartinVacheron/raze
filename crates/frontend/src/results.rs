@@ -46,7 +46,7 @@ impl<'a, T: PhyReport> PhyResult<T> {
 
             // Here, 4 is for space at the beginning and between line nb and '|' and space again
             let margin = cx.line.to_string().len() + 4;
-            print!("{}{}\n", " ".repeat(margin), deco.red());
+            println!("{}{}", " ".repeat(margin), deco.red());
         }
     }
 
