@@ -6,7 +6,7 @@ use crate::expr::{
     AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
 };
 use crate::results::PhyReport;
-use crate::stmt::{BlockStmt, ExprStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt};
+use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt};
 use crate::{expr::Expr, results::PhyResult};
 
 #[derive(Debug)]
@@ -58,6 +58,10 @@ impl VisitStmt<String, AstPrinterErr> for AstPrinter {
 
     fn visit_block_stmt(&self, _stmt: &BlockStmt, _: Rc<RefCell<Env>>) -> Result<String, PhyResult<AstPrinterErr>> {
         self.parenthesize("block", &[])
+    }
+
+    fn visit_if_stmt(&self, _stmt: &IfStmt, _env: Rc<RefCell<Env>>) -> Result<String, PhyResult<AstPrinterErr>> {
+        todo!()
     }
 }
 

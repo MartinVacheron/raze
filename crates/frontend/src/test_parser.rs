@@ -6,7 +6,7 @@ use crate::{
     environment::{Env, EnvWrapper}, expr::{
         AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr,
         StrLiteralExpr, UnaryExpr, VisitExpr,
-    }, lexer::Loc, results::{PhyReport, PhyResult}, stmt::{BlockStmt, ExprStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt}
+    }, lexer::Loc, results::{PhyReport, PhyResult}, stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt}
 };
 
 #[derive(Debug)]
@@ -29,6 +29,14 @@ pub struct StmtInfos {
     pub print: Vec<String>,
     pub var_decl: Vec<(EcoString, Option<ExprInfos>)>,
     pub block: Vec<StmtInfos>,
+    pub if_stmt: Vec<IfInfos>,
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct IfInfos {
+    pub condition: ExprInfos,
+    pub then_branch: Option<StmtInfos>,
+    pub else_branch: Option<StmtInfos>,
 }
 
 impl StmtInfos {
@@ -37,6 +45,7 @@ impl StmtInfos {
         self.print.append(&mut other.print);
         self.var_decl.append(&mut other.var_decl);
         self.block.append(&mut other.block);
+        self.if_stmt.append(&mut other.if_stmt);
     }
 }
 
@@ -87,6 +96,23 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         }
 
         Ok(StmtInfos{ block: vec![all_infos], ..Default::default()})
+    }
+
+    fn visit_if_stmt(&self, stmt: &IfStmt, env: Rc<RefCell<Env>>) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+        let condition = stmt.condition.accept(self, env.clone())?;
+        
+        let mut then_branch = None;
+        if let Some(e) = &stmt.then_branch {
+            then_branch = Some(e.accept(self, env.clone())?);
+        }
+        
+        let mut else_branch = None;
+
+        if let Some(e) = &stmt.else_branch {
+            else_branch = Some(e.accept(self, env)?);
+        }
+
+        Ok(StmtInfos{ if_stmt: vec![IfInfos { condition, then_branch, else_branch }], ..Default::default()})
     }
 }
 

@@ -10,7 +10,7 @@ use crate::expr::{
     StrLiteralExpr, UnaryExpr, VisitExpr,
 };
 use crate::results::{PhyReport, PhyResult};
-use crate::stmt::{BlockStmt, ExprStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt};
+use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt};
 use crate::values::{RtVal, RtValKind};
 
 // ----------------
@@ -44,6 +44,9 @@ pub enum InterpErr {
 
     #[error("uninitialized variable")]
     UninitializedValue,
+
+    #[error("'if' condition is not a boolean")]
+    NonBoolIfCond,
 }
 
 impl PhyReport for InterpErr {
@@ -107,9 +110,6 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
         Ok(RtVal::new_null())
     }
 
-    // TODO:
-    // TEST: test sur l'execution de block
-    //       test aussi sur l'ssignement de variables dans les environnements tmp
     fn visit_block_stmt(&self, stmt: &BlockStmt, env: EnvWrapper) -> InterpRes {
         let tmp_env = Rc::new(RefCell::new(Env::new(Some(env.clone()))));
 
@@ -119,10 +119,32 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
 
         Ok(RtVal::new_null())
     }
+
+    fn visit_if_stmt(&self, stmt: &IfStmt, env: Rc<RefCell<Env>>) -> Result<RtVal, PhyResult<InterpErr>> {
+        let cond = stmt.condition.accept(self, env.clone())?;
+
+        match cond.value {
+            RtValKind::BoolVal(b) => match b.borrow().value {
+                true => {
+                    if let Some(t) = &stmt.then_branch {
+                        t.accept(self, env)
+                    } else {
+                        Ok(RtVal::new_null())
+                    }
+                }
+                false => {
+                    if let Some(e) = &stmt.else_branch {
+                        e.accept(self, env)
+                    } else {
+                        Ok(RtVal::new_null())
+                    }
+                }
+            }
+            _ => Err(PhyResult::new(InterpErr::NonBoolIfCond, Some(stmt.loc.clone())))
+        }
+    }
 }
 
-// TODO:
-// TEST: sur les variables non init
 impl VisitExpr<RtVal, InterpErr> for Interpreter {
     fn visit_binary_expr(&self, expr: &BinaryExpr, env: EnvWrapper) -> Result<RtVal, PhyResInterp> {
         let lhs = expr.left.accept(self, env.clone())?;
@@ -303,5 +325,74 @@ mod tests {
             lex_parse_interp(code).err().unwrap().err,
             InterpErr::BangOpOnNonBool
         );
+    }
+
+    #[test]
+    fn variable() {
+        let code = "var a = -8
+a";
+        assert_eq!(lex_parse_interp(code).unwrap(), (-8).into());
+
+        let code = "var a = -8
+a = 4 + a*2
+a";
+        assert_eq!(lex_parse_interp(code).unwrap(), (-12).into());
+
+        // Errors
+        let code = "a = 5";
+        assert!(matches!(
+            lex_parse_interp(code).err().unwrap().err,
+            InterpErr::AssignEnv { .. }
+        ));
+
+        let code = "var b
+3 + b";
+        assert_eq!(lex_parse_interp(code).err().unwrap().err, InterpErr::UninitializedValue);
+    }
+
+    #[test]
+    fn block() {
+        let code = "var a = -8
+{
+    var b = 1
+    b = a + 9
+    a = b
+}
+a";
+        assert_eq!(lex_parse_interp(code).unwrap(), 1.into());
+    }
+
+    #[test]
+    fn if_stmt() {
+        let code = "
+var a = true
+var b = 0
+if a { b = 1 } else {}
+b
+";
+        assert_eq!(lex_parse_interp(code).unwrap(), 1.into());
+
+        let code = "
+var a = false
+var b = 0
+if a { b = 8 } else { b = 1 }
+b
+";
+        assert_eq!(lex_parse_interp(code).unwrap(), 1.into());
+
+        let code = "
+var a = false
+var b = 42
+if a {} else {}
+b
+";
+        assert_eq!(lex_parse_interp(code).unwrap(), 42.into());
+
+        // Errors
+        let code = "
+var a = 5
+if a {} else {}
+";
+        assert!(lex_parse_interp(code).err().unwrap().err == InterpErr::NonBoolIfCond);
     }
 }

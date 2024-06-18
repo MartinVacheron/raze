@@ -12,6 +12,7 @@ pub enum Stmt {
     Print(PrintStmt),
     VarDecl(VarDeclStmt),
     Block(BlockStmt),
+    If(IfStmt),
 }
 
 #[derive(Debug)]
@@ -39,6 +40,14 @@ pub struct VarDeclStmt {
     pub loc: Loc,
 }
 
+#[derive(Debug)]
+pub struct IfStmt {
+    pub condition: Expr,
+    pub then_branch: Option<Box<Stmt>>,
+    pub else_branch: Option<Box<Stmt>>,
+    pub loc: Loc,
+}
+
 impl Stmt {
 	pub fn accept<T, U: PhyReport>(& self, visitor: &dyn VisitStmt<T, U>, env: Rc<RefCell<Env>>) -> Result<T, PhyResult<U>> {
         match self {
@@ -46,6 +55,7 @@ impl Stmt {
             Stmt::Print(stmt) => visitor.visit_print_stmt(stmt, env),
             Stmt::VarDecl(stmt) => visitor.visit_var_decl_stmt(stmt, env),
             Stmt::Block(stmt) => visitor.visit_block_stmt(stmt, env),
+            Stmt::If(stmt) => visitor.visit_if_stmt(stmt, env),
 		}
 	}
 }
@@ -55,4 +65,5 @@ pub trait VisitStmt<T, U: PhyReport> {
     fn visit_print_stmt(&self, stmt: &PrintStmt, env: Rc<RefCell<Env>>) -> Result<T, PhyResult<U>>;
     fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt, env: Rc<RefCell<Env>>) -> Result<T, PhyResult<U>>;
     fn visit_block_stmt(&self, stmt: &BlockStmt, env: Rc<RefCell<Env>>) -> Result<T, PhyResult<U>>;
+    fn visit_if_stmt(&self, stmt: &IfStmt, env: Rc<RefCell<Env>>) -> Result<T, PhyResult<U>>;
 }

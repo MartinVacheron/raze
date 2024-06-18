@@ -7,7 +7,7 @@ use crate::expr::{
 };
 use crate::lexer::{Loc, Token, TokenKind};
 use crate::results::{PhyReport, PhyResult};
-use crate::stmt::{BlockStmt, ExprStmt, PrintStmt, Stmt, VarDeclStmt};
+use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt};
 
 // ----------------
 // Error managment
@@ -54,6 +54,28 @@ pub enum ParserErr {
     #[error("expected '}}' after block statement")]
     UnclosedBlock,
 
+    // If
+    #[error("missing block start '{{' after 'if' condition")]
+    MissingIfOpenBrace,
+
+    #[error("missing block end '}}' in 'if' branch")]
+    MissingIfCloseBrace,
+
+    #[error("missing block start '{{' after 'else'")]
+    MissingElseOpenBrace,
+
+    #[error("missing block end '}}' in 'else' branch")]
+    MissingElseCloseBrace,
+
+    #[error("if statement with no condition")]
+    IfWithNoCond,
+
+    #[error("variable declaration inside 'if' block is not allowed")]
+    VarDeclInIf,
+
+    #[error("else branch can't have a condition")]
+    ElseWithCond,
+
     // Others
     #[error("unexpected end of file")]
     UnexpectedEof,
@@ -69,7 +91,8 @@ impl PhyReport for ParserErr {
 }
 
 pub(crate) type PhyResParser = PhyResult<ParserErr>;
-
+pub(crate) type ParserStmtRes = Result<Stmt, PhyResParser>;
+pub(crate) type ParserExprRes = Result<Expr, PhyResParser>;
 // ---------
 //  Parsing
 // ---------
@@ -97,7 +120,7 @@ impl<'a> Parser<'a> {
 
             // We could have reached EOF while skipping new lines
             if self.eof() {
-                break
+                break;
             }
 
             match self.parse_declarations() {
@@ -113,14 +136,14 @@ impl<'a> Parser<'a> {
         Ok(stmts)
     }
 
-    fn parse_declarations(&mut self) -> Result<Stmt, PhyResParser> {
+    fn parse_declarations(&mut self) -> ParserStmtRes {
         match self.at().kind {
             TokenKind::Var => self.parse_var_declaration(),
             _ => self.parse_stmt(),
         }
     }
 
-    fn parse_var_declaration(&mut self) -> Result<Stmt, PhyResParser> {
+    fn parse_var_declaration(&mut self) -> ParserStmtRes {
         self.expect(TokenKind::Var)?;
         let name = self
             .expect(TokenKind::Identifier)
@@ -154,6 +177,8 @@ impl<'a> Parser<'a> {
             _ => return Err(self.trigger_error(ParserErr::WrongRhsVarDecl, true)),
         }
 
+        self.skip_new_lines();
+
         Ok(Stmt::VarDecl(VarDeclStmt {
             name,
             value,
@@ -161,15 +186,20 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_stmt(&mut self) -> Result<Stmt, PhyResParser> {
-        match self.at().kind {
+    fn parse_stmt(&mut self) -> ParserStmtRes {
+        let stmt = match self.at().kind {
             TokenKind::Print => self.parse_print_stmt(),
             TokenKind::OpenBrace => self.parse_block_stmt(),
+            TokenKind::If => self.parse_if_stmt(),
             _ => self.parse_expr_stmt(),
-        }
+        };
+
+        self.skip_new_lines();
+
+        stmt
     }
 
-    fn parse_print_stmt(&mut self) -> Result<Stmt, PhyResParser> {
+    fn parse_print_stmt(&mut self) -> ParserStmtRes {
         self.expect(TokenKind::Print)?;
 
         let expr = self.parse_expr()?;
@@ -180,18 +210,17 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_block_stmt(&mut self) -> Result<Stmt, PhyResParser> {
-        self.expect(TokenKind::OpenBrace)?;
-        self.skip_new_lines();
+    fn parse_block_stmt(&mut self) -> ParserStmtRes {
+        self.expect_and_skip_new_lines(TokenKind::OpenBrace)?;
 
         let mut stmts: Vec<Stmt> = vec![];
 
         while !self.is_at(TokenKind::CloseBrace) && !self.eof() {
             stmts.push(self.parse_declarations()?);
-            self.skip_new_lines();
         }
 
-        self.expect(TokenKind::CloseBrace).map_err(|_| self.trigger_error(ParserErr::UnclosedBlock, true))?;
+        self.expect_and_skip_new_lines(TokenKind::CloseBrace)
+            .map_err(|_| self.trigger_error(ParserErr::UnclosedBlock, true))?;
 
         Ok(Stmt::Block(BlockStmt {
             stmts,
@@ -199,7 +228,66 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_expr_stmt(&mut self) -> Result<Stmt, PhyResParser> {
+    fn parse_if_stmt(&mut self) -> ParserStmtRes {
+        self.eat()?;
+
+        let condition = self.parse_expr().map_err(|e| {
+            if e.err == ParserErr::UnknownToken(String::from("{")) {
+                self.trigger_error(ParserErr::IfWithNoCond, true)
+            } else {
+                e
+            }
+        })?;
+
+        self.expect_and_skip_new_lines(TokenKind::OpenBrace)
+            .map_err(|_| self.trigger_error(ParserErr::MissingIfOpenBrace, true))?;
+
+        let mut then_branch = None;
+
+        if !self.is_at(TokenKind::CloseBrace) {
+            then_branch = Some(Box::new(self.parse_stmt().map_err(|e| {
+                if e.err == ParserErr::UnknownToken(String::from("var")) {
+                    self.trigger_error(ParserErr::VarDeclInIf, true)
+                } else {
+                    e
+                }
+            })?));
+        }
+
+        self.expect_and_skip_new_lines(TokenKind::CloseBrace)
+            .map_err(|_| self.trigger_error(ParserErr::MissingIfCloseBrace, true))?;
+
+        let mut else_branch: Option<Box<Stmt>> = None;
+
+        if self.is_at(TokenKind::Else) {
+            self.eat()?;
+
+            if !self.is_at(TokenKind::OpenBrace) && !self.is_at(TokenKind::Eof) && !self.is_at(TokenKind::NewLine) {
+                return Err(self.trigger_error(ParserErr::ElseWithCond, true))
+            }
+
+            self.expect_and_skip_new_lines(TokenKind::OpenBrace)
+                .map_err(|_| self.trigger_error(ParserErr::MissingElseOpenBrace, true))?;
+
+            match self.at().kind {
+                TokenKind::CloseBrace => { self.eat()?; },
+                _ => {
+                    else_branch = Some(Box::new(self.parse_stmt()?));
+                    self.expect_and_skip_new_lines(TokenKind::CloseBrace)
+                        .map_err(|_| self.trigger_error(ParserErr::MissingElseCloseBrace, true))?;
+                }
+            }
+        }
+
+        Ok(Stmt::If(IfStmt {
+            condition,
+            then_branch,
+            else_branch,
+            loc: self.get_loc(),
+        }))
+    }
+
+    fn parse_expr_stmt(&mut self) -> ParserStmtRes {
         let expr = self.parse_expr()?;
 
         Ok(Stmt::Expr(ExprStmt {
@@ -208,11 +296,11 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_expr(&mut self) -> Result<Expr, PhyResParser> {
+    fn parse_expr(&mut self) -> ParserExprRes {
         self.parse_assign()
     }
 
-    fn parse_assign(&mut self) -> Result<Expr, PhyResParser> {
+    fn parse_assign(&mut self) -> ParserExprRes {
         let assigne = self.parse_equality()?;
 
         if self.is_at(TokenKind::Equal) {
@@ -233,7 +321,7 @@ impl<'a> Parser<'a> {
         Ok(assigne)
     }
 
-    fn parse_equality(&mut self) -> Result<Expr, PhyResParser> {
+    fn parse_equality(&mut self) -> ParserExprRes {
         let mut expr = self.parse_comparison()?;
 
         while self.is_at(TokenKind::EqualEqual) || self.is_at(TokenKind::BangEqual) {
@@ -250,7 +338,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_comparison(&mut self) -> Result<Expr, PhyResParser> {
+    fn parse_comparison(&mut self) -> ParserExprRes {
         let mut expr = self.parse_term()?;
 
         while self.is_at(TokenKind::Less)
@@ -271,7 +359,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_term(&mut self) -> Result<Expr, PhyResParser> {
+    fn parse_term(&mut self) -> ParserExprRes {
         let mut expr = self.parse_factor()?;
 
         while self.is_at(TokenKind::Minus) || self.is_at(TokenKind::Plus) {
@@ -288,7 +376,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_factor(&mut self) -> Result<Expr, PhyResParser> {
+    fn parse_factor(&mut self) -> ParserExprRes {
         let mut expr = self.parse_unary()?;
 
         while self.is_at(TokenKind::Star)
@@ -308,7 +396,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_unary(&mut self) -> Result<Expr, PhyResParser> {
+    fn parse_unary(&mut self) -> ParserExprRes {
         if self.is_at(TokenKind::Bang) || self.is_at(TokenKind::Minus) {
             let operator = self.eat()?.value.clone();
             let right = self.parse_primary()?;
@@ -323,7 +411,7 @@ impl<'a> Parser<'a> {
         self.parse_primary()
     }
 
-    fn parse_primary(&mut self) -> Result<Expr, PhyResParser> {
+    fn parse_primary(&mut self) -> ParserExprRes {
         match &self.eat()?.kind {
             TokenKind::Identifier | TokenKind::True | TokenKind::False | TokenKind::Null => {
                 Ok(Expr::Identifier(IdentifierExpr {
@@ -347,7 +435,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_int_literal(&self) -> Result<Expr, PhyResParser> {
+    fn parse_int_literal(&self) -> ParserExprRes {
         let tk = self.prev();
         let value = tk
             .value
@@ -360,7 +448,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_real_literal(&self) -> Result<Expr, PhyResParser> {
+    fn parse_real_literal(&self) -> ParserExprRes {
         let tk = self.prev();
         let value = tk
             .value
@@ -373,7 +461,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_str_literal(&self) -> Result<Expr, PhyResParser> {
+    fn parse_str_literal(&self) -> ParserExprRes {
         let tk = self.prev();
 
         Ok(Expr::StrLiteral(StrLiteralExpr {
@@ -382,7 +470,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_grouping(&mut self) -> Result<Expr, PhyResParser> {
+    fn parse_grouping(&mut self) -> ParserExprRes {
         let expr = match self.parse_expr() {
             Ok(expr) => expr,
             Err(e) => match e.err {
@@ -431,6 +519,13 @@ impl<'a> Parser<'a> {
                 Some(self.get_loc()),
             )),
         }
+    }
+
+    fn expect_and_skip_new_lines(&mut self, kind: TokenKind) -> Result<(), PhyResParser> {
+        self.expect(kind)?;
+        self.skip_new_lines();
+
+        Ok(())
     }
 
     fn is_at(&self, kind: TokenKind) -> bool {
@@ -741,10 +836,17 @@ foo_b4r = 65 % 6.";
 }
 ";
         let infos = get_stmt_nodes_infos(code);
-        println!("Infos: {:?}", infos);
         let block = &infos.block[0];
-        assert_eq!(block.var_decl[0].0, EcoString::from("a"), "block: {:?}", block);
-        assert_eq!(block.var_decl[0].1.as_ref().unwrap().get_int_values()[0], &3);
+        assert_eq!(
+            block.var_decl[0].0,
+            EcoString::from("a"),
+            "block: {:?}",
+            block
+        );
+        assert_eq!(
+            block.var_decl[0].1.as_ref().unwrap().get_int_values()[0],
+            &3
+        );
         assert_eq!(&block.print[0], &String::from("8"));
 
         let code = "
@@ -755,5 +857,71 @@ foo_b4r = 65 % 6.";
         let errs = lex_and_parse(code).err().unwrap();
         let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
         assert!(e[0] == &ParserErr::UnclosedBlock);
+    }
+
+    #[test]
+    fn if_stmt() {
+        let code = "
+var a = -1
+
+if c {
+   a = 1
+}
+
+if b == true {a = 1}
+else {
+    a = 0}
+
+if a {} else {}
+";
+        // 0
+        let infos = get_stmt_nodes_infos(code);
+        let if_stmt = &infos.if_stmt[0];
+        assert_eq!(
+            if_stmt.condition.get_ident_values()[0],
+            EcoString::from("c")
+        );
+
+        let then_branch = &if_stmt.then_branch.as_ref().unwrap().expr.assign[0];
+        assert_eq!(then_branch.name, EcoString::from("a"));
+        assert_eq!(then_branch.expr.get_int_values()[0], &1);
+
+        // 1
+        let if_stmt = &infos.if_stmt[1];
+        let cond_binop = &if_stmt.condition.binop[0];
+        assert_eq!(cond_binop.left.get_ident_values()[0], EcoString::from("b"));
+        assert_eq!(cond_binop.op, EcoString::from("=="));
+        assert_eq!(
+            cond_binop.right.get_ident_values()[0],
+            EcoString::from("true")
+        );
+
+        let then_branch = &if_stmt.then_branch.as_ref().unwrap().expr.assign[0];
+        assert_eq!(then_branch.name, EcoString::from("a"));
+        assert_eq!(then_branch.expr.get_int_values()[0], &1);
+
+        let else_branch = &if_stmt.else_branch.as_ref().unwrap().expr.assign[0];
+        assert_eq!(else_branch.name, EcoString::from("a"));
+        assert_eq!(else_branch.expr.get_int_values()[0], &0);
+
+        // 2
+        let if_stmt = &infos.if_stmt[2];
+        assert!(if_stmt.then_branch.is_none());
+        assert!(if_stmt.else_branch.is_none());
+
+        // Errors
+        let code = "
+if
+if {}
+if a { var a = 1 }
+if a {} else a {}
+";
+        // 0
+        let errs = lex_and_parse(code).err().unwrap();
+        let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
+        assert!(e[0] == &ParserErr::UnexpectedEol);
+        assert!(e[1] == &ParserErr::IfWithNoCond);
+        assert!(e[2] == &ParserErr::VarDeclInIf);
+        assert!(e[3] == &ParserErr::ElseWithCond);
     }
 }
