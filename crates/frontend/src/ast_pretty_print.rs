@@ -1,5 +1,5 @@
 use crate::expr::{
-    AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
+    AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
 };
 use crate::results::PhyReport;
 use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt};
@@ -93,5 +93,9 @@ impl VisitExpr<String, AstPrinterErr> for AstPrinter {
     fn visit_assign_expr(&self, expr: &AssignExpr) -> Result<String, PhyResult<AstPrinterErr>> {
         let assign_str = format!("assign {} to {}", expr.value.accept(self)?, expr.name);
         self.parenthesize(assign_str.as_str(), &[])
+    }
+
+    fn visit_logical_expr(&self, expr: &LogicalExpr) -> Result<String, PhyResult<AstPrinterErr>> {
+        self.parenthesize(expr.operator.as_str(), &[&expr.left, &expr.right])
     }
 }

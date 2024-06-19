@@ -1,9 +1,9 @@
 use colored::*;
+use ecow::EcoString;
 use thiserror::Error;
 
 use crate::expr::{
-    AssignExpr, BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr,
-    StrLiteralExpr, UnaryExpr,
+    AssignExpr, BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr
 };
 use crate::lexer::{Loc, Token, TokenKind};
 use crate::results::{PhyReport, PhyResult};
@@ -21,8 +21,8 @@ pub enum ParserErr {
     #[error("missing left hand side of binary expression")]
     MissingLhsInBinop,
 
-    #[error("unknown token to parse: '{0}'")]
-    UnknownToken(String),
+    #[error("unexpected token to parse: '{0}'")]
+    UnexpectedToken(String),
 
     #[error("error parsing int")]
     ParsingInt,
@@ -67,13 +67,19 @@ pub enum ParserErr {
     #[error("missing block end '}}' in 'else' branch")]
     MissingElseCloseBrace,
 
-    #[error("if statement with no condition")]
+    #[error("'if' statement with no condition")]
     IfWithNoCond,
+
+    #[error("missing right expression in 'or' statement")]
+    OrWithNoCond,
+
+    #[error("missing right expression in 'and' statement")]
+    AndWithNoCond,
 
     #[error("variable declaration inside 'if' block is not allowed")]
     VarDeclInIf,
 
-    #[error("else branch can't have a condition")]
+    #[error("'else' branch can't have a condition")]
     ElseWithCond,
 
     // Others
@@ -81,7 +87,7 @@ pub enum ParserErr {
     UnexpectedEof,
 
     #[error("expected token type '{0:?}', found: {1:?}")]
-    UnexpextedToken(String, String),
+    ExpectedToken(String, String),
 }
 
 impl PhyReport for ParserErr {
@@ -231,13 +237,11 @@ impl<'a> Parser<'a> {
     fn parse_if_stmt(&mut self) -> ParserStmtRes {
         self.eat()?;
 
-        let condition = self.parse_expr().map_err(|e| {
-            if e.err == ParserErr::UnknownToken(String::from("{")) {
-                self.trigger_error(ParserErr::IfWithNoCond, true)
-            } else {
-                e
-            }
-        })?;
+        if self.is_at(TokenKind::OpenBrace) || self.is_at(TokenKind::Eof) || self.is_at(TokenKind::NewLine) {
+            return Err(self.trigger_error(ParserErr::IfWithNoCond, true))
+        }
+
+        let condition = self.parse_expr()?;
 
         self.expect_and_skip_new_lines(TokenKind::OpenBrace)
             .map_err(|_| self.trigger_error(ParserErr::MissingIfOpenBrace, true))?;
@@ -245,13 +249,11 @@ impl<'a> Parser<'a> {
         let mut then_branch = None;
 
         if !self.is_at(TokenKind::CloseBrace) {
-            then_branch = Some(Box::new(self.parse_stmt().map_err(|e| {
-                if e.err == ParserErr::UnknownToken(String::from("var")) {
-                    self.trigger_error(ParserErr::VarDeclInIf, true)
-                } else {
-                    e
-                }
-            })?));
+            if self.is_at(TokenKind::Var) {
+                return Err(self.trigger_error(ParserErr::VarDeclInIf, true))
+            }
+
+            then_branch = Some(Box::new(self.parse_stmt()?));
         }
 
         self.expect_and_skip_new_lines(TokenKind::CloseBrace)
@@ -273,6 +275,7 @@ impl<'a> Parser<'a> {
                 TokenKind::CloseBrace => { self.eat()?; },
                 _ => {
                     else_branch = Some(Box::new(self.parse_stmt()?));
+
                     self.expect_and_skip_new_lines(TokenKind::CloseBrace)
                         .map_err(|_| self.trigger_error(ParserErr::MissingElseCloseBrace, true))?;
                 }
@@ -301,7 +304,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_assign(&mut self) -> ParserExprRes {
-        let assigne = self.parse_equality()?;
+        let assigne = self.parse_or()?;
 
         if self.is_at(TokenKind::Equal) {
             self.eat()?;
@@ -319,6 +322,52 @@ impl<'a> Parser<'a> {
         }
 
         Ok(assigne)
+    }
+
+    fn parse_or(&mut self) -> ParserExprRes {
+        let left = self.parse_and()?;
+
+        if self.is_at(TokenKind::Or) {
+            self.eat()?;
+
+            if self.is_at(TokenKind::OpenBrace) || self.is_at(TokenKind::Eof) || self.is_at(TokenKind::NewLine) {
+                return Err(self.trigger_error(ParserErr::OrWithNoCond, true))
+            }
+
+            let right = self.parse_and()?;
+
+            return Ok(Expr::Logical(LogicalExpr {
+                left: Box::new(left),
+                operator: EcoString::from("or"),
+                right: Box::new(right),
+                loc: self.get_loc(),
+            }))
+        }
+
+        Ok(left)
+    }
+
+    fn parse_and(&mut self) -> ParserExprRes {
+        let left = self.parse_equality()?;
+
+        if self.is_at(TokenKind::And) {
+            self.eat()?;
+
+            if self.is_at(TokenKind::OpenBrace) || self.is_at(TokenKind::Eof) || self.is_at(TokenKind::NewLine) {
+                return Err(self.trigger_error(ParserErr::AndWithNoCond, true))
+            }
+
+            let right = self.parse_equality()?;
+
+            return Ok(Expr::Logical(LogicalExpr {
+                left: Box::new(left),
+                operator: EcoString::from("and"),
+                right: Box::new(right),
+                loc: self.get_loc(),
+            }))
+        }
+
+        Ok(left)
     }
 
     fn parse_equality(&mut self) -> ParserExprRes {
@@ -429,7 +478,7 @@ impl<'a> Parser<'a> {
                     Err(self.trigger_error(ParserErr::MissingLhsInBinop, true))
                 }
                 _ => {
-                    Err(self.trigger_error(ParserErr::UnknownToken(self.prev().to_string()), true))
+                    Err(self.trigger_error(ParserErr::UnexpectedToken(self.prev().to_string()), true))
                 }
             },
         }
@@ -515,7 +564,7 @@ impl<'a> Parser<'a> {
         match tk.kind == kind {
             true => Ok(self.prev().clone()),
             false => Err(PhyResult::new(
-                ParserErr::UnexpextedToken(format!("{:?}", kind), format!("{:?}", tk.kind)),
+                ParserErr::ExpectedToken(format!("{:?}", kind), format!("{:?}", tk.kind)),
                 Some(self.get_loc()),
             )),
         }
@@ -862,8 +911,6 @@ foo_b4r = 65 % 6.";
     #[test]
     fn if_stmt() {
         let code = "
-var a = -1
-
 if c {
    a = 1
 }
@@ -919,9 +966,74 @@ if a {} else a {}
         // 0
         let errs = lex_and_parse(code).err().unwrap();
         let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
-        assert!(e[0] == &ParserErr::UnexpectedEol);
+        assert!(e[0] == &ParserErr::IfWithNoCond);
         assert!(e[1] == &ParserErr::IfWithNoCond);
         assert!(e[2] == &ParserErr::VarDeclInIf);
         assert!(e[3] == &ParserErr::ElseWithCond);
+    }
+
+    #[test]
+    fn logical() {
+        let code = "
+if a or b {} else {}
+if a and b {} else {}
+if a and b or c {} else {}
+";
+        // 0
+        let infos = get_stmt_nodes_infos(code);
+        let logical = &infos.if_stmt[0].condition.logical[0];
+        assert_eq!(
+            logical.left.get_ident_values()[0],
+            EcoString::from("a")
+        );
+        assert_eq!(logical.op, EcoString::from("or"));
+        assert_eq!(
+            logical.right.get_ident_values()[0],
+            EcoString::from("b")
+        );
+
+        // 1
+        let logical = &infos.if_stmt[1].condition.logical[0];
+        assert_eq!(
+            logical.left.get_ident_values()[0],
+            EcoString::from("a")
+        );
+        assert_eq!(logical.op, EcoString::from("and"));
+        assert_eq!(
+            logical.right.get_ident_values()[0],
+            EcoString::from("b")
+        );
+
+        // 2.2
+        let logical = &infos.if_stmt[2].condition.logical[0];
+        let prev_logical = &logical.left.logical[0];
+        assert_eq!(
+            prev_logical.left.get_ident_values()[0],
+            EcoString::from("a")
+        );
+        assert_eq!(
+            prev_logical.op,
+            EcoString::from("and")
+        );
+        assert_eq!(
+            prev_logical.right.get_ident_values()[0],
+            EcoString::from("b")
+        );
+        assert_eq!(logical.op, EcoString::from("or"));
+        assert_eq!(
+            logical.right.get_ident_values()[0],
+            EcoString::from("c")
+        );
+
+        // Errors
+        let code = "
+if a or {}
+if a and {}
+";
+        // 0
+        let errs = lex_and_parse(code).err().unwrap();
+        let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
+        assert!(e[0] == &ParserErr::OrWithNoCond);
+        assert!(e[1] == &ParserErr::AndWithNoCond);
     }
 }

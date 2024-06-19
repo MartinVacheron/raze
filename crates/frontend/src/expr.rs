@@ -14,6 +14,7 @@ pub enum Expr {
     Identifier(IdentifierExpr),
     Unary(UnaryExpr),
     Assign(AssignExpr),
+    Logical(LogicalExpr),
 }
 
 impl Display for Expr {
@@ -27,6 +28,7 @@ impl Display for Expr {
             Expr::Identifier(e) => write!(f, "{}", e.name),
             Expr::Unary(e) => write!(f, "{} {}", e.operator, e.right),
             Expr::Assign(e) => write!(f, "{} {}", e.name, e.value),
+            Expr::Logical(e) => write!(f, "{} {} {}", e.left, e.operator, e.right),
         }
     }
 }
@@ -41,7 +43,8 @@ impl Expr {
             Self::StrLiteral(s) => s.loc.clone(),
             Self::Identifier(i) => i.loc.clone(),
             Self::Unary(u) => u.loc.clone(),
-            Self::Assign(u) => u.loc.clone(),
+            Self::Assign(a) => a.loc.clone(),
+            Self::Logical(l) => l.loc.clone(),
         }
     }
 }
@@ -98,6 +101,14 @@ pub struct AssignExpr {
     pub loc: Loc,
 }
 
+#[derive(Debug, PartialEq)]
+pub struct LogicalExpr {
+    pub left: Box<Expr>,
+    pub operator: EcoString,
+    pub right: Box<Expr>,
+    pub loc: Loc,
+}
+
 impl Expr {
 	pub fn accept<T, U: PhyReport>(&self, visitor: &dyn VisitExpr<T, U>) -> Result<T, PhyResult<U>> {
 		match self {
@@ -109,6 +120,7 @@ impl Expr {
 			Expr::Identifier(e) => visitor.visit_identifier_expr(e),
 			Expr::Unary(e) => visitor.visit_unary_expr(e),
 			Expr::Assign(e) => visitor.visit_assign_expr(e),
+			Expr::Logical(l) => visitor.visit_logical_expr(l),
 		}
 	}
 }
@@ -123,4 +135,5 @@ pub trait VisitExpr<T, U: PhyReport> {
 	fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<T, PhyResult<U>>;
 	fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<T, PhyResult<U>>;
 	fn visit_assign_expr(&self, expr: &AssignExpr) -> Result<T, PhyResult<U>>;
+	fn visit_logical_expr(&self, expr: &LogicalExpr) -> Result<T, PhyResult<U>>;
 }

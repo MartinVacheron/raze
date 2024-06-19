@@ -6,8 +6,7 @@ use thiserror::Error;
 
 use crate::environment::Env;
 use crate::expr::{
-    AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr,
-    StrLiteralExpr, UnaryExpr, VisitExpr,
+    AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
 };
 use crate::results::{PhyReport, PhyResult};
 use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt};
@@ -237,6 +236,29 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
 
         Ok(value)
     }
+
+    fn visit_logical_expr(&self, expr: &LogicalExpr) -> Result<RtVal, PhyResult<InterpErr>> {
+        let left = expr.left.accept(self)?;
+        let op = expr.operator.as_str();
+
+        if op == "or" {
+            match &left.value {
+                RtValKind::BoolVal(b) => {
+                    if b.borrow().value { return Ok(left) }
+                }
+                _ => return Err(PhyResult::new(InterpErr::NonBoolIfCond, Some(expr.loc.clone())))
+            }
+        } else if op == "and" {
+            match &left.value {
+                RtValKind::BoolVal(b) => {
+                    if !b.borrow().value { return Ok(left) }
+                }
+                _ => return Err(PhyResult::new(InterpErr::NonBoolIfCond, Some(expr.loc.clone())))
+            }
+        }
+
+        expr.right.accept(self)
+    }
 }
 
 #[cfg(test)]
@@ -401,5 +423,48 @@ var a = 5
 if a {} else {}
 ";
         assert!(lex_parse_interp(code).err().unwrap().err == InterpErr::NonBoolIfCond);
+    }
+
+    #[test]
+    fn logical() {
+        let code = "
+var a = true
+var b = 0
+if a and b == 0 { b = 1 }
+b
+";
+        assert_eq!(lex_parse_interp(code).unwrap(), 1.into());
+
+        let code = "
+var a = true
+var b = 0
+if a and 2 + 2 == 5 { } else { b = 1 }
+b
+";
+        assert_eq!(lex_parse_interp(code).unwrap(), 1.into());
+
+        let code = "
+var a = true
+var b = 0
+if a or false { b = 1 }
+b
+";
+        assert_eq!(lex_parse_interp(code).unwrap(), 1.into());
+
+        let code = "
+var a = false
+var b = 0
+if a or false {} else { b = 1 }
+b
+";
+        assert_eq!(lex_parse_interp(code).unwrap(), 1.into());
+
+        let code = "
+var a = true
+var b = 42
+if a and b == 41 or b == 42 and false {} else { b = 45 }
+b
+";
+        assert_eq!(lex_parse_interp(code).unwrap(), 45.into());
     }
 }

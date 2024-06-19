@@ -2,8 +2,7 @@ use ecow::EcoString;
 
 use crate::{
     expr::{
-        AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr,
-        StrLiteralExpr, UnaryExpr, VisitExpr,
+        AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
     }, lexer::Loc, results::{PhyReport, PhyResult}, stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt}
 };
 
@@ -125,6 +124,7 @@ pub struct ExprInfos {
     pub ident: Vec<IdentifierInfo>,
     pub unary: Vec<UnaryInfo>,
     pub assign: Vec<AssignInfo>,
+    pub logical: Vec<LogicalInfo>,
 }
 
 impl ExprInfos {
@@ -181,6 +181,7 @@ impl ExprInfos {
         self.grouping.append(&mut other.grouping);
         self.unary.append(&mut other.unary);
         self.assign.append(&mut other.assign);
+        self.logical.append(&mut other.logical);
     }
 }
 
@@ -238,6 +239,14 @@ pub struct UnaryInfo {
 pub struct AssignInfo {
     pub name: EcoString,
     pub expr: ExprInfos,
+    pub loc: Loc,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct LogicalInfo {
+    pub left: ExprInfos,
+    pub op: EcoString,
+    pub right: ExprInfos,
     pub loc: Loc,
 }
 
@@ -345,6 +354,19 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
             loc: expr.loc.clone(),
         };
         infos.assign.push(assign_infos);
+        Ok(infos)
+    }
+
+    fn visit_logical_expr(&self, expr: &LogicalExpr) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
+        let mut infos = ExprInfos::default();
+        let logical_infos = LogicalInfo {
+            left: expr.left.accept(self).unwrap(),
+            op: expr.operator.clone(),
+            right: expr.right.accept(self).unwrap(),
+            loc: expr.loc.clone(),
+        };
+        infos.logical.push(logical_infos);
+
         Ok(infos)
     }
 }
