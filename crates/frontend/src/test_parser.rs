@@ -1,9 +1,7 @@
-use std::{cell::RefCell, rc::Rc};
-
 use ecow::EcoString;
 
 use crate::{
-    environment::{Env, EnvWrapper}, expr::{
+    expr::{
         AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr,
         StrLiteralExpr, UnaryExpr, VisitExpr,
     }, lexer::Loc, results::{PhyReport, PhyResult}, stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt}
@@ -50,13 +48,13 @@ impl StmtInfos {
 }
 
 impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
-    fn visit_expr_stmt(&self, stmt: &ExprStmt, env: EnvWrapper) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
-        let expr = stmt.expr.accept(self, env)?;
+    fn visit_expr_stmt(&self, stmt: &ExprStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+        let expr = stmt.expr.accept(self)?;
         Ok(StmtInfos{ expr, ..Default::default()})
     }
 
-    fn visit_print_stmt(&self, stmt: &PrintStmt, env: EnvWrapper) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
-        let expr = stmt.expr.accept(self, env)?;
+    fn visit_print_stmt(&self, stmt: &PrintStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+        let expr = stmt.expr.accept(self)?;
         let mut infos = StmtInfos::default();
         // Only one field cannot be empty
         if let Some(v) = expr.get_int_values().first() {
@@ -75,11 +73,11 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt, env: EnvWrapper) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+    fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
         let mut infos = StmtInfos::default();
 
         let val = if let Some(v) = &stmt.value {
-            Some(v.accept(self, env)?)
+            Some(v.accept(self)?)
         } else {
             None
         };
@@ -88,28 +86,28 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_block_stmt(&self, stmt: &BlockStmt, env: EnvWrapper) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+    fn visit_block_stmt(&self, stmt: &BlockStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
         let mut all_infos: StmtInfos = StmtInfos::default();
 
         for s in &stmt.stmts {
-            all_infos.concat(&mut s.accept(self, env.clone())?);
+            all_infos.concat(&mut s.accept(self)?);
         }
 
         Ok(StmtInfos{ block: vec![all_infos], ..Default::default()})
     }
 
-    fn visit_if_stmt(&self, stmt: &IfStmt, env: Rc<RefCell<Env>>) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
-        let condition = stmt.condition.accept(self, env.clone())?;
+    fn visit_if_stmt(&self, stmt: &IfStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+        let condition = stmt.condition.accept(self)?;
         
         let mut then_branch = None;
         if let Some(e) = &stmt.then_branch {
-            then_branch = Some(e.accept(self, env.clone())?);
+            then_branch = Some(e.accept(self)?);
         }
         
         let mut else_branch = None;
 
         if let Some(e) = &stmt.else_branch {
-            else_branch = Some(e.accept(self, env)?);
+            else_branch = Some(e.accept(self)?);
         }
 
         Ok(StmtInfos{ if_stmt: vec![IfInfos { condition, then_branch, else_branch }], ..Default::default()})
@@ -251,7 +249,7 @@ pub struct TestParser {
 impl TestParser {
     pub fn get_all_infos(&mut self, nodes: &[Stmt]) -> Result<&StmtInfos, PhyResParserTestErr> {
         for node in nodes {
-            let mut res = node.accept(self, Rc::new(RefCell::new(Env::new(None)))).unwrap();
+            let mut res = node.accept(self).unwrap();
             self.infos.concat(&mut res);
         }
 
@@ -260,7 +258,7 @@ impl TestParser {
 }
 
 impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
-    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr, _: EnvWrapper) -> Result<ExprInfos, PhyResParserTestErr> {
+    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<ExprInfos, PhyResParserTestErr> {
         let mut infos = ExprInfos::default();
         let int_infos = IntInfo {
             value: expr.value,
@@ -271,12 +269,12 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_binary_expr(&self, expr: &BinaryExpr, env: EnvWrapper) -> Result<ExprInfos, PhyResParserTestErr> {
+    fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<ExprInfos, PhyResParserTestErr> {
         let mut infos = ExprInfos::default();
         let binop_infos = BinopInfo {
-            left: expr.left.accept(self, env.clone()).unwrap(),
+            left: expr.left.accept(self).unwrap(),
             op: expr.operator.clone(),
-            right: expr.right.accept(self, env).unwrap(),
+            right: expr.right.accept(self).unwrap(),
             loc: expr.loc.clone(),
         };
         infos.binop.push(binop_infos);
@@ -284,10 +282,10 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_grouping_expr(&self, expr: &GroupingExpr, env: EnvWrapper) -> Result<ExprInfos, PhyResParserTestErr> {
+    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<ExprInfos, PhyResParserTestErr> {
         let mut infos = ExprInfos::default();
         let grouping_info = GroupingInfo {
-            expr: expr.expr.accept(self, env).unwrap(),
+            expr: expr.expr.accept(self).unwrap(),
             loc: expr.loc.clone(),
         };
         infos.grouping.push(grouping_info);
@@ -295,7 +293,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr, _: EnvWrapper) -> Result<ExprInfos, PhyResParserTestErr> {
+    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<ExprInfos, PhyResParserTestErr> {
         let mut infos = ExprInfos::default();
         let real_infos = RealInfo {
             value: expr.value,
@@ -306,7 +304,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr, _: EnvWrapper) -> Result<ExprInfos, PhyResParserTestErr> {
+    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<ExprInfos, PhyResParserTestErr> {
         let mut infos = ExprInfos::default();
         let str_infos = StrInfo {
             value: expr.value.clone(),
@@ -317,7 +315,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_identifier_expr(&self, expr: &IdentifierExpr, _: EnvWrapper) -> Result<ExprInfos, PhyResParserTestErr> {
+    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<ExprInfos, PhyResParserTestErr> {
         let mut infos = ExprInfos::default();
         let ident_info = IdentifierInfo {
             name: expr.name.clone(),
@@ -327,10 +325,10 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_unary_expr(&self, expr: &UnaryExpr, env: EnvWrapper) -> Result<ExprInfos, PhyResParserTestErr> {
+    fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<ExprInfos, PhyResParserTestErr> {
         let mut infos = ExprInfos::default();
         let unary_info = UnaryInfo {
-            expr: expr.right.accept(self, env).unwrap(),
+            expr: expr.right.accept(self).unwrap(),
             op: expr.operator.clone(),
             loc: expr.loc.clone(),
         };
@@ -339,11 +337,11 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_assign_expr(&self, expr: &AssignExpr, env: EnvWrapper) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
+    fn visit_assign_expr(&self, expr: &AssignExpr) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
         let mut infos = ExprInfos::default();
         let assign_infos = AssignInfo {
             name: expr.name.clone(),
-            expr: expr.value.accept(self, env)?,
+            expr: expr.value.accept(self)?,
             loc: expr.loc.clone(),
         };
         infos.assign.push(assign_infos);

@@ -1,9 +1,7 @@
-use std::{cell::RefCell, rc::Rc};
-
 use ecow::EcoString;
 
 use crate::{
-    environment::Env, expr::Expr, lexer::Loc, results::{PhyReport, PhyResult}
+    expr::Expr, lexer::Loc, results::{PhyReport, PhyResult}
 };
 
 #[derive(Debug)]
@@ -49,21 +47,21 @@ pub struct IfStmt {
 }
 
 impl Stmt {
-	pub fn accept<T, U: PhyReport>(& self, visitor: &dyn VisitStmt<T, U>, env: Rc<RefCell<Env>>) -> Result<T, PhyResult<U>> {
+	pub fn accept<T, U: PhyReport>(& self, visitor: &dyn VisitStmt<T, U>) -> Result<T, PhyResult<U>> {
         match self {
-            Stmt::Expr(stmt) => visitor.visit_expr_stmt(stmt, env),
-            Stmt::Print(stmt) => visitor.visit_print_stmt(stmt, env),
-            Stmt::VarDecl(stmt) => visitor.visit_var_decl_stmt(stmt, env),
-            Stmt::Block(stmt) => visitor.visit_block_stmt(stmt, env),
-            Stmt::If(stmt) => visitor.visit_if_stmt(stmt, env),
+            Stmt::Expr(stmt) => visitor.visit_expr_stmt(stmt),
+            Stmt::Print(stmt) => visitor.visit_print_stmt(stmt),
+            Stmt::VarDecl(stmt) => visitor.visit_var_decl_stmt(stmt),
+            Stmt::Block(stmt) => visitor.visit_block_stmt(stmt),
+            Stmt::If(stmt) => visitor.visit_if_stmt(stmt),
 		}
 	}
 }
 
 pub trait VisitStmt<T, U: PhyReport> {
-    fn visit_expr_stmt(&self, stmt: &ExprStmt, env: Rc<RefCell<Env>>) -> Result<T, PhyResult<U>>;
-    fn visit_print_stmt(&self, stmt: &PrintStmt, env: Rc<RefCell<Env>>) -> Result<T, PhyResult<U>>;
-    fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt, env: Rc<RefCell<Env>>) -> Result<T, PhyResult<U>>;
-    fn visit_block_stmt(&self, stmt: &BlockStmt, env: Rc<RefCell<Env>>) -> Result<T, PhyResult<U>>;
-    fn visit_if_stmt(&self, stmt: &IfStmt, env: Rc<RefCell<Env>>) -> Result<T, PhyResult<U>>;
+    fn visit_expr_stmt(&self, stmt: &ExprStmt) -> Result<T, PhyResult<U>>;
+    fn visit_print_stmt(&self, stmt: &PrintStmt) -> Result<T, PhyResult<U>>;
+    fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt) -> Result<T, PhyResult<U>>;
+    fn visit_block_stmt(&self, stmt: &BlockStmt) -> Result<T, PhyResult<U>>;
+    fn visit_if_stmt(&self, stmt: &IfStmt) -> Result<T, PhyResult<U>>;
 }

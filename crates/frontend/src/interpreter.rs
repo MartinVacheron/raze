@@ -4,7 +4,7 @@ use std::rc::Rc;
 use colored::Colorize;
 use thiserror::Error;
 
-use crate::environment::{Env, EnvWrapper};
+use crate::environment::Env;
 use crate::expr::{
     AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, RealLiteralExpr,
     StrLiteralExpr, UnaryExpr, VisitExpr,
@@ -64,8 +64,8 @@ pub(crate) type InterpRes = Result<RtVal, PhyResInterp>;
 #[derive(Default)]
 pub struct Interpreter {
     // In RefCell because visitor methods only borrow (&) so we must be
-    // able to mutate thanks to RefCell
-    env: Rc<RefCell<Env>>,
+    // able to mutate thanks to RefCell and it can be multiple owners
+    env: RefCell<Rc<RefCell<Env>>>,
 }
 
 impl Interpreter {
@@ -73,7 +73,7 @@ impl Interpreter {
         let mut res: RtVal = RtVal::new_null();
 
         for node in nodes {
-            match node.accept(self, self.env.clone()) {
+            match node.accept(self) {
                 Ok(r) => res = r,
                 Err(e) => return Err(e),
             }
@@ -84,23 +84,24 @@ impl Interpreter {
 }
 
 impl VisitStmt<RtVal, InterpErr> for Interpreter {
-    fn visit_expr_stmt(&self, stmt: &ExprStmt, env: EnvWrapper) -> InterpRes {
-        stmt.expr.accept(self, env)
+    fn visit_expr_stmt(&self, stmt: &ExprStmt) -> InterpRes {
+        stmt.expr.accept(self)
     }
 
-    fn visit_print_stmt(&self, stmt: &PrintStmt, env: EnvWrapper) -> InterpRes {
-        let value = stmt.expr.accept(self, env)?;
+    fn visit_print_stmt(&self, stmt: &PrintStmt) -> InterpRes {
+        let value = stmt.expr.accept(self)?;
         println!("{}", value);
 
         Ok(RtVal::new_null())
     }
-    fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt, env: EnvWrapper) -> InterpRes {
+    fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt) -> InterpRes {
         let value = match &stmt.value {
-            Some(v) => v.accept(self, env.clone())?,
+            Some(v) => v.accept(self)?,
             None => RtVal::new_null(),
         };
 
-        env
+        self.env
+            .borrow()
             .borrow_mut()
             .declare_var(stmt.name.clone(), value)
             .map_err(|e| {
@@ -110,31 +111,35 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
         Ok(RtVal::new_null())
     }
 
-    fn visit_block_stmt(&self, stmt: &BlockStmt, env: EnvWrapper) -> InterpRes {
-        let tmp_env = Rc::new(RefCell::new(Env::new(Some(env.clone()))));
+    fn visit_block_stmt(&self, stmt: &BlockStmt) -> InterpRes {
+        let new_env = Env::new(Some(self.env.borrow().clone()));
+        let prev_env = self.env.replace(Rc::new(RefCell::new(new_env)));
 
+        println!("new env created successfuly!");
         for s in &stmt.stmts {
-            let _ = s.accept(self, tmp_env.clone())?;
+            let _ = s.accept(self)?;
         }
+
+        self.env.replace(prev_env);
 
         Ok(RtVal::new_null())
     }
 
-    fn visit_if_stmt(&self, stmt: &IfStmt, env: Rc<RefCell<Env>>) -> Result<RtVal, PhyResult<InterpErr>> {
-        let cond = stmt.condition.accept(self, env.clone())?;
+    fn visit_if_stmt(&self, stmt: &IfStmt) -> Result<RtVal, PhyResult<InterpErr>> {
+        let cond = stmt.condition.accept(self)?;
 
         match cond.value {
             RtValKind::BoolVal(b) => match b.borrow().value {
                 true => {
                     if let Some(t) = &stmt.then_branch {
-                        t.accept(self, env)
+                        t.accept(self)
                     } else {
                         Ok(RtVal::new_null())
                     }
                 }
                 false => {
                     if let Some(e) = &stmt.else_branch {
-                        e.accept(self, env)
+                        e.accept(self)
                     } else {
                         Ok(RtVal::new_null())
                     }
@@ -146,13 +151,13 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
 }
 
 impl VisitExpr<RtVal, InterpErr> for Interpreter {
-    fn visit_binary_expr(&self, expr: &BinaryExpr, env: EnvWrapper) -> Result<RtVal, PhyResInterp> {
-        let lhs = expr.left.accept(self, env.clone())?;
+    fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<RtVal, PhyResInterp> {
+        let lhs = expr.left.accept(self)?;
         if lhs == RtVal::new_null() {
             return Err(PhyResult::new(InterpErr::UninitializedValue, Some(expr.left.get_loc())))
         }
 
-        let rhs = expr.right.accept(self, env)?;
+        let rhs = expr.right.accept(self)?;
         if rhs == RtVal::new_null() {
             return Err(PhyResult::new(InterpErr::UninitializedValue, Some(expr.right.get_loc())))
         }
@@ -166,9 +171,11 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
         }
     }
 
-    fn visit_assign_expr(&self, expr: &AssignExpr, env: EnvWrapper) -> InterpRes {
-        let value = expr.value.accept(self, env.clone())?;
-        env
+    fn visit_assign_expr(&self, expr: &AssignExpr) -> InterpRes {
+        let value = expr.value.accept(self)?;
+
+        self.env
+            .borrow()
             .borrow_mut()
             .assign(expr.name.clone(), value)
             .map_err(|e| {
@@ -178,35 +185,35 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
         Ok(RtVal::new_null())
     }
 
-    fn visit_grouping_expr(&self, expr: &GroupingExpr, env: EnvWrapper) -> Result<RtVal, PhyResInterp> {
-        expr.expr.accept(self, env)
+    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<RtVal, PhyResInterp> {
+        expr.expr.accept(self)
     }
 
-    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr, _: EnvWrapper) -> Result<RtVal, PhyResInterp> {
+    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<RtVal, PhyResInterp> {
         Ok(expr.value.into())
     }
 
-    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr, _: EnvWrapper) -> Result<RtVal, PhyResInterp> {
+    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<RtVal, PhyResInterp> {
         Ok(expr.value.into())
     }
 
-    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr, _: EnvWrapper) -> Result<RtVal, PhyResInterp> {
+    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<RtVal, PhyResInterp> {
         Ok(expr.value.clone().into())
     }
 
-    fn visit_identifier_expr(&self, expr: &IdentifierExpr, env: EnvWrapper) -> Result<RtVal, PhyResInterp> {
+    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<RtVal, PhyResInterp> {
         match expr.name.as_str() {
             "true" => Ok(true.into()),
             "false" => Ok(false.into()),
             "null" => Ok(RtVal::new_null()),
-            _ => env.borrow().get_var(expr.name.clone()).map_err(|e| {
+            _ => self.env.borrow().borrow().get_var(expr.name.clone()).map_err(|e| {
                 PhyResult::new(InterpErr::GetVarEnv(e.to_string()), Some(expr.loc.clone()))
             }),
         }
     }
 
-    fn visit_unary_expr(&self, expr: &UnaryExpr, env: EnvWrapper) -> Result<RtVal, PhyResInterp> {
-        let value = expr.right.accept(self, env)?;
+    fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<RtVal, PhyResInterp> {
+        let value = expr.right.accept(self)?;
 
         match (&value.value, expr.operator.as_str()) {
             (RtValKind::IntVal(..) | RtValKind::RealVal(..), "!") => {

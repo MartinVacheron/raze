@@ -20,6 +20,8 @@ pub enum EnvErr {
 }
 
 
+type EnvWrapper = Rc<RefCell<Env>>;
+
 // -------------
 //  Environment
 // -------------
@@ -28,8 +30,6 @@ pub struct Env {
     pub enclosing: Option<Rc<RefCell<Env>>>,
     pub vars: HashMap<EcoString, RtVal>,
 }
-
-pub type EnvWrapper = Rc<RefCell<Env>>;
 
 impl Env {
     pub fn new(enclosing: Option<EnvWrapper>) -> Self {
