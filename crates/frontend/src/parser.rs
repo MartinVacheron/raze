@@ -3,11 +3,14 @@ use ecow::EcoString;
 use thiserror::Error;
 
 use crate::expr::{
-    AssignExpr, BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr
+    AssignExpr, BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr,
+    RealLiteralExpr, StrLiteralExpr, UnaryExpr,
 };
 use crate::lexer::{Loc, Token, TokenKind};
 use crate::results::{PhyReport, PhyResult};
-use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, WhileStmt};
+use crate::stmt::{
+    BlockStmt, ExprStmt, ForRange, ForStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, WhileStmt,
+};
 
 // ----------------
 // Error managment
@@ -94,6 +97,22 @@ pub enum ParserErr {
 
     #[error("'while' can't be empty, it requires at least one statement to break infinite loop")]
     NoBodyWhile,
+
+    // For
+    #[error("missing variable name in 'for' loop")]
+    MissingVarNameFor,
+
+    #[error("missing 'in' after variable name in 'for' loop")]
+    MissingInFor,
+
+    #[error("only 'ints' are supported as 'for' ranges")]
+    NonIntForRange,
+
+    #[error("missing block start '{{' after 'for' condition")]
+    MissingForOpenBrace,
+
+    #[error("missing block end '}}' after 'for' body")]
+    MissingForCloseBrace,
 
     // Others
     #[error("unexpected end of file")]
@@ -211,6 +230,7 @@ impl<'a> Parser<'a> {
             TokenKind::OpenBrace => self.parse_block_stmt(),
             TokenKind::If => self.parse_if_stmt(),
             TokenKind::While => self.parse_while_stmt(),
+            TokenKind::For => self.parse_for_stmt(),
             _ => self.parse_expr_stmt(),
         };
 
@@ -261,7 +281,7 @@ impl<'a> Parser<'a> {
 
         if !self.is_at(TokenKind::CloseBrace) {
             if self.is_at(TokenKind::Var) {
-                return Err(self.trigger_error(ParserErr::VarDeclInIf, true))
+                return Err(self.trigger_error(ParserErr::VarDeclInIf, true));
             }
 
             then_branch = Some(Box::new(self.parse_stmt()?));
@@ -281,7 +301,9 @@ impl<'a> Parser<'a> {
                 .map_err(|_| self.trigger_error(ParserErr::MissingElseOpenBrace, true))?;
 
             match self.at().kind {
-                TokenKind::CloseBrace => { self.eat()?; },
+                TokenKind::CloseBrace => {
+                    self.eat()?;
+                }
                 _ => {
                     else_branch = Some(Box::new(self.parse_stmt()?));
 
@@ -309,7 +331,7 @@ impl<'a> Parser<'a> {
             .map_err(|_| self.trigger_error(ParserErr::MissingWhileOpenBrace, true))?;
 
         if self.is_at(TokenKind::CloseBrace) {
-            return Err(self.trigger_error(ParserErr::NoBodyWhile, true))
+            return Err(self.trigger_error(ParserErr::NoBodyWhile, true));
         }
 
         let body = Box::new(self.parse_stmt()?);
@@ -319,6 +341,53 @@ impl<'a> Parser<'a> {
 
         Ok(Stmt::While(WhileStmt {
             condition,
+            body,
+            loc: self.get_loc(),
+        }))
+    }
+
+    fn parse_for_stmt(&mut self) -> ParserStmtRes {
+        self.eat()?;
+
+        let placeholder = self
+            .expect(TokenKind::Identifier)
+            .map_err(|_| self.trigger_error(ParserErr::MissingVarNameFor, true))?
+            .value;
+
+        self.expect(TokenKind::In)
+            .map_err(|_| self.trigger_error(ParserErr::MissingInFor, true))?;
+
+        let end = self
+            .expect(TokenKind::Int)
+            .map_err(|_| self.trigger_error(ParserErr::NonIntForRange, true))?
+            .value
+            .parse::<i64>()
+            .map_err(|_| self.trigger_error(ParserErr::ParsingInt, true))?;
+
+        let mut start = None;
+        if self.is_at(TokenKind::DotDot) {
+            self.eat()?;
+
+            start = Some(
+                self.expect(TokenKind::Int)
+                    .map_err(|_| self.trigger_error(ParserErr::NonIntForRange, true))?
+                    .value
+                    .parse::<i64>()
+                    .map_err(|_| self.trigger_error(ParserErr::ParsingInt, true))?
+            );
+        }
+
+        self.skip_expect_and_skip(TokenKind::OpenBrace)
+            .map_err(|_| self.trigger_error(ParserErr::MissingForOpenBrace, true))?;
+
+        let body = Box::new(self.parse_stmt()?);
+
+        self.skip_expect_and_skip(TokenKind::CloseBrace)
+            .map_err(|_| self.trigger_error(ParserErr::MissingForCloseBrace, true))?;
+
+        Ok(Stmt::For(ForStmt {
+            placeholder,
+            range: ForRange { start, end },
             body,
             loc: self.get_loc(),
         }))
@@ -364,8 +433,11 @@ impl<'a> Parser<'a> {
         if self.is_at(TokenKind::Or) {
             self.eat()?;
 
-            if self.is_at(TokenKind::OpenBrace) || self.is_at(TokenKind::Eof) || self.is_at(TokenKind::NewLine) {
-                return Err(self.trigger_error(ParserErr::OrWithNoCond, true))
+            if self.is_at(TokenKind::OpenBrace)
+                || self.is_at(TokenKind::Eof)
+                || self.is_at(TokenKind::NewLine)
+            {
+                return Err(self.trigger_error(ParserErr::OrWithNoCond, true));
             }
 
             let right = self.parse_and()?;
@@ -375,7 +447,7 @@ impl<'a> Parser<'a> {
                 operator: EcoString::from("or"),
                 right: Box::new(right),
                 loc: self.get_loc(),
-            }))
+            }));
         }
 
         Ok(left)
@@ -387,8 +459,11 @@ impl<'a> Parser<'a> {
         if self.is_at(TokenKind::And) {
             self.eat()?;
 
-            if self.is_at(TokenKind::OpenBrace) || self.is_at(TokenKind::Eof) || self.is_at(TokenKind::NewLine) {
-                return Err(self.trigger_error(ParserErr::AndWithNoCond, true))
+            if self.is_at(TokenKind::OpenBrace)
+                || self.is_at(TokenKind::Eof)
+                || self.is_at(TokenKind::NewLine)
+            {
+                return Err(self.trigger_error(ParserErr::AndWithNoCond, true));
             }
 
             let right = self.parse_equality()?;
@@ -398,7 +473,7 @@ impl<'a> Parser<'a> {
                 operator: EcoString::from("and"),
                 right: Box::new(right),
                 loc: self.get_loc(),
-            }))
+            }));
         }
 
         Ok(left)
@@ -507,23 +582,24 @@ impl<'a> Parser<'a> {
             TokenKind::String => self.parse_str_literal(),
             TokenKind::OpenParen => self.parse_grouping(),
             TokenKind::NewLine => Err(self.trigger_error(ParserErr::UnexpectedEol, false)),
-            tk => match tk {
-                TokenKind::Star | TokenKind::Plus | TokenKind::Slash | TokenKind::Modulo => {
-                    Err(self.trigger_error(ParserErr::MissingLhsInBinop, true))
+            tk => {
+                match tk {
+                    TokenKind::Star | TokenKind::Plus | TokenKind::Slash | TokenKind::Modulo => {
+                        Err(self.trigger_error(ParserErr::MissingLhsInBinop, true))
+                    }
+                    _ => Err(self
+                        .trigger_error(ParserErr::UnexpectedToken(self.prev().to_string()), true)),
                 }
-                _ => {
-                    Err(self.trigger_error(ParserErr::UnexpectedToken(self.prev().to_string()), true))
-                }
-            },
+            }
         }
     }
 
-    fn parse_int_literal(&self) -> ParserExprRes {
+    fn parse_int_literal(&mut self) -> ParserExprRes {
         let tk = self.prev();
         let value = tk
             .value
             .parse::<i64>()
-            .map_err(|_| PhyResult::new(ParserErr::ParsingInt, Some(self.get_loc())))?;
+            .map_err(|_| self.trigger_error(ParserErr::ParsingInt, true))?;
 
         Ok(Expr::IntLiteral(IntLiteralExpr {
             value,
@@ -531,12 +607,12 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_real_literal(&self) -> ParserExprRes {
+    fn parse_real_literal(&mut self) -> ParserExprRes {
         let tk = self.prev();
         let value = tk
             .value
             .parse::<f64>()
-            .map_err(|_| PhyResult::new(ParserErr::ParsingReal, Some(self.get_loc())))?;
+            .map_err(|_| self.trigger_error(ParserErr::ParsingReal, true))?;
 
         Ok(Expr::RealLiteral(RealLiteralExpr {
             value,
@@ -653,16 +729,22 @@ impl<'a> Parser<'a> {
     }
 
     fn is_at_brace_or_end_of(&mut self, err: ParserErr) -> Result<(), PhyResParser> {
-        if self.is_at(TokenKind::OpenBrace) || self.is_at(TokenKind::Eof) || self.is_at(TokenKind::NewLine) {
-            return Err(self.trigger_error(err, true))
+        if self.is_at(TokenKind::OpenBrace)
+            || self.is_at(TokenKind::Eof)
+            || self.is_at(TokenKind::NewLine)
+        {
+            return Err(self.trigger_error(err, true));
         }
 
         Ok(())
     }
 
     fn is_not_at_brace_or_end_of(&mut self, err: ParserErr) -> Result<(), PhyResParser> {
-        if !self.is_at(TokenKind::OpenBrace) || self.is_at(TokenKind::Eof) || self.is_at(TokenKind::NewLine) {
-            return Err(self.trigger_error(err, true))
+        if !self.is_at(TokenKind::OpenBrace)
+            || self.is_at(TokenKind::Eof)
+            || self.is_at(TokenKind::NewLine)
+        {
+            return Err(self.trigger_error(err, true));
         }
 
         Ok(())
@@ -1038,27 +1120,15 @@ if a and b or c {} else {}
         // 0
         let infos = get_stmt_nodes_infos(code);
         let logical = &infos.if_stmt[0].condition.logical[0];
-        assert_eq!(
-            logical.left.get_ident_values()[0],
-            EcoString::from("a")
-        );
+        assert_eq!(logical.left.get_ident_values()[0], EcoString::from("a"));
         assert_eq!(logical.op, EcoString::from("or"));
-        assert_eq!(
-            logical.right.get_ident_values()[0],
-            EcoString::from("b")
-        );
+        assert_eq!(logical.right.get_ident_values()[0], EcoString::from("b"));
 
         // 1
         let logical = &infos.if_stmt[1].condition.logical[0];
-        assert_eq!(
-            logical.left.get_ident_values()[0],
-            EcoString::from("a")
-        );
+        assert_eq!(logical.left.get_ident_values()[0], EcoString::from("a"));
         assert_eq!(logical.op, EcoString::from("and"));
-        assert_eq!(
-            logical.right.get_ident_values()[0],
-            EcoString::from("b")
-        );
+        assert_eq!(logical.right.get_ident_values()[0], EcoString::from("b"));
 
         // 2.2
         let logical = &infos.if_stmt[2].condition.logical[0];
@@ -1067,19 +1137,13 @@ if a and b or c {} else {}
             prev_logical.left.get_ident_values()[0],
             EcoString::from("a")
         );
-        assert_eq!(
-            prev_logical.op,
-            EcoString::from("and")
-        );
+        assert_eq!(prev_logical.op, EcoString::from("and"));
         assert_eq!(
             prev_logical.right.get_ident_values()[0],
             EcoString::from("b")
         );
         assert_eq!(logical.op, EcoString::from("or"));
-        assert_eq!(
-            logical.right.get_ident_values()[0],
-            EcoString::from("c")
-        );
+        assert_eq!(logical.right.get_ident_values()[0], EcoString::from("c"));
 
         // Errors
         let code = "
@@ -1106,10 +1170,7 @@ while a or true
         let infos = get_stmt_nodes_infos(code);
         let while_stmt = &infos.while_stmt[0];
         let while_cond = &while_stmt.condition.logical[0];
-        assert_eq!(
-            while_cond.left.get_ident_values()[0],
-            EcoString::from("a")
-        );
+        assert_eq!(while_cond.left.get_ident_values()[0], EcoString::from("a"));
         assert_eq!(while_cond.op, EcoString::from("or"));
         assert_eq!(
             while_cond.right.get_ident_values()[0],

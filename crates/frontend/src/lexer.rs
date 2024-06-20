@@ -63,6 +63,7 @@ pub enum TokenKind {
     GreaterEqual,
     Less,
     LessEqual,
+    DotDot,
 
     // Literals
     Identifier,
@@ -85,6 +86,7 @@ pub enum TokenKind {
     Print,
     For,
     While,
+    In,
     True,
     False,
 
@@ -154,6 +156,7 @@ impl Lexer {
         map.insert("or".into(), TokenKind::Or);
         map.insert("for".into(), TokenKind::For);
         map.insert("while".into(), TokenKind::While);
+        map.insert("in".into(), TokenKind::In);
         map.insert("null".into(), TokenKind::Null);
         map.insert("print".into(), TokenKind::Print);
 
@@ -180,7 +183,13 @@ impl Lexer {
                 '{' => self.add_token(TokenKind::OpenBrace),
                 '}' => self.add_token(TokenKind::CloseBrace),
                 ',' => self.add_token(TokenKind::Comma),
-                '.' => self.add_token(TokenKind::Dot),
+                '.' => {
+                    if self.is_at('.') {
+                        self.add_token(TokenKind::DotDot);
+                    } else {
+                        self.add_token(TokenKind::Dot);
+                    }
+                },
                 '-' => self.add_token(TokenKind::Minus),
                 '+' => self.add_token(TokenKind::Plus),
                 '*' => self.add_token(TokenKind::Star),
@@ -463,7 +472,7 @@ mod tests {
 
     #[test]
     fn tokenize_double_char() {
-        let code: String = "!= <= >= ==".into();
+        let code: String = "!= <= >= == ..".into();
         let mut lexer = Lexer::new(); 
         let tokens = lexer.tokenize(&code).unwrap();
 
@@ -476,6 +485,7 @@ mod tests {
                 TokenKind::LessEqual,
                 TokenKind::GreaterEqual,
                 TokenKind::EqualEqual,
+                TokenKind::DotDot,
                 TokenKind::Eof,
             ]
         );

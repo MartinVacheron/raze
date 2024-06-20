@@ -3,7 +3,7 @@ use ecow::EcoString;
 use crate::{
     expr::{
         AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
-    }, lexer::Loc, results::{PhyReport, PhyResult}, stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt}
+    }, lexer::Loc, results::{PhyReport, PhyResult}, stmt::{BlockStmt, ExprStmt, ForStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt}
 };
 
 #[derive(Debug)]
@@ -28,6 +28,7 @@ pub struct StmtInfos {
     pub block: Vec<StmtInfos>,
     pub if_stmt: Vec<IfInfos>,
     pub while_stmt: Vec<WhileInfos>,
+    pub for_stmt: Vec<ForInfos>,
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -40,6 +41,13 @@ pub struct IfInfos {
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct WhileInfos {
     pub condition: ExprInfos,
+    pub body: StmtInfos,
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct ForInfos {
+    pub placeholder: EcoString,
+    pub range: (Option<i64>, i64),
     pub body: StmtInfos,
 }
 
@@ -125,6 +133,13 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         let body = stmt.body.accept(self)?;
 
         Ok(StmtInfos { while_stmt: vec![WhileInfos { condition, body }], ..Default::default()})
+    }
+
+    fn visit_for_stmt(&self, stmt: &ForStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+        let placeholder = stmt.placeholder.name.clone();
+        let range = (stmt.range.start.clone(), stmt.range.end.clone());
+
+        Ok(StmtInfos { for_stmt: vec![ForInfos { placeholder, range, body: stmt.body.accept(self)? }], ..Default::default() })
     }
 }
 

@@ -63,6 +63,10 @@ impl VisitStmt<String, AstPrinterErr> for AstPrinter {
     fn visit_while_stmt(&self, _stmt: &WhileStmt) -> Result<String, PhyResult<AstPrinterErr>> {
         todo!()
     }
+
+    fn visit_for_stmt(&self, _stmt: &crate::stmt::ForStmt) -> Result<String, PhyResult<AstPrinterErr>> {
+        todo!()
+    }
 }
 
 impl VisitExpr<String, AstPrinterErr> for AstPrinter {

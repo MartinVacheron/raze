@@ -12,6 +12,7 @@ pub enum Stmt {
     Block(BlockStmt),
     If(IfStmt),
     While(WhileStmt),
+    For(ForStmt),
 }
 
 #[derive(Debug)]
@@ -54,6 +55,20 @@ pub struct WhileStmt {
     pub loc: Loc,
 }
 
+#[derive(Debug)]
+pub struct ForStmt {
+    pub placeholder: EcoString,
+    pub range: ForRange,
+    pub body: Box<Stmt>,
+    pub loc: Loc,
+}
+
+#[derive(Debug)]
+pub struct ForRange {
+    pub start: Option<i64>,
+    pub end: i64,
+}
+
 impl Stmt {
 	pub fn accept<T, U: PhyReport>(&self, visitor: &dyn VisitStmt<T, U>) -> Result<T, PhyResult<U>> {
         match self {
@@ -63,6 +78,7 @@ impl Stmt {
             Stmt::Block(stmt) => visitor.visit_block_stmt(stmt),
             Stmt::If(stmt) => visitor.visit_if_stmt(stmt),
             Stmt::While(stmt) => visitor.visit_while_stmt(stmt),
+            Stmt::For(stmt) => visitor.visit_for_stmt(stmt),
 		}
 	}
 }
@@ -74,4 +90,5 @@ pub trait VisitStmt<T, U: PhyReport> {
     fn visit_block_stmt(&self, stmt: &BlockStmt) -> Result<T, PhyResult<U>>;
     fn visit_if_stmt(&self, stmt: &IfStmt) -> Result<T, PhyResult<U>>;
     fn visit_while_stmt(&self, stmt: &WhileStmt) -> Result<T, PhyResult<U>>;
+    fn visit_for_stmt(&self, stmt: &ForStmt) -> Result<T, PhyResult<U>>;
 }

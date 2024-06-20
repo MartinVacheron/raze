@@ -9,6 +9,7 @@ statement      → exprStmt
                | ifStmt
                | block
                | whileStmt
+               | forStmt
                | printStmt ;
 
 ifStmt         → "if" expression "{" statement "}" ( "else" "{" statement "}" )? ;
@@ -16,6 +17,8 @@ ifStmt         → "if" expression "{" statement "}" ( "else" "{" statement "}" 
 block          → "{" declaration* "}" ;
 
 whileStmt      → "while" expression "{" statement "}" ;
+
+froStmt        → "for" expression "in" (( INTEGER ".." )? INTEGER) "{" statement "}" ;
 
 exprStmt       → expression ;
 printStmt      → "print" expression ;
