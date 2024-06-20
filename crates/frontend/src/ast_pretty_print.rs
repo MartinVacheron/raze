@@ -2,7 +2,7 @@ use crate::expr::{
     AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
 };
 use crate::results::PhyReport;
-use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt};
+use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt};
 use crate::{expr::Expr, results::PhyResult};
 
 #[derive(Debug)]
@@ -57,6 +57,10 @@ impl VisitStmt<String, AstPrinterErr> for AstPrinter {
     }
 
     fn visit_if_stmt(&self, _stmt: &IfStmt) -> Result<String, PhyResult<AstPrinterErr>> {
+        todo!()
+    }
+
+    fn visit_while_stmt(&self, _stmt: &WhileStmt) -> Result<String, PhyResult<AstPrinterErr>> {
         todo!()
     }
 }

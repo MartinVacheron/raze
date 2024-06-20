@@ -7,7 +7,7 @@ use crate::expr::{
 };
 use crate::lexer::{Loc, Token, TokenKind};
 use crate::results::{PhyReport, PhyResult};
-use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt};
+use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, WhileStmt};
 
 // ----------------
 // Error managment
@@ -81,6 +81,19 @@ pub enum ParserErr {
 
     #[error("'else' branch can't have a condition")]
     ElseWithCond,
+
+    // While
+    #[error("'while' statement with no condition")]
+    WhileWithNoCond,
+
+    #[error("missing block start '{{' after 'while' condition")]
+    MissingWhileOpenBrace,
+
+    #[error("missing block end '}}' after 'while' body")]
+    MissingWhileCloseBrace,
+
+    #[error("'while' can't be empty, it requires at least one statement to break infinite loop")]
+    NoBodyWhile,
 
     // Others
     #[error("unexpected end of file")]
@@ -197,6 +210,7 @@ impl<'a> Parser<'a> {
             TokenKind::Print => self.parse_print_stmt(),
             TokenKind::OpenBrace => self.parse_block_stmt(),
             TokenKind::If => self.parse_if_stmt(),
+            TokenKind::While => self.parse_while_stmt(),
             _ => self.parse_expr_stmt(),
         };
 
@@ -217,7 +231,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_block_stmt(&mut self) -> ParserStmtRes {
-        self.expect_and_skip_new_lines(TokenKind::OpenBrace)?;
+        self.expect_and_skip(TokenKind::OpenBrace)?;
 
         let mut stmts: Vec<Stmt> = vec![];
 
@@ -225,7 +239,7 @@ impl<'a> Parser<'a> {
             stmts.push(self.parse_declarations()?);
         }
 
-        self.expect_and_skip_new_lines(TokenKind::CloseBrace)
+        self.expect_and_skip(TokenKind::CloseBrace)
             .map_err(|_| self.trigger_error(ParserErr::UnclosedBlock, true))?;
 
         Ok(Stmt::Block(BlockStmt {
@@ -236,14 +250,11 @@ impl<'a> Parser<'a> {
 
     fn parse_if_stmt(&mut self) -> ParserStmtRes {
         self.eat()?;
-
-        if self.is_at(TokenKind::OpenBrace) || self.is_at(TokenKind::Eof) || self.is_at(TokenKind::NewLine) {
-            return Err(self.trigger_error(ParserErr::IfWithNoCond, true))
-        }
+        self.is_at_brace_or_end_of(ParserErr::IfWithNoCond)?;
 
         let condition = self.parse_expr()?;
 
-        self.expect_and_skip_new_lines(TokenKind::OpenBrace)
+        self.skip_expect_and_skip(TokenKind::OpenBrace)
             .map_err(|_| self.trigger_error(ParserErr::MissingIfOpenBrace, true))?;
 
         let mut then_branch = None;
@@ -256,19 +267,17 @@ impl<'a> Parser<'a> {
             then_branch = Some(Box::new(self.parse_stmt()?));
         }
 
-        self.expect_and_skip_new_lines(TokenKind::CloseBrace)
+        self.expect_and_skip(TokenKind::CloseBrace)
             .map_err(|_| self.trigger_error(ParserErr::MissingIfCloseBrace, true))?;
 
         let mut else_branch: Option<Box<Stmt>> = None;
 
         if self.is_at(TokenKind::Else) {
             self.eat()?;
+            self.skip_new_lines();
+            self.is_not_at_brace_or_end_of(ParserErr::ElseWithCond)?;
 
-            if !self.is_at(TokenKind::OpenBrace) && !self.is_at(TokenKind::Eof) && !self.is_at(TokenKind::NewLine) {
-                return Err(self.trigger_error(ParserErr::ElseWithCond, true))
-            }
-
-            self.expect_and_skip_new_lines(TokenKind::OpenBrace)
+            self.expect_and_skip(TokenKind::OpenBrace)
                 .map_err(|_| self.trigger_error(ParserErr::MissingElseOpenBrace, true))?;
 
             match self.at().kind {
@@ -276,7 +285,7 @@ impl<'a> Parser<'a> {
                 _ => {
                     else_branch = Some(Box::new(self.parse_stmt()?));
 
-                    self.expect_and_skip_new_lines(TokenKind::CloseBrace)
+                    self.expect_and_skip(TokenKind::CloseBrace)
                         .map_err(|_| self.trigger_error(ParserErr::MissingElseCloseBrace, true))?;
                 }
             }
@@ -286,6 +295,31 @@ impl<'a> Parser<'a> {
             condition,
             then_branch,
             else_branch,
+            loc: self.get_loc(),
+        }))
+    }
+
+    fn parse_while_stmt(&mut self) -> ParserStmtRes {
+        self.eat()?;
+        self.is_at_brace_or_end_of(ParserErr::WhileWithNoCond)?;
+
+        let condition = self.parse_expr()?;
+
+        self.skip_expect_and_skip(TokenKind::OpenBrace)
+            .map_err(|_| self.trigger_error(ParserErr::MissingWhileOpenBrace, true))?;
+
+        if self.is_at(TokenKind::CloseBrace) {
+            return Err(self.trigger_error(ParserErr::NoBodyWhile, true))
+        }
+
+        let body = Box::new(self.parse_stmt()?);
+
+        self.expect_and_skip(TokenKind::CloseBrace)
+            .map_err(|_| self.trigger_error(ParserErr::MissingWhileCloseBrace, true))?;
+
+        Ok(Stmt::While(WhileStmt {
+            condition,
+            body,
             loc: self.get_loc(),
         }))
     }
@@ -570,7 +604,15 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expect_and_skip_new_lines(&mut self, kind: TokenKind) -> Result<(), PhyResParser> {
+    fn expect_and_skip(&mut self, kind: TokenKind) -> Result<(), PhyResParser> {
+        self.expect(kind)?;
+        self.skip_new_lines();
+
+        Ok(())
+    }
+
+    fn skip_expect_and_skip(&mut self, kind: TokenKind) -> Result<(), PhyResParser> {
+        self.skip_new_lines();
         self.expect(kind)?;
         self.skip_new_lines();
 
@@ -608,6 +650,22 @@ impl<'a> Parser<'a> {
         }
 
         PhyResult::new(err, Some(self.get_loc()))
+    }
+
+    fn is_at_brace_or_end_of(&mut self, err: ParserErr) -> Result<(), PhyResParser> {
+        if self.is_at(TokenKind::OpenBrace) || self.is_at(TokenKind::Eof) || self.is_at(TokenKind::NewLine) {
+            return Err(self.trigger_error(err, true))
+        }
+
+        Ok(())
+    }
+
+    fn is_not_at_brace_or_end_of(&mut self, err: ParserErr) -> Result<(), PhyResParser> {
+        if !self.is_at(TokenKind::OpenBrace) || self.is_at(TokenKind::Eof) || self.is_at(TokenKind::NewLine) {
+            return Err(self.trigger_error(err, true))
+        }
+
+        Ok(())
     }
 
     // TODO: For now, we are only looking for new line token as we
@@ -822,7 +880,6 @@ var b =
 var c = var";
         let errs = lex_and_parse(code).err().unwrap();
         let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
-        println!("All: {:?}", e);
         assert!(e[0] == &ParserErr::VarDeclNoName);
         assert!(e[1] == &ParserErr::WrongRhsVarDecl);
         assert!(e[2] == &ParserErr::NoExprAssign, "it was: {}", e[2]);
@@ -861,7 +918,6 @@ foo_b4r = 65 % 6.";
         assert_eq!(assign_infos[0].0, EcoString::from("a"));
         assert_eq!(assign_infos[0].1.get_int_values()[0], &6i64);
 
-        println!("Assign info: {:?}", assign_infos[1]);
         let assign2_binop = assign_infos[1].1.get_binop_values();
         assert_eq!(assign_infos[1].0, EcoString::from("foo_b4r"));
         assert_eq!(assign2_binop[0].0.get_int_values()[0], &65i64);
@@ -1035,5 +1091,47 @@ if a and {}
         let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
         assert!(e[0] == &ParserErr::OrWithNoCond);
         assert!(e[1] == &ParserErr::AndWithNoCond);
+    }
+
+    #[test]
+    fn while_stmt() {
+        let code = "
+while a or true
+
+{
+    a = 1
+}
+";
+        // 0
+        let infos = get_stmt_nodes_infos(code);
+        let while_stmt = &infos.while_stmt[0];
+        let while_cond = &while_stmt.condition.logical[0];
+        assert_eq!(
+            while_cond.left.get_ident_values()[0],
+            EcoString::from("a")
+        );
+        assert_eq!(while_cond.op, EcoString::from("or"));
+        assert_eq!(
+            while_cond.right.get_ident_values()[0],
+            EcoString::from("true")
+        );
+
+        let body = &while_stmt.body.expr.assign[0];
+        assert_eq!(body.name, EcoString::from("a"));
+        assert_eq!(body.expr.get_int_values()[0], &1);
+
+        // Errors
+        let code = "
+while {}
+while a {}
+while a
+}
+";
+        // 0
+        let errs = lex_and_parse(code).err().unwrap();
+        let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
+        assert!(e[0] == &ParserErr::WhileWithNoCond);
+        assert!(e[1] == &ParserErr::NoBodyWhile);
+        assert!(e[2] == &ParserErr::MissingWhileOpenBrace);
     }
 }

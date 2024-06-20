@@ -11,6 +11,7 @@ pub enum Stmt {
     VarDecl(VarDeclStmt),
     Block(BlockStmt),
     If(IfStmt),
+    While(WhileStmt),
 }
 
 #[derive(Debug)]
@@ -46,14 +47,22 @@ pub struct IfStmt {
     pub loc: Loc,
 }
 
+#[derive(Debug)]
+pub struct WhileStmt {
+    pub condition: Expr,
+    pub body: Box<Stmt>,
+    pub loc: Loc,
+}
+
 impl Stmt {
-	pub fn accept<T, U: PhyReport>(& self, visitor: &dyn VisitStmt<T, U>) -> Result<T, PhyResult<U>> {
+	pub fn accept<T, U: PhyReport>(&self, visitor: &dyn VisitStmt<T, U>) -> Result<T, PhyResult<U>> {
         match self {
             Stmt::Expr(stmt) => visitor.visit_expr_stmt(stmt),
             Stmt::Print(stmt) => visitor.visit_print_stmt(stmt),
             Stmt::VarDecl(stmt) => visitor.visit_var_decl_stmt(stmt),
             Stmt::Block(stmt) => visitor.visit_block_stmt(stmt),
             Stmt::If(stmt) => visitor.visit_if_stmt(stmt),
+            Stmt::While(stmt) => visitor.visit_while_stmt(stmt),
 		}
 	}
 }
@@ -64,4 +73,5 @@ pub trait VisitStmt<T, U: PhyReport> {
     fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt) -> Result<T, PhyResult<U>>;
     fn visit_block_stmt(&self, stmt: &BlockStmt) -> Result<T, PhyResult<U>>;
     fn visit_if_stmt(&self, stmt: &IfStmt) -> Result<T, PhyResult<U>>;
+    fn visit_while_stmt(&self, stmt: &WhileStmt) -> Result<T, PhyResult<U>>;
 }

@@ -9,7 +9,7 @@ use crate::expr::{
     AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
 };
 use crate::results::{PhyReport, PhyResult};
-use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt};
+use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt};
 use crate::values::{RtVal, RtValKind};
 
 // ----------------
@@ -44,8 +44,13 @@ pub enum InterpErr {
     #[error("uninitialized variable")]
     UninitializedValue,
 
+    // If
     #[error("'if' condition is not a boolean")]
     NonBoolIfCond,
+
+    // While
+    #[error("'while' condition is not a boolean")]
+    NonBoolWhileCond,
 }
 
 impl PhyReport for InterpErr {
@@ -146,6 +151,22 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
             }
             _ => Err(PhyResult::new(InterpErr::NonBoolIfCond, Some(stmt.loc.clone())))
         }
+    }
+
+    fn visit_while_stmt(&self, stmt: &WhileStmt) -> Result<RtVal, PhyResult<InterpErr>> {
+        loop {
+            let cond = stmt.condition.accept(self)?;
+
+            match cond.value {
+                RtValKind::BoolVal(b) => match b.borrow().value {
+                    true => { stmt.body.accept(self)?; },
+                    false => break,
+                }
+                _ => return Err(PhyResult::new(InterpErr::NonBoolWhileCond, Some(stmt.loc.clone())))
+            }
+        }
+
+        Ok(RtVal::new_null())
     }
 }
 
@@ -466,5 +487,17 @@ if a and b == 41 or b == 42 and false {} else { b = 45 }
 b
 ";
         assert_eq!(lex_parse_interp(code).unwrap(), 45.into());
+    }
+
+    #[test]
+    fn while_stmt() {
+        let code = "
+var a = 0
+while a < 5 {
+    a = a + 1
+}
+a
+";
+        assert_eq!(lex_parse_interp(code).unwrap(), 5.into());
     }
 }

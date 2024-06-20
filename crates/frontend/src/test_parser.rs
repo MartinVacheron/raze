@@ -3,7 +3,7 @@ use ecow::EcoString;
 use crate::{
     expr::{
         AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
-    }, lexer::Loc, results::{PhyReport, PhyResult}, stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt}
+    }, lexer::Loc, results::{PhyReport, PhyResult}, stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt}
 };
 
 #[derive(Debug)]
@@ -27,6 +27,7 @@ pub struct StmtInfos {
     pub var_decl: Vec<(EcoString, Option<ExprInfos>)>,
     pub block: Vec<StmtInfos>,
     pub if_stmt: Vec<IfInfos>,
+    pub while_stmt: Vec<WhileInfos>,
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -36,6 +37,12 @@ pub struct IfInfos {
     pub else_branch: Option<StmtInfos>,
 }
 
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct WhileInfos {
+    pub condition: ExprInfos,
+    pub body: StmtInfos,
+}
+
 impl StmtInfos {
     fn concat(&mut self, other: &mut StmtInfos) {
         self.expr.concat(&mut other.expr);
@@ -43,6 +50,7 @@ impl StmtInfos {
         self.var_decl.append(&mut other.var_decl);
         self.block.append(&mut other.block);
         self.if_stmt.append(&mut other.if_stmt);
+        self.while_stmt.append(&mut other.while_stmt);
     }
 }
 
@@ -102,7 +110,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         if let Some(e) = &stmt.then_branch {
             then_branch = Some(e.accept(self)?);
         }
-        
+
         let mut else_branch = None;
 
         if let Some(e) = &stmt.else_branch {
@@ -110,6 +118,13 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         }
 
         Ok(StmtInfos{ if_stmt: vec![IfInfos { condition, then_branch, else_branch }], ..Default::default()})
+    }
+
+    fn visit_while_stmt(&self, stmt: &WhileStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+        let condition = stmt.condition.accept(self)?;
+        let body = stmt.body.accept(self)?;
+
+        Ok(StmtInfos { while_stmt: vec![WhileInfos { condition, body }], ..Default::default()})
     }
 }
 
