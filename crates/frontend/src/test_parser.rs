@@ -47,8 +47,8 @@ pub struct WhileInfos {
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct ForInfos {
     pub placeholder: EcoString,
-    pub range: (Option<i64>, i64),
-    pub body: StmtInfos,
+    pub range: (i64, Option<i64>),
+    pub body: Option<StmtInfos>,
 }
 
 impl StmtInfos {
@@ -59,6 +59,7 @@ impl StmtInfos {
         self.block.append(&mut other.block);
         self.if_stmt.append(&mut other.if_stmt);
         self.while_stmt.append(&mut other.while_stmt);
+        self.for_stmt.append(&mut other.for_stmt);
     }
 }
 
@@ -136,10 +137,15 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
     }
 
     fn visit_for_stmt(&self, stmt: &ForStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
-        let placeholder = stmt.placeholder.name.clone();
-        let range = (stmt.range.start.clone(), stmt.range.end.clone());
+        let placeholder = stmt.placeholder.clone();
+        let range = (stmt.range.start, stmt.range.end);
+        let mut body = None;
 
-        Ok(StmtInfos { for_stmt: vec![ForInfos { placeholder, range, body: stmt.body.accept(self)? }], ..Default::default() })
+        if let Some(b) = &stmt.body {
+            body = Some(b.accept(self)?);
+        }
+
+        Ok(StmtInfos { for_stmt: vec![ForInfos { placeholder, range, body }], ..Default::default() })
     }
 }
 

@@ -316,6 +316,15 @@ impl Lexer {
         }
         
         if self.at() == '.' {
+            if self.next() == '.' {
+                self.add_token(TokenKind::Int);
+                self.eat();
+                self.eat();
+                self.add_token(TokenKind::DotDot);
+
+                return Ok(())
+            }
+
             self.eat();
 
             if self.eof() || self.is_skippable() || self.at() == '\n' {
@@ -364,6 +373,14 @@ impl Lexer {
     fn at(&self) -> char {
         if !self.eof() {
             *self.code.get(self.current).unwrap()
+        } else {
+            '\0'
+        }
+    }
+
+    fn next(&self) -> char {
+        if self.current < self.code.len() - 1 {
+            *self.code.get(self.current + 1).unwrap()
         } else {
             '\0'
         }
@@ -522,6 +539,19 @@ mod tests {
         );
     }
 
+    #[test]
+    fn tokenize_range() {
+        let code: String = "2..5".into();
+        let mut lexer = Lexer::new(); 
+        let tokens = lexer.tokenize(&code).unwrap();
+
+        let tk_type: Vec<TokenKind> = tokens.iter().map(|tk| tk.kind.clone()).collect();
+
+        assert_eq!(
+            tk_type,
+            vec![TokenKind::Int, TokenKind::DotDot, TokenKind::Int, TokenKind::Eof]
+        );
+    }
     #[test]
     fn number_errors() {
         let code: String = "12.5.".into();

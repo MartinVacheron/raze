@@ -105,8 +105,23 @@ pub enum ParserErr {
     #[error("missing 'in' after variable name in 'for' loop")]
     MissingInFor,
 
+    #[error("missing range in 'for' loop")]
+    MissingForRange,
+
     #[error("only 'ints' are supported as 'for' ranges")]
     NonIntForRange,
+
+    #[error("range can only be positive")]
+    NegativeForRange,
+
+    #[error("end of range smaller than start")]
+    LesserEndForRange,
+
+    #[error("missing start of range before '..'")]
+    MissingStartForRange,
+
+    #[error("missing end of range after '..'")]
+    MissingEndForRange,
 
     #[error("missing block start '{{' after 'for' condition")]
     MissingForOpenBrace,
@@ -357,30 +372,52 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::In)
             .map_err(|_| self.trigger_error(ParserErr::MissingInFor, true))?;
 
-        let end = self
+        self.is_at_brace_or_end_of(ParserErr::MissingForRange)?;
+
+        if self.is_at(TokenKind::DotDot) {
+            return Err(self.trigger_error(ParserErr::MissingStartForRange, true))
+        }
+
+        if self.is_at(TokenKind::Minus) {
+            return Err(self.trigger_error(ParserErr::NegativeForRange, true))
+        }
+
+        let start = self
             .expect(TokenKind::Int)
             .map_err(|_| self.trigger_error(ParserErr::NonIntForRange, true))?
             .value
             .parse::<i64>()
             .map_err(|_| self.trigger_error(ParserErr::ParsingInt, true))?;
 
-        let mut start = None;
+        let mut end = None;
         if self.is_at(TokenKind::DotDot) {
             self.eat()?;
 
-            start = Some(
+            self.is_at_brace_or_end_of(ParserErr::MissingEndForRange)?;
+
+        println!("Before end: {}", self.at());
+            end = Some(
                 self.expect(TokenKind::Int)
                     .map_err(|_| self.trigger_error(ParserErr::NonIntForRange, true))?
                     .value
                     .parse::<i64>()
                     .map_err(|_| self.trigger_error(ParserErr::ParsingInt, true))?
             );
+
+        println!("After end: {}", self.at());
+
+            if Some(start) > end {
+                return Err(self.trigger_error(ParserErr::LesserEndForRange, true))
+            }
         }
 
         self.skip_expect_and_skip(TokenKind::OpenBrace)
             .map_err(|_| self.trigger_error(ParserErr::MissingForOpenBrace, true))?;
 
-        let body = Box::new(self.parse_stmt()?);
+        let mut body = None;
+        if !self.is_at(TokenKind::CloseBrace) {
+            body = Some(Box::new(self.parse_stmt()?));
+        }
 
         self.skip_expect_and_skip(TokenKind::CloseBrace)
             .map_err(|_| self.trigger_error(ParserErr::MissingForCloseBrace, true))?;
@@ -1194,5 +1231,58 @@ while a
         assert!(e[0] == &ParserErr::WhileWithNoCond);
         assert!(e[1] == &ParserErr::NoBodyWhile);
         assert!(e[2] == &ParserErr::MissingWhileOpenBrace);
+    }
+
+    #[test]
+    fn for_stmt() {
+        let code = "
+for a in 5 {}
+for foo_b4r in 5..10
+
+{
+    print a
+
+}
+";
+        // 0
+        let infos = get_stmt_nodes_infos(code);
+        let for_stmt = &infos.for_stmt[0];
+        assert_eq!(for_stmt.placeholder, EcoString::from("a"));
+        assert_eq!(
+            for_stmt.range,
+            (5, None)
+        );
+
+        let for_stmt = &infos.for_stmt[1];
+        assert_eq!(for_stmt.placeholder, EcoString::from("foo_b4r"));
+        assert_eq!(
+            for_stmt.range,
+            (5, Some(10))
+        );
+
+        // Errors
+        let code = "
+for in 5 {}
+for a 5 {}
+for a in {}
+for a in 5 print a
+for a in ..5 {}
+for a in 5.. {}
+for a in -5 {}
+for a in 3.14 {}
+for a in 5..0 {}
+";
+        // 0
+        let errs = lex_and_parse(code).err().unwrap();
+        let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
+        assert!(e[0] == &ParserErr::MissingVarNameFor);
+        assert!(e[1] == &ParserErr::MissingInFor);
+        assert!(e[2] == &ParserErr::MissingForRange);
+        assert!(e[3] == &ParserErr::MissingForOpenBrace);
+        assert!(e[4] == &ParserErr::MissingStartForRange);
+        assert!(e[5] == &ParserErr::MissingEndForRange);
+        assert!(e[6] == &ParserErr::NegativeForRange, "{}", e[6]);
+        assert!(e[7] == &ParserErr::NonIntForRange);
+        assert!(e[8] == &ParserErr::LesserEndForRange);
     }
 }

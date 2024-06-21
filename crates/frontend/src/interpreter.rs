@@ -168,6 +168,10 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
 
         Ok(RtVal::new_null())
     }
+
+    fn visit_for_stmt(&self, stmt: &crate::stmt::ForStmt) -> Result<RtVal, PhyResult<InterpErr>> {
+        todo!()
+    }
 }
 
 impl VisitExpr<RtVal, InterpErr> for Interpreter {

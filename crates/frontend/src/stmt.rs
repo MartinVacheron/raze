@@ -59,14 +59,14 @@ pub struct WhileStmt {
 pub struct ForStmt {
     pub placeholder: EcoString,
     pub range: ForRange,
-    pub body: Box<Stmt>,
+    pub body: Option<Box<Stmt>>,
     pub loc: Loc,
 }
 
 #[derive(Debug)]
 pub struct ForRange {
-    pub start: Option<i64>,
-    pub end: i64,
+    pub start: i64,
+    pub end: Option<i64>,
 }
 
 impl Stmt {
