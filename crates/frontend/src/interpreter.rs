@@ -4,12 +4,17 @@ use std::rc::Rc;
 use colored::Colorize;
 use thiserror::Error;
 
+use crate::callable::Callable;
 use crate::environment::Env;
 use crate::expr::{
-    AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
+    AssignExpr, BinaryExpr, CallExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr,
+    RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr,
 };
 use crate::results::{PhyReport, PhyResult};
-use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt};
+use crate::stmt::{
+    BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt,
+    WhileStmt,
+};
 use crate::values::{RtVal, RtValKind};
 
 // ----------------
@@ -51,6 +56,20 @@ pub enum InterpErr {
     // While
     #[error("'while' condition is not a boolean")]
     NonBoolWhileCond,
+
+    // For
+    #[error("{0}")]
+    ForLoop(String),
+
+    // Call
+    #[error("only functions and structures are callable")]
+    NonFnCall,
+
+    #[error("wrong arguments number: expected {0} but got {1}")]
+    WrongArgsNb(usize, usize),
+
+    #[error("{0}")]
+    FnCall(String),
 }
 
 impl PhyReport for InterpErr {
@@ -70,10 +89,11 @@ pub struct Interpreter {
     // In RefCell because visitor methods only borrow (&) so we must be
     // able to mutate thanks to RefCell and it can be multiple owners
     env: RefCell<Rc<RefCell<Env>>>,
+    pub globals: Rc<RefCell<Env>>,
 }
 
 impl Interpreter {
-    pub fn interpret(&self, nodes: &Vec<Stmt>) -> InterpRes  {
+    pub fn interpret(&self, nodes: &Vec<Stmt>) -> InterpRes {
         let mut res: RtVal = RtVal::new_null();
 
         for node in nodes {
@@ -117,19 +137,12 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
 
     fn visit_block_stmt(&self, stmt: &BlockStmt) -> InterpRes {
         let new_env = Env::new(Some(self.env.borrow().clone()));
-        let prev_env = self.env.replace(Rc::new(RefCell::new(new_env)));
-
-        println!("new env created successfuly!");
-        for s in &stmt.stmts {
-            let _ = s.accept(self)?;
-        }
-
-        self.env.replace(prev_env);
+        self.execute_block_stmt(&stmt.stmts, new_env)?;
 
         Ok(RtVal::new_null())
     }
 
-    fn visit_if_stmt(&self, stmt: &IfStmt) -> Result<RtVal, PhyResult<InterpErr>> {
+    fn visit_if_stmt(&self, stmt: &IfStmt) -> InterpRes {
         let cond = stmt.condition.accept(self)?;
 
         match cond.value {
@@ -148,42 +161,116 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
                         Ok(RtVal::new_null())
                     }
                 }
-            }
-            _ => Err(PhyResult::new(InterpErr::NonBoolIfCond, Some(stmt.loc.clone())))
+            },
+            _ => Err(PhyResult::new(
+                InterpErr::NonBoolIfCond,
+                Some(stmt.loc.clone()),
+            )),
         }
     }
 
-    fn visit_while_stmt(&self, stmt: &WhileStmt) -> Result<RtVal, PhyResult<InterpErr>> {
+    fn visit_while_stmt(&self, stmt: &WhileStmt) -> InterpRes {
         loop {
             let cond = stmt.condition.accept(self)?;
 
             match cond.value {
                 RtValKind::BoolVal(b) => match b.borrow().value {
-                    true => { stmt.body.accept(self)?; },
+                    true => {
+                        stmt.body.accept(self)?;
+                    }
                     false => break,
+                },
+                _ => {
+                    return Err(PhyResult::new(
+                        InterpErr::NonBoolWhileCond,
+                        Some(stmt.loc.clone()),
+                    ))
                 }
-                _ => return Err(PhyResult::new(InterpErr::NonBoolWhileCond, Some(stmt.loc.clone())))
             }
         }
 
         Ok(RtVal::new_null())
     }
 
-    fn visit_for_stmt(&self, stmt: &crate::stmt::ForStmt) -> Result<RtVal, PhyResult<InterpErr>> {
+    fn visit_for_stmt(&self, stmt: &ForStmt) -> InterpRes {
+        let new_env = Env::new(Some(self.env.borrow().clone()));
+        let prev_env = self.env.replace(Rc::new(RefCell::new(new_env)));
+
+        self.visit_var_decl_stmt(&stmt.placeholder)?;
+        let mut range = 0..stmt.range.start + 1;
+
+        if let Some(i) = stmt.range.end {
+            range = stmt.range.start..i + 1;
+        }
+
+        for i in range {
+            self.env
+                .borrow()
+                .borrow_mut()
+                .assign(stmt.placeholder.name.clone(), i.into())
+                .map_err(|e| {
+                    PhyResult::new(InterpErr::ForLoop(e.to_string()), Some(stmt.loc.clone()))
+                })?;
+
+            stmt.body.accept(self)?;
+        }
+
+        self.env.replace(prev_env);
+
+        Ok(RtVal::new_null())
+    }
+
+    fn visit_fn_decl_stmt(&self, stmt: &FnDeclStmt) -> Result<RtVal, PhyResult<InterpErr>> {
+        let func: RtVal = stmt.into();
+        self.env
+            .borrow()
+            .borrow_mut()
+            .declare_var(stmt.name.clone(), func)
+            .map_err(|_| {
+                PhyResult::new(
+                    InterpErr::VarDeclEnv(stmt.name.to_string()),
+                    Some(stmt.loc.clone()),
+                )
+            })?;
+
+        Ok(RtVal::new_null())
+    }
+
+    fn visit_return_stmt(&self, stmt: &crate::stmt::ReturnStmt) -> Result<RtVal, PhyResult<InterpErr>> {
         todo!()
     }
 }
 
+impl Interpreter {
+    pub fn execute_block_stmt(&self, stmts: &Vec<Stmt>, env: Env) -> InterpRes {
+        let prev_env = self.env.replace(Rc::new(RefCell::new(env)));
+
+        for s in stmts {
+            let _ = s.accept(self)?;
+        }
+
+        self.env.replace(prev_env);
+
+        Ok(RtVal::new_null())
+    }
+}
+
 impl VisitExpr<RtVal, InterpErr> for Interpreter {
-    fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<RtVal, PhyResInterp> {
+    fn visit_binary_expr(&self, expr: &BinaryExpr) -> InterpRes {
         let lhs = expr.left.accept(self)?;
         if lhs == RtVal::new_null() {
-            return Err(PhyResult::new(InterpErr::UninitializedValue, Some(expr.left.get_loc())))
+            return Err(PhyResult::new(
+                InterpErr::UninitializedValue,
+                Some(expr.left.get_loc()),
+            ));
         }
 
         let rhs = expr.right.accept(self)?;
         if rhs == RtVal::new_null() {
-            return Err(PhyResult::new(InterpErr::UninitializedValue, Some(expr.right.get_loc())))
+            return Err(PhyResult::new(
+                InterpErr::UninitializedValue,
+                Some(expr.right.get_loc()),
+            ));
         }
 
         match lhs.operate(&rhs, &expr.operator) {
@@ -209,34 +296,39 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
         Ok(RtVal::new_null())
     }
 
-    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<RtVal, PhyResInterp> {
+    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> InterpRes {
         expr.expr.accept(self)
     }
 
-    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<RtVal, PhyResInterp> {
+    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> InterpRes {
         Ok(expr.value.into())
     }
 
-    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<RtVal, PhyResInterp> {
+    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> InterpRes {
         Ok(expr.value.into())
     }
 
-    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<RtVal, PhyResInterp> {
+    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> InterpRes {
         Ok(expr.value.clone().into())
     }
 
-    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<RtVal, PhyResInterp> {
+    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> InterpRes {
         match expr.name.as_str() {
             "true" => Ok(true.into()),
             "false" => Ok(false.into()),
             "null" => Ok(RtVal::new_null()),
-            _ => self.env.borrow().borrow().get_var(expr.name.clone()).map_err(|e| {
-                PhyResult::new(InterpErr::GetVarEnv(e.to_string()), Some(expr.loc.clone()))
-            }),
+            _ => self
+                .env
+                .borrow()
+                .borrow()
+                .get_var(expr.name.clone())
+                .map_err(|e| {
+                    PhyResult::new(InterpErr::GetVarEnv(e.to_string()), Some(expr.loc.clone()))
+                }),
         }
     }
 
-    fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<RtVal, PhyResInterp> {
+    fn visit_unary_expr(&self, expr: &UnaryExpr) -> InterpRes {
         let value = expr.right.accept(self)?;
 
         match (&value.value, expr.operator.as_str()) {
@@ -262,27 +354,65 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
         Ok(value)
     }
 
-    fn visit_logical_expr(&self, expr: &LogicalExpr) -> Result<RtVal, PhyResult<InterpErr>> {
+    fn visit_logical_expr(&self, expr: &LogicalExpr) -> InterpRes {
         let left = expr.left.accept(self)?;
         let op = expr.operator.as_str();
 
         if op == "or" {
             match &left.value {
                 RtValKind::BoolVal(b) => {
-                    if b.borrow().value { return Ok(left) }
+                    if b.borrow().value {
+                        return Ok(left);
+                    }
                 }
-                _ => return Err(PhyResult::new(InterpErr::NonBoolIfCond, Some(expr.loc.clone())))
+                _ => {
+                    return Err(PhyResult::new(
+                        InterpErr::NonBoolIfCond,
+                        Some(expr.loc.clone()),
+                    ))
+                }
             }
         } else if op == "and" {
             match &left.value {
                 RtValKind::BoolVal(b) => {
-                    if !b.borrow().value { return Ok(left) }
+                    if !b.borrow().value {
+                        return Ok(left);
+                    }
                 }
-                _ => return Err(PhyResult::new(InterpErr::NonBoolIfCond, Some(expr.loc.clone())))
+                _ => {
+                    return Err(PhyResult::new(
+                        InterpErr::NonBoolIfCond,
+                        Some(expr.loc.clone()),
+                    ))
+                }
             }
         }
 
         expr.right.accept(self)
+    }
+
+    fn visit_call_expr(&self, expr: &CallExpr) -> InterpRes {
+        let callee = expr.callee.accept(self)?;
+
+        let mut args: Vec<RtVal> = vec![];
+        for a in &expr.args {
+            args.push(a.accept(self)?);
+        }
+
+        if let RtValKind::FuncVal(f) = callee.value {
+            if f.borrow().arity() != args.len() {
+                return Err(PhyResult::new(
+                    InterpErr::WrongArgsNb(f.borrow().arity(), args.len()),
+                    Some(expr.loc.clone()),
+                ));
+            }
+
+            f.borrow_mut().call(self, args).map_err(|e| {
+                PhyResult::new(InterpErr::FnCall(e.err.to_string()), Some(expr.loc.clone()))
+            })
+        } else {
+            Err(PhyResult::new(InterpErr::NonFnCall, Some(expr.loc.clone())))
+        }
     }
 }
 
@@ -401,7 +531,10 @@ a";
 
         let code = "var b
 3 + b";
-        assert_eq!(lex_parse_interp(code).err().unwrap().err, InterpErr::UninitializedValue);
+        assert_eq!(
+            lex_parse_interp(code).err().unwrap().err,
+            InterpErr::UninitializedValue
+        );
     }
 
     #[test]
@@ -503,5 +636,35 @@ while a < 5 {
 a
 ";
         assert_eq!(lex_parse_interp(code).unwrap(), 5.into());
+    }
+
+    #[test]
+    fn for_stmt() {
+        let code = "
+var a = 0
+for i in 5 { a = a + i }
+a
+";
+        assert_eq!(lex_parse_interp(code).unwrap(), 15.into());
+
+        let code = "
+var a = 0
+for i in 5..10 { a = a + i }
+a
+";
+        assert_eq!(lex_parse_interp(code).unwrap(), 45.into());
+    }
+
+    #[test]
+    fn functions() {
+        let code = "
+var res
+fn add(a, b) {
+    res = a + b
+}
+add(5, 6)
+b
+";
+        assert_eq!(lex_parse_interp(code).unwrap(), 11.into());
     }
 }

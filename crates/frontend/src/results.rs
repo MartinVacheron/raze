@@ -1,8 +1,7 @@
 use std::collections::VecDeque;
 
+use crate::lexer::Loc;
 use colored::*;
-use super::lexer::Loc;
-
 
 pub trait PhyReport {
     fn get_err_msg(&self) -> String;
@@ -58,7 +57,11 @@ impl<'a, T: PhyReport> PhyResult<T> {
             lines.push_back((i + 1, line));
 
             if loc.start >= offset && loc.start < offset + line.len() {
-                return ReportContext { line: i + 1, snippets: lines, offset }
+                return ReportContext {
+                    line: i + 1,
+                    snippets: lines,
+                    offset,
+                };
             } else {
                 if lines.len() == 2 {
                     lines.pop_front();
@@ -69,9 +72,12 @@ impl<'a, T: PhyReport> PhyResult<T> {
             }
         }
 
-        panic!("Code snippet not found while reporting error: {}", self.err.get_err_msg())
+        panic!(
+            "Code snippet not found while reporting error: {}",
+            self.err.get_err_msg()
+        )
     }
-    
+
     fn get_decorators(&self, cx: &ReportContext, loc: &Loc) -> String {
         let mut decorators = " ".repeat(loc.start - cx.offset);
         let indicators = "^".repeat(loc.get_len());

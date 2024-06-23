@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use ecow::EcoString;
 
 use crate::{
@@ -13,6 +15,8 @@ pub enum Stmt {
     If(IfStmt),
     While(WhileStmt),
     For(ForStmt),
+    FnDecl(FnDeclStmt),
+    Return(ReturnStmt),
 }
 
 #[derive(Debug)]
@@ -57,9 +61,9 @@ pub struct WhileStmt {
 
 #[derive(Debug)]
 pub struct ForStmt {
-    pub placeholder: EcoString,
+    pub placeholder: VarDeclStmt,
     pub range: ForRange,
-    pub body: Option<Box<Stmt>>,
+    pub body: Box<Stmt>,
     pub loc: Loc,
 }
 
@@ -67,6 +71,20 @@ pub struct ForStmt {
 pub struct ForRange {
     pub start: i64,
     pub end: Option<i64>,
+}
+
+#[derive(Debug)]
+pub struct FnDeclStmt {
+    pub name: EcoString,
+    pub params: Rc<Vec<EcoString>>,
+    pub body: Rc<Vec<Stmt>>,
+    pub loc: Loc,
+}
+
+#[derive(Debug)]
+pub struct ReturnStmt {
+    pub value: Option<Expr>,
+    pub loc: Loc,
 }
 
 impl Stmt {
@@ -79,6 +97,8 @@ impl Stmt {
             Stmt::If(stmt) => visitor.visit_if_stmt(stmt),
             Stmt::While(stmt) => visitor.visit_while_stmt(stmt),
             Stmt::For(stmt) => visitor.visit_for_stmt(stmt),
+            Stmt::FnDecl(stmt) => visitor.visit_fn_decl_stmt(stmt),
+            Stmt::Return(stmt) => visitor.visit_return_stmt(stmt),
 		}
 	}
 }
@@ -91,4 +111,6 @@ pub trait VisitStmt<T, U: PhyReport> {
     fn visit_if_stmt(&self, stmt: &IfStmt) -> Result<T, PhyResult<U>>;
     fn visit_while_stmt(&self, stmt: &WhileStmt) -> Result<T, PhyResult<U>>;
     fn visit_for_stmt(&self, stmt: &ForStmt) -> Result<T, PhyResult<U>>;
+    fn visit_fn_decl_stmt(&self, stmt: &FnDeclStmt) -> Result<T, PhyResult<U>>;
+    fn visit_return_stmt(&self, stmt: &ReturnStmt) -> Result<T, PhyResult<U>>;
 }

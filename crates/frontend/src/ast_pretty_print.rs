@@ -67,6 +67,14 @@ impl VisitStmt<String, AstPrinterErr> for AstPrinter {
     fn visit_for_stmt(&self, _stmt: &crate::stmt::ForStmt) -> Result<String, PhyResult<AstPrinterErr>> {
         todo!()
     }
+
+    fn visit_fn_decl_stmt(&self, _stmt: &crate::stmt::FnDeclStmt) -> Result<String, PhyResult<AstPrinterErr>> {
+        todo!()
+    }
+
+    fn visit_return_stmt(&self, stmt: &crate::stmt::ReturnStmt) -> Result<String, PhyResult<AstPrinterErr>> {
+        todo!()
+    }
 }
 
 impl VisitExpr<String, AstPrinterErr> for AstPrinter {
@@ -105,5 +113,9 @@ impl VisitExpr<String, AstPrinterErr> for AstPrinter {
 
     fn visit_logical_expr(&self, expr: &LogicalExpr) -> Result<String, PhyResult<AstPrinterErr>> {
         self.parenthesize(expr.operator.as_str(), &[&expr.left, &expr.right])
+    }
+
+    fn visit_call_expr(&self, expr: &crate::expr::CallExpr) -> Result<String, PhyResult<AstPrinterErr>> {
+        todo!()
     }
 }

@@ -1,24 +1,28 @@
 program        → declaration* EOF ;
 
 declaration    → varDecl
+               | funcDecl
                | statement ;
 
 varDecl        → "var" IDENTIFIER ( "=" expression )? ;
+
+funcDecl       → "fn" function ;
+function       → IDENTIFIER "(" paramters? ")" block ;
+parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
 
 statement      → exprStmt
                | ifStmt
                | block
                | whileStmt
                | forStmt
+               | returnStmt
                | printStmt ;
 
 ifStmt         → "if" expression "{" statement "}" ( "else" "{" statement "}" )? ;
-
 block          → "{" declaration* "}" ;
-
 whileStmt      → "while" expression "{" statement "}" ;
-
 froStmt        → "for" expression "in" (( INTEGER ".." )? INTEGER) "{" statement "}" ;
+returnStmt     → "return" expression? ;
 
 exprStmt       → expression ;
 printStmt      → "print" expression ;
@@ -33,7 +37,11 @@ comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 term           → factor ( ( "-" | "+" ) factor )* ;
 factor         → unary ( ( "/" | "*" ) unary )* ;
 unary          → ( "!" | "-" ) unary
-               | primary ;
+               | call ;
+
+call           → primary ( "(" arguments? ")" ) ;
+arguments      → expression ( "," expression )* ;
+
 primary        → "true" | "false" | "null"
                | NUMBER | STRING
                | IDENTIFIER

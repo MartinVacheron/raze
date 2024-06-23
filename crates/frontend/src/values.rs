@@ -1,7 +1,15 @@
-use std::{cell::RefCell, fmt::Display, rc::Rc};
+use colored::*;
 use ecow::EcoString;
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 use thiserror::Error;
 
+use crate::{
+    callable::Callable,
+    environment::Env,
+    interpreter::Interpreter,
+    results::{PhyReport, PhyResult},
+    stmt::{FnDeclStmt, Stmt},
+};
 
 // -----------------
 //  Error managment
@@ -22,6 +30,13 @@ pub enum RtValErr {
     #[error("operator '{0}' is not supported for string manipulation")]
     StringManip(String),
 
+    // Function
+    #[error("function parameter declaration")]
+    WrongFnParamDecl,
+
+    #[error("{0}")]
+    FnExecution(String),
+
     // Others
     #[error("can't use a null value in a binary operation")]
     OperationOnNull,
@@ -30,6 +45,11 @@ pub enum RtValErr {
     UnknownOperation,
 }
 
+impl PhyReport for RtValErr {
+    fn get_err_msg(&self) -> String {
+        format!("{}: {}", "Function error".red(), self)
+    }
+}
 
 // ----------------
 //  Runtime Values
@@ -40,6 +60,7 @@ pub enum RtValKind {
     RealVal(Rc<RefCell<Real>>),
     StrVal(Rc<RefCell<Str>>),
     BoolVal(Rc<RefCell<Bool>>),
+    FuncVal(Rc<RefCell<Function>>),
     Null,
 }
 
@@ -65,7 +86,6 @@ trait Operate<Rhs> {
     fn operate(&self, rhs: &Rhs, operator: &str) -> Result<RtVal, RtValErr>;
 }
 
-
 impl RtVal {
     pub fn new_null() -> Self {
         Self {
@@ -79,9 +99,7 @@ impl RtVal {
             RtValKind::IntVal(i) => i.borrow_mut().negate(),
             RtValKind::RealVal(r) => r.borrow_mut().negate(),
             RtValKind::BoolVal(b) => b.borrow_mut().negate(),
-            _ => {
-                return Err(RtValErr::UnNegatable)
-            }
+            _ => return Err(RtValErr::UnNegatable),
         }
 
         Ok(())
@@ -90,17 +108,31 @@ impl RtVal {
     // TODO: Error handling for other operation
     pub fn operate(&self, rhs: &RtVal, operator: &str) -> Result<RtVal, RtValErr> {
         match (&self.value, &rhs.value) {
-            (RtValKind::IntVal(i1), RtValKind::IntVal(i2)) => i1.borrow().operate(&*i2.borrow(), operator),
-            (RtValKind::RealVal(r1), RtValKind::RealVal(r2)) => r1.borrow().operate(&*r2.borrow(), operator),
-            (RtValKind::IntVal(i1), RtValKind::RealVal(r1)) => i1.borrow().operate(&*r1.borrow(), operator),
-            (RtValKind::RealVal(r1), RtValKind::IntVal(i1)) => r1.borrow().operate(&*i1.borrow(), operator),
-            (RtValKind::StrVal(s1), RtValKind::StrVal(s2)) => s1.borrow().operate(&*s2.borrow(), operator),
-            (RtValKind::StrVal(s1), RtValKind::IntVal(i1)) => s1.borrow().operate(&*i1.borrow(), operator),
-            (RtValKind::IntVal(i1), RtValKind::StrVal(s1)) => i1.borrow().operate(&*s1.borrow(), operator),
-            (RtValKind::BoolVal(b1), RtValKind::BoolVal(b2)) => b1.borrow().operate(&*b2.borrow(), operator),
-            (RtValKind::Null, _) | (_, RtValKind::Null) => {
-                Err(RtValErr::OperationOnNull)
+            (RtValKind::IntVal(i1), RtValKind::IntVal(i2)) => {
+                i1.borrow().operate(&*i2.borrow(), operator)
             }
+            (RtValKind::RealVal(r1), RtValKind::RealVal(r2)) => {
+                r1.borrow().operate(&*r2.borrow(), operator)
+            }
+            (RtValKind::IntVal(i1), RtValKind::RealVal(r1)) => {
+                i1.borrow().operate(&*r1.borrow(), operator)
+            }
+            (RtValKind::RealVal(r1), RtValKind::IntVal(i1)) => {
+                r1.borrow().operate(&*i1.borrow(), operator)
+            }
+            (RtValKind::StrVal(s1), RtValKind::StrVal(s2)) => {
+                s1.borrow().operate(&*s2.borrow(), operator)
+            }
+            (RtValKind::StrVal(s1), RtValKind::IntVal(i1)) => {
+                s1.borrow().operate(&*i1.borrow(), operator)
+            }
+            (RtValKind::IntVal(i1), RtValKind::StrVal(s1)) => {
+                i1.borrow().operate(&*s1.borrow(), operator)
+            }
+            (RtValKind::BoolVal(b1), RtValKind::BoolVal(b2)) => {
+                b1.borrow().operate(&*b2.borrow(), operator)
+            }
+            (RtValKind::Null, _) | (_, RtValKind::Null) => Err(RtValErr::OperationOnNull),
             _ => Err(RtValErr::UnknownOperation),
         }
     }
@@ -161,14 +193,11 @@ impl Operate<Real> for Int {
 impl Operate<Str> for Int {
     fn operate(&self, rhs: &Str, operator: &str) -> Result<RtVal, RtValErr> {
         match operator {
-            "*" => Ok(
-                rhs.value.repeat(self.value as usize).into(),
-            ),
+            "*" => Ok(rhs.value.repeat(self.value as usize).into()),
             _ => Err(RtValErr::OpStrInt),
         }
     }
 }
-
 
 // --------
 //   Real
@@ -233,7 +262,7 @@ pub struct Str {
 impl Operate<Str> for Str {
     fn operate(&self, rhs: &Str, operator: &str) -> Result<RtVal, RtValErr> {
         match operator {
-            "+" => Ok(EcoString::from(format!("{}{}", self.value, rhs.value)).into(),),
+            "+" => Ok(EcoString::from(format!("{}{}", self.value, rhs.value)).into()),
             "==" => Ok((self.value == rhs.value).into()),
             "!=" => Ok((self.value != rhs.value).into()),
             op => Err(RtValErr::StringManip(op.to_string())),
@@ -244,14 +273,11 @@ impl Operate<Str> for Str {
 impl Operate<Int> for Str {
     fn operate(&self, rhs: &Int, operator: &str) -> Result<RtVal, RtValErr> {
         match operator {
-            "*" => Ok(
-                self.value.repeat(rhs.value as usize).into(),
-            ),
+            "*" => Ok(self.value.repeat(rhs.value as usize).into()),
             _ => Err(RtValErr::OpStrInt),
         }
     }
 }
-
 
 // --------
 //   Bool
@@ -279,6 +305,47 @@ impl Operate<Bool> for Bool {
     }
 }
 
+// ------------
+//   Function
+// ------------
+#[derive(Debug)]
+pub struct Function {
+    pub name: EcoString,
+    pub params: Rc<Vec<EcoString>>,
+    pub body: Rc<Vec<Stmt>>,
+}
+
+impl PartialEq for Function {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Callable<RtValErr> for Function {
+    fn call(
+        &self,
+        interpreter: &Interpreter,
+        args: Vec<RtVal>,
+    ) -> Result<RtVal, PhyResult<RtValErr>> {
+        let mut new_env = Env::new(Some(interpreter.globals.clone()));
+
+        for (p, v) in self.params.iter().zip(args) {
+            new_env
+                .declare_var(p.clone(), v)
+                .map_err(|_| PhyResult::new(RtValErr::WrongFnParamDecl, None))?;
+        }
+
+        interpreter
+            .execute_block_stmt(&self.body, new_env)
+            .map_err(|e| PhyResult::new(RtValErr::FnExecution(e.err.to_string()), None))?;
+
+        Ok(RtVal::new_null())
+    }
+
+    fn arity(&self) -> usize {
+        self.params.len()
+    }
+}
 
 // --------
 //   Into
@@ -304,7 +371,9 @@ impl From<f64> for RtVal {
 impl From<EcoString> for RtVal {
     fn from(value: EcoString) -> Self {
         Self {
-            value: RtValKind::StrVal(Rc::new(RefCell::new(Str { value: value.clone() }))),
+            value: RtValKind::StrVal(Rc::new(RefCell::new(Str {
+                value: value.clone(),
+            }))),
             typ: RtType::Defined("str".into()),
         }
     }
@@ -313,7 +382,9 @@ impl From<EcoString> for RtVal {
 impl From<String> for RtVal {
     fn from(value: String) -> Self {
         Self {
-            value: RtValKind::StrVal(Rc::new(RefCell::new(Str { value: value.into() }))),
+            value: RtValKind::StrVal(Rc::new(RefCell::new(Str {
+                value: value.into(),
+            }))),
             typ: RtType::Defined("str".into()),
         }
     }
@@ -324,11 +395,22 @@ impl From<bool> for RtVal {
         Self {
             value: RtValKind::BoolVal(Rc::new(RefCell::new(Bool { value }))),
             typ: RtType::Defined("bool".into()),
-
         }
     }
 }
 
+impl From<&FnDeclStmt> for RtVal {
+    fn from(value: &FnDeclStmt) -> Self {
+        Self {
+            value: RtValKind::FuncVal(Rc::new(RefCell::new(Function {
+                name: value.name.clone(),
+                params: value.params.clone(),
+                body: value.body.clone(),
+            }))),
+            typ: RtType::Any,
+        }
+    }
+}
 
 // -----------
 //   Display
@@ -340,6 +422,7 @@ impl Display for RtVal {
             RtValKind::RealVal(r) => write!(f, "{}", r.borrow().value),
             RtValKind::BoolVal(b) => write!(f, "{}", b.borrow().value),
             RtValKind::StrVal(s) => write!(f, "\"{}\"", s.borrow().value),
+            RtValKind::FuncVal(func) => write!(f, "<fn {}>", func.borrow().name),
             RtValKind::Null => write!(f, "null"),
         }
     }

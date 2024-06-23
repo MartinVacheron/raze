@@ -1,15 +1,16 @@
+use std::rc::Rc;
+
 use colored::*;
 use ecow::EcoString;
 use thiserror::Error;
 
 use crate::expr::{
-    AssignExpr, BinaryExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr,
-    RealLiteralExpr, StrLiteralExpr, UnaryExpr,
+    AssignExpr, BinaryExpr, CallExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr
 };
 use crate::lexer::{Loc, Token, TokenKind};
 use crate::results::{PhyReport, PhyResult};
 use crate::stmt::{
-    BlockStmt, ExprStmt, ForRange, ForStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, WhileStmt,
+    BlockStmt, ExprStmt, FnDeclStmt, ForRange, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt, WhileStmt
 };
 
 // ----------------
@@ -92,12 +93,6 @@ pub enum ParserErr {
     #[error("missing block start '{{' after 'while' condition")]
     MissingWhileOpenBrace,
 
-    #[error("missing block end '}}' after 'while' body")]
-    MissingWhileCloseBrace,
-
-    #[error("'while' can't be empty, it requires at least one statement to break infinite loop")]
-    NoBodyWhile,
-
     // For
     #[error("missing variable name in 'for' loop")]
     MissingVarNameFor,
@@ -126,8 +121,31 @@ pub enum ParserErr {
     #[error("missing block start '{{' after 'for' condition")]
     MissingForOpenBrace,
 
-    #[error("missing block end '}}' after 'for' body")]
-    MissingForCloseBrace,
+    // Call
+    #[error("missing close parenthesis after arguments list")]
+    MissingCallCloseParen,
+
+    #[error("can't have more than 255 arguments")]
+    TooManyCallArgs,
+
+    #[error("missing comma to seperate arguments")]
+    MissingArgsComma,
+
+    // Function declaration
+    #[error("missing function name after 'fn' keyword")]
+    MissingFnName,
+
+    #[error("missing '(' after function name")]
+    NoOpenParenAfterFnName,
+
+    #[error("can't have more than 255 parameters")]
+    MaxFnArgs,
+
+    #[error("function paramters must be identifiers")]
+    WrongFnArgType,
+
+    #[error("missing '{{' before function body")]
+    MissingFnOpenBrace,
 
     // Others
     #[error("unexpected end of file")]
@@ -146,6 +164,11 @@ impl PhyReport for ParserErr {
 pub(crate) type PhyResParser = PhyResult<ParserErr>;
 pub(crate) type ParserStmtRes = Result<Stmt, PhyResParser>;
 pub(crate) type ParserExprRes = Result<Expr, PhyResParser>;
+
+enum FnKind {
+    Fn,
+}
+
 // ---------
 //  Parsing
 // ---------
@@ -246,6 +269,8 @@ impl<'a> Parser<'a> {
             TokenKind::If => self.parse_if_stmt(),
             TokenKind::While => self.parse_while_stmt(),
             TokenKind::For => self.parse_for_stmt(),
+            TokenKind::Fn => self.parse_fn_decl_stmt(FnKind::Fn),
+            TokenKind::Return => self.parse_return_stmt(),
             _ => self.parse_expr_stmt(),
         };
 
@@ -268,19 +293,26 @@ impl<'a> Parser<'a> {
     fn parse_block_stmt(&mut self) -> ParserStmtRes {
         self.expect_and_skip(TokenKind::OpenBrace)?;
 
-        let mut stmts: Vec<Stmt> = vec![];
-
-        while !self.is_at(TokenKind::CloseBrace) && !self.eof() {
-            stmts.push(self.parse_declarations()?);
-        }
-
-        self.expect_and_skip(TokenKind::CloseBrace)
-            .map_err(|_| self.trigger_error(ParserErr::UnclosedBlock, true))?;
+        let stmts = self.parse_block()?;
 
         Ok(Stmt::Block(BlockStmt {
             stmts,
             loc: self.get_loc(),
         }))
+    }
+
+    fn parse_block(&mut self) -> Result<Vec<Stmt>, PhyResParser> {
+        let mut stmts: Vec<Stmt> = vec![];
+
+        while !self.is_at(TokenKind::CloseBrace) && !self.eof() {
+            stmts.push(self.parse_declarations()?);
+            self.skip_new_lines();
+        }
+
+        self.expect_and_skip(TokenKind::CloseBrace)
+            .map_err(|_| self.trigger_error(ParserErr::UnclosedBlock, true))?;
+
+        Ok(stmts)
     }
 
     fn parse_if_stmt(&mut self) -> ParserStmtRes {
@@ -341,18 +373,13 @@ impl<'a> Parser<'a> {
         self.is_at_brace_or_end_of(ParserErr::WhileWithNoCond)?;
 
         let condition = self.parse_expr()?;
+        self.skip_new_lines();
 
-        self.skip_expect_and_skip(TokenKind::OpenBrace)
-            .map_err(|_| self.trigger_error(ParserErr::MissingWhileOpenBrace, true))?;
-
-        if self.is_at(TokenKind::CloseBrace) {
-            return Err(self.trigger_error(ParserErr::NoBodyWhile, true));
+        if !self.is_at(TokenKind::OpenBrace) {
+            return Err(self.trigger_error(ParserErr::MissingWhileOpenBrace, true));
         }
 
         let body = Box::new(self.parse_stmt()?);
-
-        self.expect_and_skip(TokenKind::CloseBrace)
-            .map_err(|_| self.trigger_error(ParserErr::MissingWhileCloseBrace, true))?;
 
         Ok(Stmt::While(WhileStmt {
             condition,
@@ -364,10 +391,12 @@ impl<'a> Parser<'a> {
     fn parse_for_stmt(&mut self) -> ParserStmtRes {
         self.eat()?;
 
-        let placeholder = self
+        let var_name = self
             .expect(TokenKind::Identifier)
             .map_err(|_| self.trigger_error(ParserErr::MissingVarNameFor, true))?
             .value;
+
+        let placeholder = VarDeclStmt { name: var_name, value: None, loc: self.get_loc() };
 
         self.expect(TokenKind::In)
             .map_err(|_| self.trigger_error(ParserErr::MissingInFor, true))?;
@@ -377,8 +406,7 @@ impl<'a> Parser<'a> {
         if self.is_at(TokenKind::DotDot) {
             return Err(self.trigger_error(ParserErr::MissingStartForRange, true))
         }
-
-        if self.is_at(TokenKind::Minus) {
+        else if self.is_at(TokenKind::Minus) {
             return Err(self.trigger_error(ParserErr::NegativeForRange, true))
         }
 
@@ -395,7 +423,6 @@ impl<'a> Parser<'a> {
 
             self.is_at_brace_or_end_of(ParserErr::MissingEndForRange)?;
 
-        println!("Before end: {}", self.at());
             end = Some(
                 self.expect(TokenKind::Int)
                     .map_err(|_| self.trigger_error(ParserErr::NonIntForRange, true))?
@@ -404,23 +431,17 @@ impl<'a> Parser<'a> {
                     .map_err(|_| self.trigger_error(ParserErr::ParsingInt, true))?
             );
 
-        println!("After end: {}", self.at());
-
             if Some(start) > end {
                 return Err(self.trigger_error(ParserErr::LesserEndForRange, true))
             }
         }
 
-        self.skip_expect_and_skip(TokenKind::OpenBrace)
-            .map_err(|_| self.trigger_error(ParserErr::MissingForOpenBrace, true))?;
-
-        let mut body = None;
-        if !self.is_at(TokenKind::CloseBrace) {
-            body = Some(Box::new(self.parse_stmt()?));
+        self.skip_new_lines();
+        if !self.is_at(TokenKind::OpenBrace) {
+            return Err(self.trigger_error(ParserErr::MissingForOpenBrace, true))
         }
 
-        self.skip_expect_and_skip(TokenKind::CloseBrace)
-            .map_err(|_| self.trigger_error(ParserErr::MissingForCloseBrace, true))?;
+        let body = Box::new(self.parse_stmt()?);
 
         Ok(Stmt::For(ForStmt {
             placeholder,
@@ -428,6 +449,76 @@ impl<'a> Parser<'a> {
             body,
             loc: self.get_loc(),
         }))
+    }
+
+    fn parse_fn_decl_stmt(&mut self, kind: FnKind) -> ParserStmtRes {
+        self.eat()?;
+
+        let name = self.expect(TokenKind::Identifier)
+            .map_err(|_| self.trigger_error(ParserErr::MissingFnName, true))?
+            .value;
+
+        self.expect(TokenKind::OpenParen)
+            .map_err(|_| self.trigger_error(ParserErr::NoOpenParenAfterFnName, true))?;
+
+        self.skip_new_lines();
+
+        let mut params: Vec<EcoString> = vec![];
+        if !self.is_at(TokenKind::CloseParen) {
+            loop {
+                if params.len() >= 255 {
+                    return Err(self.trigger_error(ParserErr::MaxFnArgs, true))
+                }
+
+                params.push(self.expect(TokenKind::Identifier)
+                    .map_err(|_| self.trigger_error(ParserErr::WrongFnArgType, true))?
+                    .value
+                );
+
+                self.skip_new_lines();
+
+                if self.is_at(TokenKind::Comma) {
+                    let _ = self.eat();
+                    self.skip_new_lines();
+                    
+                    if self.is_at(TokenKind::CloseParen) { break }
+                } else if !self.is_at(TokenKind::CloseParen) {
+                    return Err(self.trigger_error(ParserErr::MissingArgsComma, true))
+                } else {
+                    break
+                }
+            }
+        }
+
+        self.eat()?;
+        self.skip_new_lines();
+
+        if !self.is_at(TokenKind::OpenBrace) {
+            return Err(self.trigger_error(ParserErr::MissingFnOpenBrace, true))
+        }
+        
+        self.eat()?;
+        self.skip_new_lines();
+
+        let body = Rc::new(self.parse_block()?);
+
+        Ok(Stmt::FnDecl(FnDeclStmt {
+            name,
+            params: Rc::new(params),
+            body,
+            loc: self.get_loc(),
+        }))
+    }
+
+    fn parse_return_stmt(&mut self) -> ParserStmtRes {
+        let _ = self.eat();
+
+        let mut value = None;
+        if !self.is_at(TokenKind::NewLine) {
+            value = Some(self.parse_expr()?);
+        }
+        
+        Ok(Stmt::Return(ReturnStmt { value, loc: self.get_loc() }))
     }
 
     fn parse_expr_stmt(&mut self) -> ParserStmtRes {
@@ -603,7 +694,63 @@ impl<'a> Parser<'a> {
             }));
         }
 
-        self.parse_primary()
+        self.parse_call()
+    }
+
+    fn parse_call(&mut self) -> ParserExprRes {
+        let mut expr = self.parse_primary()?;
+
+        loop {
+            if self.is_at(TokenKind::OpenParen) {
+                self.eat()?;
+                self.skip_new_lines();
+
+                expr = self.finish_call(expr)?;
+            } else {
+                break
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> ParserExprRes {
+        let mut args: Vec<Expr> = vec![];
+
+        if !self.is_at(TokenKind::CloseParen) {
+            loop {
+                if args.len() >= 255 {
+                    return Err(self.trigger_error(ParserErr::TooManyCallArgs, true))
+                }
+
+                args.push(self.parse_expr()?);
+                self.skip_new_lines();
+
+                if self.is_at(TokenKind::Comma) {
+                    let _ = self.eat();
+                    self.skip_new_lines();
+
+                    if self.is_at(TokenKind::CloseParen) { break }
+                }
+                else if !self.is_at(TokenKind::CloseParen) {
+                    return Err(self.trigger_error(ParserErr::MissingArgsComma, true))
+                }
+                else {
+                    break
+                }
+            }
+
+            self.skip_new_lines();
+        }
+
+        self.expect(TokenKind::CloseParen)
+            .map_err(|_| self.trigger_error(ParserErr::MissingCallCloseParen, true))?;
+
+        Ok(Expr::Call(CallExpr {
+            callee: Box::new(callee),
+            args,
+            loc: self.get_loc()
+        }))
     }
 
     fn parse_primary(&mut self) -> ParserExprRes {
@@ -1201,6 +1348,7 @@ while a or true
 
 {
     a = 1
+    print a
 }
 ";
         // 0
@@ -1214,14 +1362,16 @@ while a or true
             EcoString::from("true")
         );
 
-        let body = &while_stmt.body.expr.assign[0];
+        let body = &while_stmt.body.block[0].expr.assign[0];
         assert_eq!(body.name, EcoString::from("a"));
         assert_eq!(body.expr.get_int_values()[0], &1);
+
+        let print = &while_stmt.body.block[0].print[0];
+        assert_eq!(print, &String::from("a"));
 
         // Errors
         let code = "
 while {}
-while a {}
 while a
 }
 ";
@@ -1229,8 +1379,7 @@ while a
         let errs = lex_and_parse(code).err().unwrap();
         let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
         assert!(e[0] == &ParserErr::WhileWithNoCond);
-        assert!(e[1] == &ParserErr::NoBodyWhile);
-        assert!(e[2] == &ParserErr::MissingWhileOpenBrace);
+        assert!(e[1] == &ParserErr::MissingWhileOpenBrace);
     }
 
     #[test]
@@ -1284,5 +1433,98 @@ for a in 5..0 {}
         assert!(e[6] == &ParserErr::NegativeForRange, "{}", e[6]);
         assert!(e[7] == &ParserErr::NonIntForRange);
         assert!(e[8] == &ParserErr::LesserEndForRange);
+    }
+
+    #[test]
+    fn call() {
+        let code = "
+foo()
+foo(2+(4-1))
+foo(a, b,
+c,
+)
+";
+        // 0
+        let infos = get_stmt_nodes_infos(code);
+        let call = &infos.expr.call[0];
+        assert_eq!(call.callee.get_ident_values()[0], EcoString::from("foo"));
+
+        // 1
+        let call = &infos.expr.call[1];
+        assert_eq!(call.callee.get_ident_values()[0], EcoString::from("foo"));
+        let arg = &call.args[0].get_binop_values()[0];
+        assert_eq!(arg.0.get_int_values()[0], &2);
+        assert_eq!(arg.1, EcoString::from("+"));
+        let arg1 = &arg.2.grouping[0].expr.get_binop_values()[0];
+        assert_eq!(arg1.0.get_int_values()[0], &4);
+        assert_eq!(arg1.1, EcoString::from("-"));
+        assert_eq!(arg1.2.get_int_values()[0], &1);
+        
+        // 2
+        let call = &infos.expr.call[2];
+        assert_eq!(call.callee.get_ident_values()[0], EcoString::from("foo"));
+        assert_eq!(call.args[0].get_ident_values()[0], EcoString::from("a"));
+        assert_eq!(call.args[1].get_ident_values()[0], EcoString::from("b"));
+        assert_eq!(call.args[2].get_ident_values()[0], EcoString::from("c"));
+
+        // Errors
+        let code = "
+foo(a b)
+";
+        let errs = lex_and_parse(code).err().unwrap();
+        let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
+        assert!(e[0] == &ParserErr::MissingArgsComma);
+    }
+
+    #[test]
+    fn fn_decl() {
+        let code = "
+fn add() {}
+fn add(a, b,)
+{
+    print a
+}
+";
+        // 0
+        let infos = get_stmt_nodes_infos(code);
+        let decl = &infos.fn_decl[0];
+        assert_eq!(decl.name, EcoString::from("add"));
+        assert!(decl.params.is_empty());
+        assert!(decl.body.is_empty());
+
+        // 1
+        let decl = &infos.fn_decl[1];
+        assert_eq!(decl.name, EcoString::from("add"));
+        assert_eq!(decl.params, vec![EcoString::from("a"), EcoString::from("b")]);
+
+        assert_eq!(decl.body[0].print[0], String::from("a"));
+
+        // Errors
+        let code = "
+fn (a, b) {}
+fn add a, b {}
+fn add(a b) {}
+fn add(a, b) print a
+fn add(1, a, b) print a
+";
+        let errs = lex_and_parse(code).err().unwrap();
+        let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
+        assert!(e[0] == &ParserErr::MissingFnName);
+        assert!(e[1] == &ParserErr::NoOpenParenAfterFnName);
+        assert!(e[2] == &ParserErr::MissingArgsComma);
+        assert!(e[3] == &ParserErr::MissingFnOpenBrace);
+        assert!(e[4] == &ParserErr::WrongFnArgType);
+    }
+
+    #[test]
+    fn return_stmt() {
+        let code = "
+return
+return 4
+";
+        // 0
+        let infos = get_stmt_nodes_infos(code);
+        assert_eq!(&infos.return_stmt[0], &None);
+        assert_eq!(&infos.return_stmt[1].as_ref().unwrap().get_int_values()[0], &&4);
     }
 }

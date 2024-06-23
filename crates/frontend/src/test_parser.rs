@@ -2,8 +2,14 @@ use ecow::EcoString;
 
 use crate::{
     expr::{
-        AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
-    }, lexer::Loc, results::{PhyReport, PhyResult}, stmt::{BlockStmt, ExprStmt, ForStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt}
+        AssignExpr, BinaryExpr, CallExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr,
+        LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr,
+    },
+    lexer::Loc,
+    results::{PhyReport, PhyResult},
+    stmt::{
+        BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt
+    },
 };
 
 #[derive(Debug)]
@@ -29,6 +35,8 @@ pub struct StmtInfos {
     pub if_stmt: Vec<IfInfos>,
     pub while_stmt: Vec<WhileInfos>,
     pub for_stmt: Vec<ForInfos>,
+    pub fn_decl: Vec<FnDeclInfos>,
+    pub return_stmt: Vec<Option<ExprInfos>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -48,7 +56,14 @@ pub struct WhileInfos {
 pub struct ForInfos {
     pub placeholder: EcoString,
     pub range: (i64, Option<i64>),
-    pub body: Option<StmtInfos>,
+    pub body: StmtInfos,
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct FnDeclInfos {
+    pub name: EcoString,
+    pub params: Vec<EcoString>,
+    pub body: Vec<StmtInfos>,
 }
 
 impl StmtInfos {
@@ -60,36 +75,42 @@ impl StmtInfos {
         self.if_stmt.append(&mut other.if_stmt);
         self.while_stmt.append(&mut other.while_stmt);
         self.for_stmt.append(&mut other.for_stmt);
+        self.fn_decl.append(&mut other.fn_decl);
+        self.return_stmt.append(&mut other.return_stmt);
     }
 }
 
 impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
     fn visit_expr_stmt(&self, stmt: &ExprStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
         let expr = stmt.expr.accept(self)?;
-        Ok(StmtInfos{ expr, ..Default::default()})
+        Ok(StmtInfos {
+            expr,
+            ..Default::default()
+        })
     }
 
     fn visit_print_stmt(&self, stmt: &PrintStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
         let expr = stmt.expr.accept(self)?;
         let mut infos = StmtInfos::default();
+
         // Only one field cannot be empty
         if let Some(v) = expr.get_int_values().first() {
             infos.print = vec![format!("{}", v)];
-            return Ok(infos)
-        }
-        if let Some(v) = expr.get_real_values().first() {
+        } else if let Some(v) = expr.get_real_values().first() {
             infos.print = vec![format!("{}", v)];
-            return Ok(infos)
-        }
-        if let Some(v) = expr.get_str_values().first() {
+        } else if let Some(v) = expr.get_str_values().first() {
             infos.print = vec![format!("{}", v)];
-            return Ok(infos)
+        } else if let Some(v) = expr.get_ident_values().first() {
+            infos.print = vec![format!("{}", v)];
         }
 
         Ok(infos)
     }
 
-    fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+    fn visit_var_decl_stmt(
+        &self,
+        stmt: &VarDeclStmt,
+    ) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
         let mut infos = StmtInfos::default();
 
         let val = if let Some(v) = &stmt.value {
@@ -109,12 +130,15 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
             all_infos.concat(&mut s.accept(self)?);
         }
 
-        Ok(StmtInfos{ block: vec![all_infos], ..Default::default()})
+        Ok(StmtInfos {
+            block: vec![all_infos],
+            ..Default::default()
+        })
     }
 
     fn visit_if_stmt(&self, stmt: &IfStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
         let condition = stmt.condition.accept(self)?;
-        
+
         let mut then_branch = None;
         if let Some(e) = &stmt.then_branch {
             then_branch = Some(e.accept(self)?);
@@ -126,26 +150,66 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
             else_branch = Some(e.accept(self)?);
         }
 
-        Ok(StmtInfos{ if_stmt: vec![IfInfos { condition, then_branch, else_branch }], ..Default::default()})
+        Ok(StmtInfos {
+            if_stmt: vec![IfInfos {
+                condition,
+                then_branch,
+                else_branch,
+            }],
+            ..Default::default()
+        })
     }
 
     fn visit_while_stmt(&self, stmt: &WhileStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
         let condition = stmt.condition.accept(self)?;
         let body = stmt.body.accept(self)?;
 
-        Ok(StmtInfos { while_stmt: vec![WhileInfos { condition, body }], ..Default::default()})
+        Ok(StmtInfos {
+            while_stmt: vec![WhileInfos { condition, body }],
+            ..Default::default()
+        })
     }
 
     fn visit_for_stmt(&self, stmt: &ForStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
-        let placeholder = stmt.placeholder.clone();
+        let placeholder = stmt.placeholder.name.clone();
         let range = (stmt.range.start, stmt.range.end);
-        let mut body = None;
+        let body = stmt.body.accept(self)?;
 
-        if let Some(b) = &stmt.body {
-            body = Some(b.accept(self)?);
+        Ok(StmtInfos {
+            for_stmt: vec![ForInfos {
+                placeholder,
+                range,
+                body,
+            }],
+            ..Default::default()
+        })
+    }
+
+    fn visit_fn_decl_stmt(&self, stmt: &FnDeclStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+        let name = stmt.name.clone();
+
+        let mut body: Vec<StmtInfos> = vec![];
+        for s in &*stmt.body {
+            body.push(s.accept(self)?);
         }
 
-        Ok(StmtInfos { for_stmt: vec![ForInfos { placeholder, range, body }], ..Default::default() })
+        Ok(StmtInfos {
+            fn_decl: vec![FnDeclInfos {
+                name,
+                params: stmt.params.clone().to_vec(),
+                body,
+            }],
+            ..Default::default()
+        })
+    }
+
+    fn visit_return_stmt(&self, stmt: &ReturnStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+        let value = match &stmt.value {
+            Some(v) => Some(v.accept(self)?),
+            None => None,
+        };
+
+        Ok(StmtInfos { return_stmt: vec![value], ..Default::default() })
     }
 }
 
@@ -161,6 +225,7 @@ pub struct ExprInfos {
     pub unary: Vec<UnaryInfo>,
     pub assign: Vec<AssignInfo>,
     pub logical: Vec<LogicalInfo>,
+    pub call: Vec<CallInfo>,
 }
 
 impl ExprInfos {
@@ -218,6 +283,7 @@ impl ExprInfos {
         self.unary.append(&mut other.unary);
         self.assign.append(&mut other.assign);
         self.logical.append(&mut other.logical);
+        self.call.append(&mut other.call);
     }
 }
 
@@ -286,6 +352,13 @@ pub struct LogicalInfo {
     pub loc: Loc,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct CallInfo {
+    pub callee: ExprInfos,
+    pub args: Vec<ExprInfos>,
+    pub loc: Loc,
+}
+
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct TestParser {
     pub infos: StmtInfos,
@@ -303,7 +376,10 @@ impl TestParser {
 }
 
 impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
-    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<ExprInfos, PhyResParserTestErr> {
+    fn visit_int_literal_expr(
+        &self,
+        expr: &IntLiteralExpr,
+    ) -> Result<ExprInfos, PhyResParserTestErr> {
         let mut infos = ExprInfos::default();
         let int_infos = IntInfo {
             value: expr.value,
@@ -338,7 +414,10 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<ExprInfos, PhyResParserTestErr> {
+    fn visit_real_literal_expr(
+        &self,
+        expr: &RealLiteralExpr,
+    ) -> Result<ExprInfos, PhyResParserTestErr> {
         let mut infos = ExprInfos::default();
         let real_infos = RealInfo {
             value: expr.value,
@@ -349,7 +428,10 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<ExprInfos, PhyResParserTestErr> {
+    fn visit_str_literal_expr(
+        &self,
+        expr: &StrLiteralExpr,
+    ) -> Result<ExprInfos, PhyResParserTestErr> {
         let mut infos = ExprInfos::default();
         let str_infos = StrInfo {
             value: expr.value.clone(),
@@ -360,7 +442,10 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<ExprInfos, PhyResParserTestErr> {
+    fn visit_identifier_expr(
+        &self,
+        expr: &IdentifierExpr,
+    ) -> Result<ExprInfos, PhyResParserTestErr> {
         let mut infos = ExprInfos::default();
         let ident_info = IdentifierInfo {
             name: expr.name.clone(),
@@ -393,7 +478,10 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_logical_expr(&self, expr: &LogicalExpr) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
+    fn visit_logical_expr(
+        &self,
+        expr: &LogicalExpr,
+    ) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
         let mut infos = ExprInfos::default();
         let logical_infos = LogicalInfo {
             left: expr.left.accept(self).unwrap(),
@@ -402,6 +490,24 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
             loc: expr.loc.clone(),
         };
         infos.logical.push(logical_infos);
+
+        Ok(infos)
+    }
+
+    fn visit_call_expr(&self, expr: &CallExpr) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
+        let mut infos = ExprInfos::default();
+        let callee = expr.callee.accept(self)?;
+        let mut args: Vec<ExprInfos> = vec![];
+
+        for a in &expr.args {
+            args.push(a.accept(self)?);
+        }
+
+        infos.call.push(CallInfo {
+            callee,
+            args,
+            loc: expr.loc.clone(),
+        });
 
         Ok(infos)
     }
