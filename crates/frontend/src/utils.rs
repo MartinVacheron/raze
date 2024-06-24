@@ -34,7 +34,7 @@ pub fn get_expr_nodes_infos(code: &str) -> ExprInfos {
 
 pub fn lex_parse_interp(code: &str) -> Result<RtVal, PhyResInterp> {
     let nodes = lex_and_parse(code).unwrap();
-    let interp = Interpreter::default();
+    let interp = Interpreter::new();
     interp.interpret(&nodes)
 }
 

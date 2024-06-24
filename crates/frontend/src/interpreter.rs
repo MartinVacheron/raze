@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use colored::Colorize;
+use ecow::EcoString;
 use thiserror::Error;
 
 use crate::callable::Callable;
@@ -10,12 +11,12 @@ use crate::expr::{
     AssignExpr, BinaryExpr, CallExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr,
     RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr,
 };
+use crate::native_functions::{NativeClock, PhyNativeFn};
 use crate::results::{PhyReport, PhyResult};
 use crate::stmt::{
-    BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt,
-    WhileStmt,
+    BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt
 };
-use crate::values::{RtVal, RtValKind};
+use crate::values::{DefinedType, RtType, RtVal, RtValKind};
 
 // ----------------
 // Error managment
@@ -70,6 +71,10 @@ pub enum InterpErr {
 
     #[error("{0}")]
     FnCall(String),
+
+    // Results
+    #[error("return: {0}")]
+    Return(RtVal),
 }
 
 impl PhyReport for InterpErr {
@@ -84,12 +89,29 @@ pub(crate) type InterpRes = Result<RtVal, PhyResInterp>;
 // --------------
 //  Interpreting
 // --------------
-#[derive(Default)]
 pub struct Interpreter {
     // In RefCell because visitor methods only borrow (&) so we must be
     // able to mutate thanks to RefCell and it can be multiple owners
-    env: RefCell<Rc<RefCell<Env>>>,
     pub globals: Rc<RefCell<Env>>,
+    pub env: RefCell<Rc<RefCell<Env>>>,
+}
+
+impl Interpreter {
+    pub fn new() -> Self {
+        let globals = Rc::new(RefCell::new(Env::new(None)));
+
+        let _ = globals.borrow_mut().declare_var(EcoString::from("clock"), RtVal {
+            value: RtValKind::NativeFnVal(Rc::new(PhyNativeFn {
+                name: EcoString::from("clock"),
+                func: Rc::new(NativeClock),
+            })),
+            typ: RtType::Defined(DefinedType::NativeFn),
+        });
+
+        let env = RefCell::new(globals.clone());
+
+        Self { globals, env }
+    }
 }
 
 impl Interpreter {
@@ -221,7 +243,8 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
     }
 
     fn visit_fn_decl_stmt(&self, stmt: &FnDeclStmt) -> Result<RtVal, PhyResult<InterpErr>> {
-        let func: RtVal = stmt.into();
+        let func = RtVal::new_fn(&stmt, self.env.borrow().clone());
+
         self.env
             .borrow()
             .borrow_mut()
@@ -236,8 +259,14 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
         Ok(RtVal::new_null())
     }
 
-    fn visit_return_stmt(&self, stmt: &crate::stmt::ReturnStmt) -> Result<RtVal, PhyResult<InterpErr>> {
-        todo!()
+    fn visit_return_stmt(&self, stmt: &ReturnStmt) -> Result<RtVal, PhyResult<InterpErr>> {
+        let mut value = RtVal::new_null();
+
+        if let Some(v) = &stmt.value {
+            value = v.accept(self)?;
+        }
+
+        Err(PhyResult::new(InterpErr::Return(value), None))
     }
 }
 
@@ -245,13 +274,16 @@ impl Interpreter {
     pub fn execute_block_stmt(&self, stmts: &Vec<Stmt>, env: Env) -> InterpRes {
         let prev_env = self.env.replace(Rc::new(RefCell::new(env)));
 
+        let mut res = Ok(RtVal::new_null());
         for s in stmts {
-            let _ = s.accept(self)?;
+            res = s.accept(self);
+
+            if res.is_err() { break }
         }
 
         self.env.replace(prev_env);
 
-        Ok(RtVal::new_null())
+        res
     }
 }
 
@@ -400,14 +432,14 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
         }
 
         if let RtValKind::FuncVal(f) = callee.value {
-            if f.borrow().arity() != args.len() {
+            if f.arity() != args.len() {
                 return Err(PhyResult::new(
-                    InterpErr::WrongArgsNb(f.borrow().arity(), args.len()),
+                    InterpErr::WrongArgsNb(f.arity(), args.len()),
                     Some(expr.loc.clone()),
                 ));
             }
 
-            f.borrow_mut().call(self, args).map_err(|e| {
+            f.call(self, args).map_err(|e| {
                 PhyResult::new(InterpErr::FnCall(e.err.to_string()), Some(expr.loc.clone()))
             })
         } else {
@@ -663,8 +695,56 @@ fn add(a, b) {
     res = a + b
 }
 add(5, 6)
-b
+res
 ";
         assert_eq!(lex_parse_interp(code).unwrap(), 11.into());
     }
+
+    #[test]
+    fn first_class_fn() {
+        let code = "
+fn add(a, b) { return a+b }
+var c = add
+c(1, 2)
+";
+        assert_eq!(lex_parse_interp(code).unwrap(), 3.into());
+    }
+
+    #[test]
+    fn recurs_and_break_fn() {
+        let code = "
+fn fib(n) {
+    if n <= 1 { return n }
+
+    return fib(n-2) + fib(n-1)
 }
+
+fib(20)
+";
+        assert_eq!(lex_parse_interp(code).unwrap(), 6765.into());
+    }
+
+    #[test]
+    fn closure_env() {
+        let code = "
+fn makeCounter() {
+  var i = 0
+  fn count() {
+    i = i + 1
+    return i
+  }
+
+  return count
+}
+
+var counter = makeCounter()
+var a = 0
+a = counter()
+a = counter()
+a
+";
+        assert_eq!(lex_parse_interp(code).unwrap(), 2.into());
+    }
+}
+
+

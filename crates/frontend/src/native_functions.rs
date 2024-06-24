@@ -1,5 +1,6 @@
 use colored::*;
-use std::time::{SystemTime, UNIX_EPOCH};
+use ecow::EcoString;
+use std::{fmt, rc::Rc, time::{SystemTime, UNIX_EPOCH}};
 use thiserror::Error;
 
 use crate::{
@@ -12,7 +13,29 @@ use crate::{
 
 pub type NativeFnRes = Result<RtVal, PhyResult<NativeFnErr>>;
 
-pub struct Clock {}
+pub struct PhyNativeFn {
+    pub name: EcoString,
+    pub func: Rc<dyn Callable<NativeFnErr>>,
+}
+
+impl fmt::Debug for PhyNativeFn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<native fn>")
+    }
+}
+
+impl PartialEq for PhyNativeFn {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name 
+    }
+}
+
+impl fmt::Display for PhyNativeFn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<native fn>")
+    }
+}
+
 
 #[derive(Debug, Error)]
 pub enum NativeFnErr {
@@ -26,7 +49,11 @@ impl PhyReport for NativeFnErr {
     }
 }
 
-impl Callable<NativeFnErr> for Clock {
+
+// Clock
+pub struct NativeClock;
+
+impl Callable<NativeFnErr> for NativeClock {
     fn arity(&self) -> usize {
         0
     }

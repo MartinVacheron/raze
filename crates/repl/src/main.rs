@@ -47,7 +47,7 @@ fn main() {
     let mut repl = Repl {
         cli: Cli::parse(),
         ast_printer: AstPrinter {},
-        interpreter: Interpreter::default(),
+        interpreter: Interpreter::new(),
     };
 
     repl.run();

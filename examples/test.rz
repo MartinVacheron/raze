@@ -1,9 +1,13 @@
+fn makeCounter() {
+  var i = 0
+  fn count() {
+    i = i + 1
+    print i
+  }
 
-
-fn foo(a, b,) {
-    print a + b
+  return count
 }
 
-foo(1, 2)
-
-print "ended"
+var counter = makeCounter()
+counter() // "1".
+counter() // "2".

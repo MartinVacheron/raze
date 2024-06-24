@@ -4,11 +4,7 @@ use std::{cell::RefCell, fmt::Display, rc::Rc};
 use thiserror::Error;
 
 use crate::{
-    callable::Callable,
-    environment::Env,
-    interpreter::Interpreter,
-    results::{PhyReport, PhyResult},
-    stmt::{FnDeclStmt, Stmt},
+    callable::Callable, environment::Env, interpreter::{InterpErr, Interpreter}, native_functions::PhyNativeFn, results::{PhyReport, PhyResult}, stmt::{FnDeclStmt, Stmt}
 };
 
 // -----------------
@@ -60,16 +56,28 @@ pub enum RtValKind {
     RealVal(Rc<RefCell<Real>>),
     StrVal(Rc<RefCell<Str>>),
     BoolVal(Rc<RefCell<Bool>>),
-    FuncVal(Rc<RefCell<Function>>),
+    FuncVal(Rc<Function>),
+    NativeFnVal(Rc<PhyNativeFn>),
     Null,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum RtType {
     None,
-    Defined(String),
+    Defined(DefinedType),
     Infered,
     Any,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum DefinedType {
+    Null,
+    Int,
+    Real,
+    String,
+    Bool,
+    Fn(EcoString),
+    NativeFn,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -90,7 +98,7 @@ impl RtVal {
     pub fn new_null() -> Self {
         Self {
             value: RtValKind::Null,
-            typ: RtType::Defined("null".into()),
+            typ: RtType::Defined(DefinedType::Null),
         }
     }
 
@@ -313,6 +321,21 @@ pub struct Function {
     pub name: EcoString,
     pub params: Rc<Vec<EcoString>>,
     pub body: Rc<Vec<Stmt>>,
+    pub closure: Rc<RefCell<Env>>,
+}
+
+impl RtVal {
+    pub fn new_fn(value: &FnDeclStmt, closure: Rc<RefCell<Env>>) -> Self {
+        Self {
+            value: RtValKind::FuncVal(Rc::new(Function {
+                name: value.name.clone(),
+                params: value.params.clone(),
+                body: value.body.clone(),
+                closure: closure.clone(),
+            })),
+            typ: RtType::Any,
+        }
+    }
 }
 
 impl PartialEq for Function {
@@ -327,7 +350,7 @@ impl Callable<RtValErr> for Function {
         interpreter: &Interpreter,
         args: Vec<RtVal>,
     ) -> Result<RtVal, PhyResult<RtValErr>> {
-        let mut new_env = Env::new(Some(interpreter.globals.clone()));
+        let mut new_env = Env::new(Some(self.closure.clone()));
 
         for (p, v) in self.params.iter().zip(args) {
             new_env
@@ -335,17 +358,20 @@ impl Callable<RtValErr> for Function {
                 .map_err(|_| PhyResult::new(RtValErr::WrongFnParamDecl, None))?;
         }
 
-        interpreter
-            .execute_block_stmt(&self.body, new_env)
-            .map_err(|e| PhyResult::new(RtValErr::FnExecution(e.err.to_string()), None))?;
-
-        Ok(RtVal::new_null())
+        match interpreter.execute_block_stmt(&self.body, new_env) {
+            Ok(_) => Ok(RtVal::new_null()),
+            Err(e) => match e.err {
+                InterpErr::Return(v) => Ok(v),
+                _ => Err(PhyResult::new(RtValErr::FnExecution(e.err.to_string()), None))
+            }
+        }
     }
 
     fn arity(&self) -> usize {
         self.params.len()
     }
 }
+
 
 // --------
 //   Into
@@ -354,7 +380,7 @@ impl From<i64> for RtVal {
     fn from(value: i64) -> Self {
         Self {
             value: RtValKind::IntVal(Rc::new(RefCell::new(Int { value }))),
-            typ: RtType::Defined("int".into()),
+            typ: RtType::Defined(DefinedType::Int),
         }
     }
 }
@@ -363,7 +389,7 @@ impl From<f64> for RtVal {
     fn from(value: f64) -> Self {
         Self {
             value: RtValKind::RealVal(Rc::new(RefCell::new(Real { value }))),
-            typ: RtType::Defined("real".into()),
+            typ: RtType::Defined(DefinedType::Real),
         }
     }
 }
@@ -374,7 +400,7 @@ impl From<EcoString> for RtVal {
             value: RtValKind::StrVal(Rc::new(RefCell::new(Str {
                 value: value.clone(),
             }))),
-            typ: RtType::Defined("str".into()),
+            typ: RtType::Defined(DefinedType::String),
         }
     }
 }
@@ -385,7 +411,7 @@ impl From<String> for RtVal {
             value: RtValKind::StrVal(Rc::new(RefCell::new(Str {
                 value: value.into(),
             }))),
-            typ: RtType::Defined("str".into()),
+            typ: RtType::Defined(DefinedType::String),
         }
     }
 }
@@ -394,23 +420,11 @@ impl From<bool> for RtVal {
     fn from(value: bool) -> Self {
         Self {
             value: RtValKind::BoolVal(Rc::new(RefCell::new(Bool { value }))),
-            typ: RtType::Defined("bool".into()),
+            typ: RtType::Defined(DefinedType::Bool),
         }
     }
 }
 
-impl From<&FnDeclStmt> for RtVal {
-    fn from(value: &FnDeclStmt) -> Self {
-        Self {
-            value: RtValKind::FuncVal(Rc::new(RefCell::new(Function {
-                name: value.name.clone(),
-                params: value.params.clone(),
-                body: value.body.clone(),
-            }))),
-            typ: RtType::Any,
-        }
-    }
-}
 
 // -----------
 //   Display
@@ -422,7 +436,8 @@ impl Display for RtVal {
             RtValKind::RealVal(r) => write!(f, "{}", r.borrow().value),
             RtValKind::BoolVal(b) => write!(f, "{}", b.borrow().value),
             RtValKind::StrVal(s) => write!(f, "\"{}\"", s.borrow().value),
-            RtValKind::FuncVal(func) => write!(f, "<fn {}>", func.borrow().name),
+            RtValKind::FuncVal(func) => write!(f, "<fn {}>", func.name),
+            RtValKind::NativeFnVal(func) => write!(f, "{}", func),
             RtValKind::Null => write!(f, "null"),
         }
     }
