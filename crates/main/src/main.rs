@@ -8,9 +8,9 @@ use std::{
 use colored::*;
 
 use frontend::{
-    ast_pretty_print::AstPrinter, interpreter::Interpreter, lexer::Lexer, parser::Parser,
-    values::RtValKind,
+    ast::ast_pretty_print::AstPrinter, lexer::Lexer, parser::Parser,
 };
+use runtime::{interpreter::Interpreter, values::RtValKind};
 
 // --------
 //   Cli

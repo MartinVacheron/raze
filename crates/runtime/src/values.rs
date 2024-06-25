@@ -2,12 +2,13 @@ use colored::*;
 use ecow::EcoString;
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 use thiserror::Error;
+use frontend::ast::stmt::{FnDeclStmt, Stmt};
+use tools::results::{PhyReport, PhyResult};
 
 use crate::{
-    callable::Callable, environment::Env, interpreter::{InterpErr, Interpreter}, native_functions::PhyNativeFn, stmt::{FnDeclStmt, Stmt}
+    callable::Callable, environment::Env, interpreter::{InterpErr, Interpreter}, native_functions::PhyNativeFn
 };
 
-use tools::results::{PhyReport, PhyResult};
 
 // -----------------
 //  Error managment

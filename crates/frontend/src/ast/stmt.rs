@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use ecow::EcoString;
 
-use crate::expr::Expr;
+use super::expr::Expr;
 use tools::results::{PhyReport, PhyResult, Loc};
 
 #[derive(Debug)]

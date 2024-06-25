@@ -4,14 +4,21 @@ use colored::*;
 use ecow::EcoString;
 use thiserror::Error;
 
-use crate::expr::{
+use crate::ast::expr::{
     AssignExpr, BinaryExpr, CallExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr
 };
 use crate::lexer::{Token, TokenKind};
-use crate::stmt::{
+use crate::ast::stmt::{
     BlockStmt, ExprStmt, FnDeclStmt, ForRange, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt, WhileStmt
 };
 use tools::results::{PhyReport, PhyResult, Loc};
+
+
+// Children mods
+#[cfg(test)]
+pub mod utils;
+#[cfg(test)]
+pub mod test_parser;
 
 // ----------------
 // Error managment
@@ -975,8 +982,7 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use tools::results::Loc;
-    use crate::parser::ParserErr;
-    use crate::utils::*;
+    use crate::parser::{ParserErr, utils::*};
     use ecow::EcoString;
 
     #[test]

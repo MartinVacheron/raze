@@ -1,6 +1,6 @@
 use ecow::EcoString;
 
-use crate::{
+use crate::ast::{
     expr::{
         AssignExpr, BinaryExpr, CallExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr,
         LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr,

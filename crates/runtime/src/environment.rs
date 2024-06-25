@@ -1,11 +1,15 @@
-use std::{cell::RefCell, collections::{
-    hash_map::Entry::{Occupied, Vacant}, HashMap
-}, rc::Rc};
 use ecow::EcoString;
+use std::{
+    cell::RefCell,
+    collections::{
+        hash_map::Entry::{Occupied, Vacant},
+        HashMap,
+    },
+    rc::Rc,
+};
 use thiserror::Error;
 
 use crate::values::RtVal;
-
 
 // -----------------
 //  Error managment
@@ -18,7 +22,6 @@ pub enum EnvErr {
     #[error("undeclared variable '{0}'")]
     UndeclaredVar(String),
 }
-
 
 type EnvWrapper = Rc<RefCell<Env>>;
 
@@ -35,7 +38,7 @@ impl Env {
     pub fn new(enclosing: Option<EnvWrapper>) -> Self {
         Self {
             enclosing,
-            vars: HashMap::new()
+            vars: HashMap::new(),
         }
     }
 
@@ -43,7 +46,7 @@ impl Env {
         if let Vacant(v) = self.vars.entry(var_name.clone()) {
             v.insert(value);
         } else {
-            return Err(EnvErr::AlreadyDeclaredVar(var_name.into()))
+            return Err(EnvErr::AlreadyDeclaredVar(var_name.into()));
         }
 
         Ok(())
@@ -74,19 +77,22 @@ impl Env {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use ecow::EcoString;
-    use crate::{environment::EnvErr, values::RtVal};
     use super::Env;
+    use crate::{environment::EnvErr, values::RtVal};
+    use ecow::EcoString;
 
     #[test]
     fn var_declaration() {
         let mut env = Env::default();
-        assert!(env.declare_var(EcoString::from("foo"), RtVal::new_null()).is_ok());
+        assert!(env
+            .declare_var(EcoString::from("foo"), RtVal::new_null())
+            .is_ok());
         assert!(matches!(
-            env.declare_var(EcoString::from("foo"), RtVal::new_null()).err().unwrap(),
+            env.declare_var(EcoString::from("foo"), RtVal::new_null())
+                .err()
+                .unwrap(),
             EnvErr::AlreadyDeclaredVar { .. }
         ));
     }

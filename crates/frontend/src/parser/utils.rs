@@ -1,11 +1,10 @@
 use crate::{
-    stmt::Stmt,
-    interpreter::{Interpreter, PhyResInterp},
+    ast::stmt::Stmt,
     lexer::Lexer,
     parser::{Parser, PhyResParser},
-    test_parser::{StmtInfos, ExprInfos, TestParser},
-    values::RtVal,
 };
+
+use super::test_parser::{StmtInfos, ExprInfos, TestParser};
 
 pub fn lex_and_parse(code: &str) -> Result<Vec<Stmt>, Vec<PhyResParser>> {
     let mut lexer = Lexer::new();
@@ -31,10 +30,3 @@ pub fn get_expr_nodes_infos(code: &str) -> ExprInfos {
     let mut test_parser = TestParser::default();
     test_parser.get_all_infos(&nodes).unwrap().expr.clone()
 }
-
-pub fn lex_parse_interp(code: &str) -> Result<RtVal, PhyResInterp> {
-    let nodes = lex_and_parse(code).unwrap();
-    let interp = Interpreter::new();
-    interp.interpret(&nodes)
-}
-

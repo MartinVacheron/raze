@@ -1,11 +1,10 @@
 use tools::results::{PhyReport, PhyResult};
 
-use crate::expr::{
-    AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
+use super::expr::{
+    AssignExpr, BinaryExpr, CallExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
 };
 
-use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt};
-use crate::expr::Expr;
+use super::stmt::{BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt};
 
 #[derive(Debug)]
 pub enum AstPrinterErr {}
@@ -66,15 +65,15 @@ impl VisitStmt<String, AstPrinterErr> for AstPrinter {
         todo!()
     }
 
-    fn visit_for_stmt(&self, _stmt: &crate::stmt::ForStmt) -> Result<String, PhyResult<AstPrinterErr>> {
+    fn visit_for_stmt(&self, _stmt: &ForStmt) -> Result<String, PhyResult<AstPrinterErr>> {
         todo!()
     }
 
-    fn visit_fn_decl_stmt(&self, _stmt: &crate::stmt::FnDeclStmt) -> Result<String, PhyResult<AstPrinterErr>> {
+    fn visit_fn_decl_stmt(&self, _stmt: &FnDeclStmt) -> Result<String, PhyResult<AstPrinterErr>> {
         todo!()
     }
 
-    fn visit_return_stmt(&self, stmt: &crate::stmt::ReturnStmt) -> Result<String, PhyResult<AstPrinterErr>> {
+    fn visit_return_stmt(&self, stmt: &ReturnStmt) -> Result<String, PhyResult<AstPrinterErr>> {
         todo!()
     }
 }
@@ -117,7 +116,7 @@ impl VisitExpr<String, AstPrinterErr> for AstPrinter {
         self.parenthesize(expr.operator.as_str(), &[&expr.left, &expr.right])
     }
 
-    fn visit_call_expr(&self, expr: &crate::expr::CallExpr) -> Result<String, PhyResult<AstPrinterErr>> {
+    fn visit_call_expr(&self, expr: &CallExpr) -> Result<String, PhyResult<AstPrinterErr>> {
         todo!()
     }
 }

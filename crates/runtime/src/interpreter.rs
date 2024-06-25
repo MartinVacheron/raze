@@ -8,12 +8,12 @@ use tools::results::{PhyReport, PhyResult};
 
 use crate::callable::Callable;
 use crate::environment::Env;
-use crate::expr::{
+use frontend::ast::expr::{
     AssignExpr, BinaryExpr, CallExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr,
     RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr,
 };
 use crate::native_functions::{NativeClock, PhyNativeFn};
-use crate::stmt::{
+use frontend::ast::stmt::{
     BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt
 };
 use crate::values::{DefinedType, RtType, RtVal, RtValKind};
