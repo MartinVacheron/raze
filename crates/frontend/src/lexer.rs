@@ -3,7 +3,7 @@ use ecow::EcoString;
 use thiserror::Error;
 use colored::*;
 
-use super::results::{PhyResult, PhyReport};
+use tools::results::{PhyReport, PhyResult, Loc};
 
 
 // ----------------
@@ -94,20 +94,6 @@ pub enum TokenKind {
     Eof,
 }
 
-#[derive(Debug, PartialEq, Default, Clone)]
-pub struct Loc {
-    pub start: usize,
-    pub end: usize
-}
-
-impl Loc {
-    pub fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
-    }
-     pub fn get_len(&self) -> usize {
-        self.end - self.start
-    }
-}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Token {

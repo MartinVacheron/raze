@@ -2,9 +2,8 @@ use std::rc::Rc;
 
 use ecow::EcoString;
 
-use crate::{
-    expr::Expr, lexer::Loc, results::{PhyReport, PhyResult}
-};
+use crate::expr::Expr;
+use tools::results::{PhyReport, PhyResult, Loc};
 
 #[derive(Debug)]
 pub enum Stmt {

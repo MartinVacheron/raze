@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-utils = { path = "../utils" }
+tools = { path = "../tools" }
 colored = { workspace = true }
 ecow = { workspace = true }
 thiserror = "1.0"

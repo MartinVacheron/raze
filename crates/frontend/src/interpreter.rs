@@ -4,6 +4,7 @@ use std::rc::Rc;
 use colored::Colorize;
 use ecow::EcoString;
 use thiserror::Error;
+use tools::results::{PhyReport, PhyResult};
 
 use crate::callable::Callable;
 use crate::environment::Env;
@@ -12,7 +13,6 @@ use crate::expr::{
     RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr,
 };
 use crate::native_functions::{NativeClock, PhyNativeFn};
-use crate::results::{PhyReport, PhyResult};
 use crate::stmt::{
     BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt
 };

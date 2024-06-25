@@ -5,12 +5,12 @@ use crate::{
         AssignExpr, BinaryExpr, CallExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr,
         LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr,
     },
-    lexer::Loc,
-    results::{PhyReport, PhyResult},
     stmt::{
         BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt
     },
 };
+
+use tools::results::{PhyReport, PhyResult, Loc};
 
 #[derive(Debug)]
 pub enum ParserTestErr {}

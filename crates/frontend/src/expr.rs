@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use ecow::EcoString;
-use crate::{lexer::Loc, results::{PhyReport, PhyResult}};
+use tools::results::{PhyReport, PhyResult, Loc};
 
 
 #[derive(Debug, PartialEq)]

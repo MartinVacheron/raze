@@ -6,9 +6,9 @@ use thiserror::Error;
 use crate::{
     callable::Callable,
     interpreter::Interpreter,
-    results::{PhyReport, PhyResult},
     values::RtVal,
 };
+use tools::results::{PhyReport, PhyResult};
 
 
 pub type NativeFnRes = Result<RtVal, PhyResult<NativeFnErr>>;

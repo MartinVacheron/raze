@@ -4,8 +4,10 @@ use std::{cell::RefCell, fmt::Display, rc::Rc};
 use thiserror::Error;
 
 use crate::{
-    callable::Callable, environment::Env, interpreter::{InterpErr, Interpreter}, native_functions::PhyNativeFn, results::{PhyReport, PhyResult}, stmt::{FnDeclStmt, Stmt}
+    callable::Callable, environment::Env, interpreter::{InterpErr, Interpreter}, native_functions::PhyNativeFn, stmt::{FnDeclStmt, Stmt}
 };
+
+use tools::results::{PhyReport, PhyResult};
 
 // -----------------
 //  Error managment

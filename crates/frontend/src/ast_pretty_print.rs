@@ -1,9 +1,11 @@
+use tools::results::{PhyReport, PhyResult};
+
 use crate::expr::{
     AssignExpr, BinaryExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
 };
-use crate::results::PhyReport;
+
 use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt};
-use crate::{expr::Expr, results::PhyResult};
+use crate::expr::Expr;
 
 #[derive(Debug)]
 pub enum AstPrinterErr {}

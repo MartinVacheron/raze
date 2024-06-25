@@ -1,5 +1,4 @@
 pub mod lexer;
-mod results;
 mod expr;
 mod stmt;
 pub mod ast_pretty_print;
@@ -9,6 +8,8 @@ pub mod values;
 pub mod environment;
 pub mod callable;
 pub mod native_functions;
+
+extern crate tools;
 
 #[cfg(test)]
 mod utils;

@@ -1,7 +1,21 @@
 use std::collections::VecDeque;
 use colored::*;
 
-use crate::{lexer::Loc, values::RtVal};
+
+#[derive(Debug, PartialEq, Default, Clone)]
+pub struct Loc {
+    pub start: usize,
+    pub end: usize
+}
+
+impl Loc {
+    pub fn new(start: usize, end: usize) -> Self {
+        Self { start, end }
+    }
+     pub fn get_len(&self) -> usize {
+        self.end - self.start
+    }
+}
 
 pub trait PhyReport {
     fn get_err_msg(&self) -> String;
@@ -16,13 +30,12 @@ struct ReportContext<'a> {
 #[derive(Debug)]
 pub struct PhyResult<T: PhyReport> {
     pub err: T,
-    pub value: Option<RtVal>,
     pub loc: Option<Loc>,
 }
 
 impl<'a, T: PhyReport> PhyResult<T> {
     pub fn new(err: T, loc: Option<Loc>) -> PhyResult<T> {
-        PhyResult { err, value: None, loc }
+        PhyResult { err, loc }
     }
 
     pub fn report(&self, file_name: &String, code: &str) {

@@ -1,4 +1,6 @@
-use crate::{interpreter::Interpreter, results::{PhyReport, PhyResult}, values::RtVal};
+use tools::results::{PhyReport, PhyResult};
+
+use crate::{interpreter::Interpreter, values::RtVal};
 
 pub trait Callable<T: PhyReport> {
     fn call(
