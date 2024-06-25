@@ -10,7 +10,7 @@ use colored::*;
 use frontend::{
     ast::ast_pretty_print::AstPrinter, lexer::Lexer, parser::Parser,
 };
-use runtime::{interpreter::Interpreter, values::RtValKind};
+use runtime::{interpreter::Interpreter, values::RtVal};
 
 // --------
 //   Cli
@@ -131,7 +131,7 @@ impl Repl {
 
         match self.interpreter.interpret(&nodes) {
             Ok(res) => {
-                if res.value != RtValKind::Null {
+                if res != RtVal::Null {
                     println!("{}", res);
                 }
             }

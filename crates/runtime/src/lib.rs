@@ -4,7 +4,6 @@ pub mod environment;
 pub mod callable;
 pub mod native_functions;
 
-#[cfg(test)]
 mod utils;
 
 extern crate frontend;

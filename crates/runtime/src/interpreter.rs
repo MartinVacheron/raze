@@ -8,15 +8,16 @@ use tools::results::{PhyReport, PhyResult};
 
 use crate::callable::Callable;
 use crate::environment::Env;
+use crate::native_functions::{NativeClock, PhyNativeFn};
+use crate::values::RtVal;
 use frontend::ast::expr::{
     AssignExpr, BinaryExpr, CallExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr,
     RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr,
 };
-use crate::native_functions::{NativeClock, PhyNativeFn};
 use frontend::ast::stmt::{
-    BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt
+    BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt,
+    VisitStmt, WhileStmt,
 };
-use crate::values::{DefinedType, RtType, RtVal, RtValKind};
 
 // ----------------
 // Error managment
@@ -100,13 +101,13 @@ impl Interpreter {
     pub fn new() -> Self {
         let globals = Rc::new(RefCell::new(Env::new(None)));
 
-        let _ = globals.borrow_mut().declare_var(EcoString::from("clock"), RtVal {
-            value: RtValKind::NativeFnVal(Rc::new(PhyNativeFn {
+        let _ = globals.borrow_mut().declare_var(
+            EcoString::from("clock"),
+            RtVal::NativeFnVal(Rc::new(PhyNativeFn {
                 name: EcoString::from("clock"),
                 func: Rc::new(NativeClock),
             })),
-            typ: RtType::Defined(DefinedType::NativeFn),
-        });
+        );
 
         let env = RefCell::new(globals.clone());
 
@@ -167,8 +168,8 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
     fn visit_if_stmt(&self, stmt: &IfStmt) -> InterpRes {
         let cond = stmt.condition.accept(self)?;
 
-        match cond.value {
-            RtValKind::BoolVal(b) => match b.borrow().value {
+        match cond {
+            RtVal::BoolVal(b) => match b.borrow().value {
                 true => {
                     if let Some(t) = &stmt.then_branch {
                         t.accept(self)
@@ -195,8 +196,8 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
         loop {
             let cond = stmt.condition.accept(self)?;
 
-            match cond.value {
-                RtValKind::BoolVal(b) => match b.borrow().value {
+            match cond {
+                RtVal::BoolVal(b) => match b.borrow().value {
                     true => {
                         stmt.body.accept(self)?;
                     }
@@ -278,7 +279,9 @@ impl Interpreter {
         for s in stmts {
             res = s.accept(self);
 
-            if res.is_err() { break }
+            if res.is_err() {
+                break;
+            }
         }
 
         self.env.replace(prev_env);
@@ -363,14 +366,14 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
     fn visit_unary_expr(&self, expr: &UnaryExpr) -> InterpRes {
         let value = expr.right.accept(self)?;
 
-        match (&value.value, expr.operator.as_str()) {
-            (RtValKind::IntVal(..) | RtValKind::RealVal(..), "!") => {
+        match (&value, expr.operator.as_str()) {
+            (RtVal::IntVal(..) | RtVal::RealVal(..), "!") => {
                 return Err(PhyResult::new(
                     InterpErr::BangOpOnNonBool,
                     Some(expr.loc.clone()),
                 ))
             }
-            (RtValKind::BoolVal(..) | RtValKind::StrVal(..) | RtValKind::Null, "-") => {
+            (RtVal::BoolVal(..) | RtVal::StrVal(..) | RtVal::Null, "-") => {
                 return Err(PhyResult::new(
                     InterpErr::NegateNonNumeric,
                     Some(expr.loc.clone()),
@@ -391,8 +394,8 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
         let op = expr.operator.as_str();
 
         if op == "or" {
-            match &left.value {
-                RtValKind::BoolVal(b) => {
+            match &left {
+                RtVal::BoolVal(b) => {
                     if b.borrow().value {
                         return Ok(left);
                     }
@@ -405,8 +408,8 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
                 }
             }
         } else if op == "and" {
-            match &left.value {
-                RtValKind::BoolVal(b) => {
+            match &left {
+                RtVal::BoolVal(b) => {
                     if !b.borrow().value {
                         return Ok(left);
                     }
@@ -431,7 +434,7 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
             args.push(a.accept(self)?);
         }
 
-        if let RtValKind::FuncVal(f) = callee.value {
+        if let RtVal::FuncVal(f) = callee {
             if f.arity() != args.len() {
                 return Err(PhyResult::new(
                     InterpErr::WrongArgsNb(f.arity(), args.len()),
@@ -746,5 +749,3 @@ a
         assert_eq!(lex_parse_interp(code).unwrap(), 2.into());
     }
 }
-
-

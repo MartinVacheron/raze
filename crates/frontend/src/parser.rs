@@ -15,9 +15,7 @@ use tools::results::{PhyReport, PhyResult, Loc};
 
 
 // Children mods
-#[cfg(test)]
 pub mod utils;
-#[cfg(test)]
 pub mod test_parser;
 
 // ----------------

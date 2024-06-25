@@ -54,7 +54,7 @@ impl PhyReport for RtValErr {
 //  Runtime Values
 // ----------------
 #[derive(Debug, PartialEq, Clone)]
-pub enum RtValKind {
+pub enum RtVal {
     IntVal(Rc<RefCell<Int>>),
     RealVal(Rc<RefCell<Real>>),
     StrVal(Rc<RefCell<Str>>),
@@ -62,31 +62,6 @@ pub enum RtValKind {
     FuncVal(Rc<Function>),
     NativeFnVal(Rc<PhyNativeFn>),
     Null,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum RtType {
-    None,
-    Defined(DefinedType),
-    Infered,
-    Any,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum DefinedType {
-    Null,
-    Int,
-    Real,
-    String,
-    Bool,
-    Fn(EcoString),
-    NativeFn,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct RtVal {
-    pub value: RtValKind,
-    pub typ: RtType,
 }
 
 trait Negate {
@@ -99,17 +74,14 @@ trait Operate<Rhs> {
 
 impl RtVal {
     pub fn new_null() -> Self {
-        Self {
-            value: RtValKind::Null,
-            typ: RtType::Defined(DefinedType::Null),
-        }
+        RtVal::Null
     }
 
     pub fn negate(&self) -> Result<(), RtValErr> {
-        match &self.value {
-            RtValKind::IntVal(i) => i.borrow_mut().negate(),
-            RtValKind::RealVal(r) => r.borrow_mut().negate(),
-            RtValKind::BoolVal(b) => b.borrow_mut().negate(),
+        match &self {
+            RtVal::IntVal(i) => i.borrow_mut().negate(),
+            RtVal::RealVal(r) => r.borrow_mut().negate(),
+            RtVal::BoolVal(b) => b.borrow_mut().negate(),
             _ => return Err(RtValErr::UnNegatable),
         }
 
@@ -118,32 +90,32 @@ impl RtVal {
 
     // TODO: Error handling for other operation
     pub fn operate(&self, rhs: &RtVal, operator: &str) -> Result<RtVal, RtValErr> {
-        match (&self.value, &rhs.value) {
-            (RtValKind::IntVal(i1), RtValKind::IntVal(i2)) => {
+        match (&self, &rhs) {
+            (RtVal::IntVal(i1), RtVal::IntVal(i2)) => {
                 i1.borrow().operate(&*i2.borrow(), operator)
             }
-            (RtValKind::RealVal(r1), RtValKind::RealVal(r2)) => {
+            (RtVal::RealVal(r1), RtVal::RealVal(r2)) => {
                 r1.borrow().operate(&*r2.borrow(), operator)
             }
-            (RtValKind::IntVal(i1), RtValKind::RealVal(r1)) => {
+            (RtVal::IntVal(i1), RtVal::RealVal(r1)) => {
                 i1.borrow().operate(&*r1.borrow(), operator)
             }
-            (RtValKind::RealVal(r1), RtValKind::IntVal(i1)) => {
+            (RtVal::RealVal(r1), RtVal::IntVal(i1)) => {
                 r1.borrow().operate(&*i1.borrow(), operator)
             }
-            (RtValKind::StrVal(s1), RtValKind::StrVal(s2)) => {
+            (RtVal::StrVal(s1), RtVal::StrVal(s2)) => {
                 s1.borrow().operate(&*s2.borrow(), operator)
             }
-            (RtValKind::StrVal(s1), RtValKind::IntVal(i1)) => {
+            (RtVal::StrVal(s1), RtVal::IntVal(i1)) => {
                 s1.borrow().operate(&*i1.borrow(), operator)
             }
-            (RtValKind::IntVal(i1), RtValKind::StrVal(s1)) => {
+            (RtVal::IntVal(i1), RtVal::StrVal(s1)) => {
                 i1.borrow().operate(&*s1.borrow(), operator)
             }
-            (RtValKind::BoolVal(b1), RtValKind::BoolVal(b2)) => {
+            (RtVal::BoolVal(b1), RtVal::BoolVal(b2)) => {
                 b1.borrow().operate(&*b2.borrow(), operator)
             }
-            (RtValKind::Null, _) | (_, RtValKind::Null) => Err(RtValErr::OperationOnNull),
+            (RtVal::Null, _) | (_, RtVal::Null) => Err(RtValErr::OperationOnNull),
             _ => Err(RtValErr::UnknownOperation),
         }
     }
@@ -329,15 +301,12 @@ pub struct Function {
 
 impl RtVal {
     pub fn new_fn(value: &FnDeclStmt, closure: Rc<RefCell<Env>>) -> Self {
-        Self {
-            value: RtValKind::FuncVal(Rc::new(Function {
-                name: value.name.clone(),
-                params: value.params.clone(),
-                body: value.body.clone(),
-                closure: closure.clone(),
-            })),
-            typ: RtType::Any,
-        }
+        RtVal::FuncVal(Rc::new(Function {
+            name: value.name.clone(),
+            params: value.params.clone(),
+            body: value.body.clone(),
+            closure: closure.clone(),
+        }))
     }
 }
 
@@ -381,50 +350,31 @@ impl Callable<RtValErr> for Function {
 // --------
 impl From<i64> for RtVal {
     fn from(value: i64) -> Self {
-        Self {
-            value: RtValKind::IntVal(Rc::new(RefCell::new(Int { value }))),
-            typ: RtType::Defined(DefinedType::Int),
-        }
+        RtVal::IntVal(Rc::new(RefCell::new(Int { value })))
     }
 }
 
 impl From<f64> for RtVal {
     fn from(value: f64) -> Self {
-        Self {
-            value: RtValKind::RealVal(Rc::new(RefCell::new(Real { value }))),
-            typ: RtType::Defined(DefinedType::Real),
-        }
+        RtVal::RealVal(Rc::new(RefCell::new(Real { value })))
     }
 }
 
 impl From<EcoString> for RtVal {
     fn from(value: EcoString) -> Self {
-        Self {
-            value: RtValKind::StrVal(Rc::new(RefCell::new(Str {
-                value: value.clone(),
-            }))),
-            typ: RtType::Defined(DefinedType::String),
-        }
+        RtVal::StrVal(Rc::new(RefCell::new(Str { value: value.clone() })))
     }
 }
 
 impl From<String> for RtVal {
     fn from(value: String) -> Self {
-        Self {
-            value: RtValKind::StrVal(Rc::new(RefCell::new(Str {
-                value: value.into(),
-            }))),
-            typ: RtType::Defined(DefinedType::String),
-        }
+        RtVal::StrVal(Rc::new(RefCell::new(Str { value: value.into() })))
     }
 }
 
 impl From<bool> for RtVal {
     fn from(value: bool) -> Self {
-        Self {
-            value: RtValKind::BoolVal(Rc::new(RefCell::new(Bool { value }))),
-            typ: RtType::Defined(DefinedType::Bool),
-        }
+        RtVal::BoolVal(Rc::new(RefCell::new(Bool { value })))
     }
 }
 
@@ -434,14 +384,14 @@ impl From<bool> for RtVal {
 // -----------
 impl Display for RtVal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.value {
-            RtValKind::IntVal(i) => write!(f, "{}", i.borrow().value),
-            RtValKind::RealVal(r) => write!(f, "{}", r.borrow().value),
-            RtValKind::BoolVal(b) => write!(f, "{}", b.borrow().value),
-            RtValKind::StrVal(s) => write!(f, "\"{}\"", s.borrow().value),
-            RtValKind::FuncVal(func) => write!(f, "<fn {}>", func.name),
-            RtValKind::NativeFnVal(func) => write!(f, "{}", func),
-            RtValKind::Null => write!(f, "null"),
+        match &self {
+            RtVal::IntVal(i) => write!(f, "{}", i.borrow().value),
+            RtVal::RealVal(r) => write!(f, "{}", r.borrow().value),
+            RtVal::BoolVal(b) => write!(f, "{}", b.borrow().value),
+            RtVal::StrVal(s) => write!(f, "\"{}\"", s.borrow().value),
+            RtVal::FuncVal(func) => write!(f, "<fn {}>", func.name),
+            RtVal::NativeFnVal(func) => write!(f, "{}", func),
+            RtVal::Null => write!(f, "null"),
         }
     }
 }
