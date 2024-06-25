@@ -1,14 +1,16 @@
 use colored::*;
 use ecow::EcoString;
+use frontend::ast::stmt::{FnDeclStmt, Stmt};
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 use thiserror::Error;
-use frontend::ast::stmt::{FnDeclStmt, Stmt};
 use tools::results::{PhyReport, PhyResult};
 
 use crate::{
-    callable::Callable, environment::Env, interpreter::{InterpErr, Interpreter}, native_functions::PhyNativeFn
+    callable::Callable,
+    environment::Env,
+    interpreter::{InterpErr, Interpreter},
+    native_functions::PhyNativeFn,
 };
-
 
 // -----------------
 //  Error managment
@@ -91,27 +93,15 @@ impl RtVal {
     // TODO: Error handling for other operation
     pub fn operate(&self, rhs: &RtVal, operator: &str) -> Result<RtVal, RtValErr> {
         match (&self, &rhs) {
-            (RtVal::IntVal(i1), RtVal::IntVal(i2)) => {
-                i1.borrow().operate(&*i2.borrow(), operator)
-            }
+            (RtVal::IntVal(i1), RtVal::IntVal(i2)) => i1.borrow().operate(&*i2.borrow(), operator),
             (RtVal::RealVal(r1), RtVal::RealVal(r2)) => {
                 r1.borrow().operate(&*r2.borrow(), operator)
             }
-            (RtVal::IntVal(i1), RtVal::RealVal(r1)) => {
-                i1.borrow().operate(&*r1.borrow(), operator)
-            }
-            (RtVal::RealVal(r1), RtVal::IntVal(i1)) => {
-                r1.borrow().operate(&*i1.borrow(), operator)
-            }
-            (RtVal::StrVal(s1), RtVal::StrVal(s2)) => {
-                s1.borrow().operate(&*s2.borrow(), operator)
-            }
-            (RtVal::StrVal(s1), RtVal::IntVal(i1)) => {
-                s1.borrow().operate(&*i1.borrow(), operator)
-            }
-            (RtVal::IntVal(i1), RtVal::StrVal(s1)) => {
-                i1.borrow().operate(&*s1.borrow(), operator)
-            }
+            (RtVal::IntVal(i1), RtVal::RealVal(r1)) => i1.borrow().operate(&*r1.borrow(), operator),
+            (RtVal::RealVal(r1), RtVal::IntVal(i1)) => r1.borrow().operate(&*i1.borrow(), operator),
+            (RtVal::StrVal(s1), RtVal::StrVal(s2)) => s1.borrow().operate(&*s2.borrow(), operator),
+            (RtVal::StrVal(s1), RtVal::IntVal(i1)) => s1.borrow().operate(&*i1.borrow(), operator),
+            (RtVal::IntVal(i1), RtVal::StrVal(s1)) => i1.borrow().operate(&*s1.borrow(), operator),
             (RtVal::BoolVal(b1), RtVal::BoolVal(b2)) => {
                 b1.borrow().operate(&*b2.borrow(), operator)
             }
@@ -334,8 +324,11 @@ impl Callable<RtValErr> for Function {
             Ok(_) => Ok(RtVal::new_null()),
             Err(e) => match e.err {
                 InterpErr::Return(v) => Ok(v),
-                _ => Err(PhyResult::new(RtValErr::FnExecution(e.err.to_string()), None))
-            }
+                _ => Err(PhyResult::new(
+                    RtValErr::FnExecution(e.err.to_string()),
+                    None,
+                )),
+            },
         }
     }
 
@@ -343,7 +336,6 @@ impl Callable<RtValErr> for Function {
         self.params.len()
     }
 }
-
 
 // --------
 //   Into
@@ -362,13 +354,17 @@ impl From<f64> for RtVal {
 
 impl From<EcoString> for RtVal {
     fn from(value: EcoString) -> Self {
-        RtVal::StrVal(Rc::new(RefCell::new(Str { value: value.clone() })))
+        RtVal::StrVal(Rc::new(RefCell::new(Str {
+            value: value.clone(),
+        })))
     }
 }
 
 impl From<String> for RtVal {
     fn from(value: String) -> Self {
-        RtVal::StrVal(Rc::new(RefCell::new(Str { value: value.into() })))
+        RtVal::StrVal(Rc::new(RefCell::new(Str {
+            value: value.into(),
+        })))
     }
 }
 
@@ -377,7 +373,6 @@ impl From<bool> for RtVal {
         RtVal::BoolVal(Rc::new(RefCell::new(Bool { value })))
     }
 }
-
 
 // -----------
 //   Display

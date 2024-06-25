@@ -1,13 +1,10 @@
-fn makeCounter() {
-  var i = 0
-  fn count() {
-    i = i + 1
-    print i
+var a = "global"
+{
+  fn showA() {
+    print a
   }
 
-  return count
+  showA()
+  var a = "block"
+  showA()
 }
-
-var counter = makeCounter()
-counter() // "1".
-counter() // "2".
