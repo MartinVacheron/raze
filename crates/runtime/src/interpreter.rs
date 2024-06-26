@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use colored::Colorize;
@@ -11,8 +12,7 @@ use crate::environment::Env;
 use crate::native_functions::{NativeClock, PhyNativeFn};
 use crate::values::RtVal;
 use frontend::ast::expr::{
-    AssignExpr, BinaryExpr, CallExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr,
-    RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr,
+    AssignExpr, BinaryExpr, CallExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
 };
 use frontend::ast::stmt::{
     BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt,
@@ -95,6 +95,7 @@ pub struct Interpreter {
     // able to mutate thanks to RefCell and it can be multiple owners
     pub globals: Rc<RefCell<Env>>,
     pub env: RefCell<Rc<RefCell<Env>>>,
+    pub locals: HashMap<Rc<Expr>, usize>,
 }
 
 impl Interpreter {
@@ -111,7 +112,7 @@ impl Interpreter {
 
         let env = RefCell::new(globals.clone());
 
-        Self { globals, env }
+        Self { globals, env, locals: HashMap::new() }
     }
 }
 

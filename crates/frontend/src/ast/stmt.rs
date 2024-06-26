@@ -3,7 +3,7 @@ use std::rc::Rc;
 use ecow::EcoString;
 
 use super::expr::Expr;
-use tools::results::{PhyReport, PhyResult, Loc};
+use tools::results::{Loc, PhyReport, PhyResult};
 
 #[derive(Debug)]
 pub enum Stmt {
@@ -87,7 +87,10 @@ pub struct ReturnStmt {
 }
 
 impl Stmt {
-	pub fn accept<T, U: PhyReport>(&self, visitor: &dyn VisitStmt<T, U>) -> Result<T, PhyResult<U>> {
+    pub fn accept<T, U: PhyReport>(
+        &self,
+        visitor: &dyn VisitStmt<T, U>,
+    ) -> Result<T, PhyResult<U>> {
         match self {
             Stmt::Expr(stmt) => visitor.visit_expr_stmt(stmt),
             Stmt::Print(stmt) => visitor.visit_print_stmt(stmt),
@@ -98,8 +101,8 @@ impl Stmt {
             Stmt::For(stmt) => visitor.visit_for_stmt(stmt),
             Stmt::FnDecl(stmt) => visitor.visit_fn_decl_stmt(stmt),
             Stmt::Return(stmt) => visitor.visit_return_stmt(stmt),
-		}
-	}
+        }
+    }
 }
 
 pub trait VisitStmt<T, U: PhyReport> {
@@ -112,4 +115,15 @@ pub trait VisitStmt<T, U: PhyReport> {
     fn visit_for_stmt(&self, stmt: &ForStmt) -> Result<T, PhyResult<U>>;
     fn visit_fn_decl_stmt(&self, stmt: &FnDeclStmt) -> Result<T, PhyResult<U>>;
     fn visit_return_stmt(&self, stmt: &ReturnStmt) -> Result<T, PhyResult<U>>;
+}
+
+// Into
+impl From<&VarDeclStmt> for Stmt {
+    fn from(value: &VarDeclStmt) -> Self {
+        Self::VarDecl(VarDeclStmt {
+            name: value.name.clone(),
+            value: value.value.clone(),
+            loc: value.loc.clone(),
+        })
+    }
 }

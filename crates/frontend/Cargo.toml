@@ -9,4 +9,4 @@ edition = "2021"
 tools = { path = "../tools" }
 colored = { workspace = true }
 ecow = { workspace = true }
-thiserror = "1.0"
+thiserror = { workspace = true }

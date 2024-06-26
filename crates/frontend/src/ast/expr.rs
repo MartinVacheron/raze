@@ -1,10 +1,9 @@
 use std::fmt::Display;
 
 use ecow::EcoString;
-use tools::results::{PhyReport, PhyResult, Loc};
+use tools::results::{Loc, PhyReport, PhyResult};
 
-
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     Binary(BinaryExpr),
     Grouping(GroupingExpr),
@@ -52,7 +51,7 @@ impl Expr {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct BinaryExpr {
     pub left: Box<Expr>,
     pub operator: EcoString,
@@ -60,51 +59,51 @@ pub struct BinaryExpr {
     pub loc: Loc,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct GroupingExpr {
     pub expr: Box<Expr>,
     pub loc: Loc,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct IntLiteralExpr {
     pub value: i64,
     pub loc: Loc,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct RealLiteralExpr {
     pub value: f64,
     pub loc: Loc,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct StrLiteralExpr {
     pub value: EcoString,
     pub loc: Loc,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct IdentifierExpr {
     pub name: EcoString,
     pub loc: Loc,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct UnaryExpr {
     pub operator: EcoString,
     pub right: Box<Expr>,
     pub loc: Loc,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct AssignExpr {
     pub name: EcoString,
     pub value: Box<Expr>,
     pub loc: Loc,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LogicalExpr {
     pub left: Box<Expr>,
     pub operator: EcoString,
@@ -112,7 +111,7 @@ pub struct LogicalExpr {
     pub loc: Loc,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct CallExpr {
     pub callee: Box<Expr>,
     pub args: Vec<Expr>,
@@ -120,32 +119,54 @@ pub struct CallExpr {
 }
 
 impl Expr {
-	pub fn accept<T, U: PhyReport>(&self, visitor: &dyn VisitExpr<T, U>) -> Result<T, PhyResult<U>> {
-		match self {
-			Expr::Binary(e) => visitor.visit_binary_expr(e),
-			Expr::Grouping(e) => visitor.visit_grouping_expr(e),
-			Expr::IntLiteral(e) => visitor.visit_int_literal_expr(e),
-			Expr::RealLiteral(e) => visitor.visit_real_literal_expr(e),
-			Expr::StrLiteral(e) => visitor.visit_str_literal_expr(e),
-			Expr::Identifier(e) => visitor.visit_identifier_expr(e),
-			Expr::Unary(e) => visitor.visit_unary_expr(e),
-			Expr::Assign(e) => visitor.visit_assign_expr(e),
-			Expr::Logical(l) => visitor.visit_logical_expr(l),
-			Expr::Call(c) => visitor.visit_call_expr(c),
-		}
-	}
+    pub fn accept<T, U: PhyReport>(
+        &self,
+        visitor: &dyn VisitExpr<T, U>,
+    ) -> Result<T, PhyResult<U>> {
+        match self {
+            Expr::Binary(e) => visitor.visit_binary_expr(e),
+            Expr::Grouping(e) => visitor.visit_grouping_expr(e),
+            Expr::IntLiteral(e) => visitor.visit_int_literal_expr(e),
+            Expr::RealLiteral(e) => visitor.visit_real_literal_expr(e),
+            Expr::StrLiteral(e) => visitor.visit_str_literal_expr(e),
+            Expr::Identifier(e) => visitor.visit_identifier_expr(e),
+            Expr::Unary(e) => visitor.visit_unary_expr(e),
+            Expr::Assign(e) => visitor.visit_assign_expr(e),
+            Expr::Logical(l) => visitor.visit_logical_expr(l),
+            Expr::Call(c) => visitor.visit_call_expr(c),
+        }
+    }
 }
 
-
 pub trait VisitExpr<T, U: PhyReport> {
-	fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<T, PhyResult<U>>;
-	fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<T, PhyResult<U>>;
-	fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<T, PhyResult<U>>;
-	fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<T, PhyResult<U>>;
-	fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<T, PhyResult<U>>;
-	fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<T, PhyResult<U>>;
-	fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<T, PhyResult<U>>;
-	fn visit_assign_expr(&self, expr: &AssignExpr) -> Result<T, PhyResult<U>>;
-	fn visit_logical_expr(&self, expr: &LogicalExpr) -> Result<T, PhyResult<U>>;
-	fn visit_call_expr(&self, expr: &CallExpr) -> Result<T, PhyResult<U>>;
+    fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<T, PhyResult<U>>;
+    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<T, PhyResult<U>>;
+    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<T, PhyResult<U>>;
+    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<T, PhyResult<U>>;
+    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<T, PhyResult<U>>;
+    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<T, PhyResult<U>>;
+    fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<T, PhyResult<U>>;
+    fn visit_assign_expr(&self, expr: &AssignExpr) -> Result<T, PhyResult<U>>;
+    fn visit_logical_expr(&self, expr: &LogicalExpr) -> Result<T, PhyResult<U>>;
+    fn visit_call_expr(&self, expr: &CallExpr) -> Result<T, PhyResult<U>>;
+}
+
+// Into
+impl From<&IdentifierExpr> for Expr {
+    fn from(value: &IdentifierExpr) -> Self {
+        Self::Identifier(IdentifierExpr {
+            name: value.name.clone(),
+            loc: value.loc.clone(),
+        })
+    }
+}
+
+impl From<&AssignExpr> for Expr {
+    fn from(value: &AssignExpr) -> Self {
+        Self::Assign(AssignExpr {
+            name: value.name.clone(),
+            value: value.value.clone(),
+            loc: value.loc.clone(),
+        })
+    }
 }
