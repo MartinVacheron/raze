@@ -121,7 +121,7 @@ pub struct CallExpr {
 impl Expr {
     pub fn accept<T, U: PhyReport>(
         &self,
-        visitor: &dyn VisitExpr<T, U>,
+        visitor: &mut impl VisitExpr<T, U>,
     ) -> Result<T, PhyResult<U>> {
         match self {
             Expr::Binary(e) => visitor.visit_binary_expr(e),
@@ -139,16 +139,16 @@ impl Expr {
 }
 
 pub trait VisitExpr<T, U: PhyReport> {
-    fn visit_binary_expr(&self, expr: &BinaryExpr) -> Result<T, PhyResult<U>>;
-    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> Result<T, PhyResult<U>>;
-    fn visit_int_literal_expr(&self, expr: &IntLiteralExpr) -> Result<T, PhyResult<U>>;
-    fn visit_real_literal_expr(&self, expr: &RealLiteralExpr) -> Result<T, PhyResult<U>>;
-    fn visit_str_literal_expr(&self, expr: &StrLiteralExpr) -> Result<T, PhyResult<U>>;
-    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> Result<T, PhyResult<U>>;
-    fn visit_unary_expr(&self, expr: &UnaryExpr) -> Result<T, PhyResult<U>>;
-    fn visit_assign_expr(&self, expr: &AssignExpr) -> Result<T, PhyResult<U>>;
-    fn visit_logical_expr(&self, expr: &LogicalExpr) -> Result<T, PhyResult<U>>;
-    fn visit_call_expr(&self, expr: &CallExpr) -> Result<T, PhyResult<U>>;
+    fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> Result<T, PhyResult<U>>;
+    fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> Result<T, PhyResult<U>>;
+    fn visit_int_literal_expr(&mut self, expr: &IntLiteralExpr) -> Result<T, PhyResult<U>>;
+    fn visit_real_literal_expr(&mut self, expr: &RealLiteralExpr) -> Result<T, PhyResult<U>>;
+    fn visit_str_literal_expr(&mut self, expr: &StrLiteralExpr) -> Result<T, PhyResult<U>>;
+    fn visit_identifier_expr(&mut self, expr: &IdentifierExpr) -> Result<T, PhyResult<U>>;
+    fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Result<T, PhyResult<U>>;
+    fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Result<T, PhyResult<U>>;
+    fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> Result<T, PhyResult<U>>;
+    fn visit_call_expr(&mut self, expr: &CallExpr) -> Result<T, PhyResult<U>>;
 }
 
 // Into

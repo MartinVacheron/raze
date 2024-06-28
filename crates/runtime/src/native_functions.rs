@@ -58,7 +58,7 @@ impl Callable<NativeFnErr> for NativeClock {
         0
     }
 
-    fn call(&self, _: &Interpreter, _: Vec<RtVal>) -> NativeFnRes {
+    fn call(&self, _: &mut Interpreter, _: Vec<RtVal>) -> NativeFnRes {
         match SystemTime::now().duration_since(UNIX_EPOCH) {
             Ok(t) => Ok((t.as_millis() as f64 / 1000.).into()),
             Err(_) => Err(PhyResult::new(NativeFnErr::GetTime, None))

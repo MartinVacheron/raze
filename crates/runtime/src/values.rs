@@ -309,7 +309,7 @@ impl PartialEq for Function {
 impl Callable<RtValErr> for Function {
     fn call(
         &self,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
         args: Vec<RtVal>,
     ) -> Result<RtVal, PhyResult<RtValErr>> {
         let mut new_env = Env::new(Some(self.closure.clone()));

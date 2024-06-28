@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap};
+use std::collections::HashMap;
 
 use colored::Colorize;
 use ecow::EcoString;
@@ -38,13 +38,13 @@ type ResolverRes = Result<(), PhyResult<ResolverErr>>;
 // var a = "outer"
 // { var a = a }
 struct Resolver<'a> {
-    scopes: RefCell<Vec<HashMap<EcoString, bool>>>,
+    scopes: Vec<HashMap<EcoString, bool>>,
     interp: &'a mut Interpreter,
 }
 
 // If we can’t find it in the stack of local scopes, we assume it must be global
 impl<'a> Resolver<'a> {
-    fn resolve(&self, stmts: &Vec<Stmt>) -> ResolverRes {
+    fn resolve(&mut self, stmts: &Vec<Stmt>) -> ResolverRes {
         for s in stmts {
             self.resolve_stmt(s)?
         }
@@ -52,16 +52,16 @@ impl<'a> Resolver<'a> {
         Ok(())
     }
 
-    fn resolve_stmt(&self, stmt: &Stmt) -> ResolverRes {
+    fn resolve_stmt(&mut self, stmt: &Stmt) -> ResolverRes {
         stmt.accept(self)
     }
 
-    fn resolve_expr(&self, expr: &Expr) -> ResolverRes {
+    fn resolve_expr(&mut self, expr: &Expr) -> ResolverRes {
         expr.accept(self)
     }
 
     fn resolve_local(&self, expr: &Expr, name: &EcoString) {
-        for scope in self.scopes.borrow().iter().rev() {
+        for scope in self.scopes.iter().rev() {
             match scope.get(name) {
                 Some(v) => match v {
                     true => todo!(),
@@ -72,31 +72,29 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn declare(&self, name: EcoString) {
-        if self.scopes.borrow().is_empty() {
+    fn declare(&mut self, name: EcoString) {
+        if self.scopes.is_empty() {
             return;
         }
 
         self.scopes
-            .borrow_mut()
             .last_mut()
             .unwrap()
             .insert(name.clone(), false);
     }
 
-    fn define(&self, name: EcoString) {
-        if self.scopes.borrow().is_empty() {
+    fn define(&mut self, name: EcoString) {
+        if self.scopes.is_empty() {
             return;
         }
 
         self.scopes
-            .borrow_mut()
             .last_mut()
             .unwrap()
             .insert(name.clone(), true);
     }
 
-    fn resolve_fn(&self, stmt: &FnDeclStmt) -> ResolverRes {
+    fn resolve_fn(&mut self, stmt: &FnDeclStmt) -> ResolverRes {
         self.begin_scope();
 
         stmt.params.iter().for_each(|p| {
@@ -111,27 +109,27 @@ impl<'a> Resolver<'a> {
         Ok(())
     }
 
-    fn begin_scope(&self) {
-        self.scopes.borrow_mut().push(HashMap::new());
+    fn begin_scope(&mut self) {
+        self.scopes.push(HashMap::new());
     }
 
-    fn end_scope(&self) {
-        self.scopes.borrow_mut().pop();
+    fn end_scope(&mut self) {
+        self.scopes.pop();
     }
 }
 
 impl<'a> VisitStmt<(), ResolverErr> for Resolver<'a> {
-    fn visit_expr_stmt(&self, stmt: &ExprStmt) -> ResolverRes {
+    fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> ResolverRes {
         self.resolve_expr(&stmt.expr)?;
 
         Ok(())
     }
 
-    fn visit_print_stmt(&self, stmt: &PrintStmt) -> ResolverRes {
+    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> ResolverRes {
         self.resolve_expr(&stmt.expr)
     }
 
-    fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt) -> ResolverRes {
+    fn visit_var_decl_stmt(&mut self, stmt: &VarDeclStmt) -> ResolverRes {
         self.declare(stmt.name.clone());
 
         if let Some(v) = &stmt.value {
@@ -143,12 +141,12 @@ impl<'a> VisitStmt<(), ResolverErr> for Resolver<'a> {
         Ok(())
     }
 
-    fn visit_block_stmt(&self, stmt: &BlockStmt) -> ResolverRes {
+    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> ResolverRes {
         self.begin_scope();
         self.resolve(&stmt.stmts)
     }
 
-    fn visit_if_stmt(&self, stmt: &IfStmt) -> ResolverRes {
+    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> ResolverRes {
         self.resolve_expr(&stmt.condition)?;
 
         if let Some(t) = &stmt.then_branch {
@@ -161,24 +159,24 @@ impl<'a> VisitStmt<(), ResolverErr> for Resolver<'a> {
         Ok(())
     }
 
-    fn visit_while_stmt(&self, stmt: &WhileStmt) -> ResolverRes {
+    fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> ResolverRes {
         self.resolve_expr(&stmt.condition)?;
         self.resolve_stmt(&stmt.body)
     }
 
-    fn visit_for_stmt(&self, stmt: &ForStmt) -> ResolverRes {
+    fn visit_for_stmt(&mut self, stmt: &ForStmt) -> ResolverRes {
         self.resolve_stmt(&(&stmt.placeholder).into())?;
         self.resolve_stmt(&stmt.body)
     }
 
-    fn visit_fn_decl_stmt(&self, stmt: &FnDeclStmt) -> ResolverRes {
+    fn visit_fn_decl_stmt(&mut self, stmt: &FnDeclStmt) -> ResolverRes {
         self.declare(stmt.name.clone());
         self.define(stmt.name.clone());
 
         self.resolve_fn(stmt)
     }
 
-    fn visit_return_stmt(&self, stmt: &ReturnStmt) -> ResolverRes {
+    fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> ResolverRes {
         if let Some(v) = &stmt.value {
             self.resolve_expr(v)?;
         }
@@ -188,32 +186,32 @@ impl<'a> VisitStmt<(), ResolverErr> for Resolver<'a> {
 }
 
 impl<'a> VisitExpr<(), ResolverErr> for Resolver<'a> {
-    fn visit_binary_expr(&self, expr: &BinaryExpr) -> ResolverRes {
+    fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> ResolverRes {
         self.resolve_expr(&expr.left)?;
         self.resolve_expr(&expr.right)
     }
 
-    fn visit_grouping_expr(&self, expr: &GroupingExpr) -> ResolverRes {
+    fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> ResolverRes {
         self.resolve_expr(&expr.expr)?;
 
         Ok(())
     }
 
-    fn visit_int_literal_expr(&self, _: &IntLiteralExpr) -> ResolverRes {
+    fn visit_int_literal_expr(&mut self, _: &IntLiteralExpr) -> ResolverRes {
         Ok(())
     }
 
-    fn visit_real_literal_expr(&self, _: &RealLiteralExpr) -> ResolverRes {
+    fn visit_real_literal_expr(&mut self, _: &RealLiteralExpr) -> ResolverRes {
         Ok(())
     }
 
-    fn visit_str_literal_expr(&self, _: &StrLiteralExpr) -> ResolverRes {
+    fn visit_str_literal_expr(&mut self, _: &StrLiteralExpr) -> ResolverRes {
         Ok(())
     }
 
-    fn visit_identifier_expr(&self, expr: &IdentifierExpr) -> ResolverRes {
-        if !self.scopes.borrow().is_empty()
-            && self.scopes.borrow().last().unwrap().get(&expr.name) == Some(&false)
+    fn visit_identifier_expr(&mut self, expr: &IdentifierExpr) -> ResolverRes {
+        if !self.scopes.is_empty()
+            && self.scopes.last().unwrap().get(&expr.name) == Some(&false)
         {
             return Err(PhyResult::new(
                 ResolverErr::LocalVarInOwnInit,
@@ -226,23 +224,23 @@ impl<'a> VisitExpr<(), ResolverErr> for Resolver<'a> {
         Ok(())
     }
 
-    fn visit_unary_expr(&self, expr: &UnaryExpr) -> ResolverRes {
+    fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> ResolverRes {
         self.resolve_expr(&expr.right)
     }
 
-    fn visit_assign_expr(&self, expr: &AssignExpr) -> ResolverRes {
+    fn visit_assign_expr(&mut self, expr: &AssignExpr) -> ResolverRes {
         self.resolve_expr(&expr.into())?;
         self.resolve_local(&expr.into(), &expr.name);
 
         Ok(())
     }
 
-    fn visit_logical_expr(&self, expr: &LogicalExpr) -> ResolverRes {
+    fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> ResolverRes {
         self.resolve_expr(&expr.right)?;
         self.resolve_expr(&expr.left)
     }
 
-    fn visit_call_expr(&self, expr: &CallExpr) -> ResolverRes {
+    fn visit_call_expr(&mut self, expr: &CallExpr) -> ResolverRes {
         self.resolve_expr(&expr.callee)?;
 
         for arg in &expr.args {

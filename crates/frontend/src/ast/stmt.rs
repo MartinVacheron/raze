@@ -89,7 +89,7 @@ pub struct ReturnStmt {
 impl Stmt {
     pub fn accept<T, U: PhyReport>(
         &self,
-        visitor: &dyn VisitStmt<T, U>,
+        visitor: &mut impl VisitStmt<T, U>,
     ) -> Result<T, PhyResult<U>> {
         match self {
             Stmt::Expr(stmt) => visitor.visit_expr_stmt(stmt),
@@ -106,15 +106,15 @@ impl Stmt {
 }
 
 pub trait VisitStmt<T, U: PhyReport> {
-    fn visit_expr_stmt(&self, stmt: &ExprStmt) -> Result<T, PhyResult<U>>;
-    fn visit_print_stmt(&self, stmt: &PrintStmt) -> Result<T, PhyResult<U>>;
-    fn visit_var_decl_stmt(&self, stmt: &VarDeclStmt) -> Result<T, PhyResult<U>>;
-    fn visit_block_stmt(&self, stmt: &BlockStmt) -> Result<T, PhyResult<U>>;
-    fn visit_if_stmt(&self, stmt: &IfStmt) -> Result<T, PhyResult<U>>;
-    fn visit_while_stmt(&self, stmt: &WhileStmt) -> Result<T, PhyResult<U>>;
-    fn visit_for_stmt(&self, stmt: &ForStmt) -> Result<T, PhyResult<U>>;
-    fn visit_fn_decl_stmt(&self, stmt: &FnDeclStmt) -> Result<T, PhyResult<U>>;
-    fn visit_return_stmt(&self, stmt: &ReturnStmt) -> Result<T, PhyResult<U>>;
+    fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> Result<T, PhyResult<U>>;
+    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Result<T, PhyResult<U>>;
+    fn visit_var_decl_stmt(&mut self, stmt: &VarDeclStmt) -> Result<T, PhyResult<U>>;
+    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Result<T, PhyResult<U>>;
+    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Result<T, PhyResult<U>>;
+    fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Result<T, PhyResult<U>>;
+    fn visit_for_stmt(&mut self, stmt: &ForStmt) -> Result<T, PhyResult<U>>;
+    fn visit_fn_decl_stmt(&mut self, stmt: &FnDeclStmt) -> Result<T, PhyResult<U>>;
+    fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Result<T, PhyResult<U>>;
 }
 
 // Into

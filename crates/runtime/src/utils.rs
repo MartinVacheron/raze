@@ -6,6 +6,6 @@ use crate::interpreter::{Interpreter, PhyResInterp};
 
 pub fn lex_parse_interp(code: &str) -> Result<RtVal, PhyResInterp> {
     let nodes = lex_and_parse(code).unwrap();
-    let interp = Interpreter::new();
+    let mut interp = Interpreter::new();
     interp.interpret(&nodes)
 }
