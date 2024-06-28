@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use colored::Colorize;
 use ecow::EcoString;
-use runtime::interpreter::Interpreter;
 use thiserror::Error;
 use tools::results::{PhyReport, PhyResult};
 
@@ -17,8 +16,8 @@ use frontend::ast::{
     },
 };
 
-#[derive(Error, Debug)]
-enum ResolverErr {
+#[derive(Error, Debug, PartialEq)]
+pub enum ResolverErr {
     #[error("local variable initializer is shadoweding global variable")]
     LocalVarInOwnInit,
 }
@@ -29,7 +28,7 @@ impl PhyReport for ResolverErr {
     }
 }
 
-type ResolverRes = Result<(), PhyResult<ResolverErr>>;
+pub type ResolverRes = Result<(), PhyResult<ResolverErr>>;
 
 // Bool is for tracking if the variable is initialized, avoiding weird cases
 // where we initialize the variable with its shadowing global one
@@ -37,17 +36,16 @@ type ResolverRes = Result<(), PhyResult<ResolverErr>>;
 // You can't initialize a variable with a shadowed one, avoiding user errors
 // var a = "outer"
 // { var a = a }
-struct Resolver<'a> {
+#[derive(Default)]
+pub struct Resolver {
     scopes: Vec<HashMap<EcoString, bool>>,
-    interp: &'a mut Interpreter,
+    locals: HashMap<EcoString, usize>,
 }
 
 // If we can’t find it in the stack of local scopes, we assume it must be global
-impl<'a> Resolver<'a> {
-    fn resolve(&mut self, stmts: &Vec<Stmt>) -> ResolverRes {
-        for s in stmts {
-            self.resolve_stmt(s)?
-        }
+impl Resolver {
+    pub fn resolve(&mut self, stmts: &[Stmt]) -> ResolverRes {
+        stmts.iter().try_for_each(|s| self.resolve_stmt(s))?;
 
         Ok(())
     }
@@ -60,11 +58,11 @@ impl<'a> Resolver<'a> {
         expr.accept(self)
     }
 
-    fn resolve_local(&self, expr: &Expr, name: &EcoString) {
-        for scope in self.scopes.iter().rev() {
+    fn resolve_local(&mut self, name: &EcoString) {
+        for (idx, scope) in self.scopes.iter().rev().enumerate() {
             match scope.get(name) {
                 Some(v) => match v {
-                    true => todo!(),
+                    true => { let _ = self.locals.insert(name.clone(), idx); },
                     false => continue,
                 },
                 None => continue,
@@ -118,7 +116,7 @@ impl<'a> Resolver<'a> {
     }
 }
 
-impl<'a> VisitStmt<(), ResolverErr> for Resolver<'a> {
+impl VisitStmt<(), ResolverErr> for Resolver {
     fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> ResolverRes {
         self.resolve_expr(&stmt.expr)?;
 
@@ -143,7 +141,10 @@ impl<'a> VisitStmt<(), ResolverErr> for Resolver<'a> {
 
     fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> ResolverRes {
         self.begin_scope();
-        self.resolve(&stmt.stmts)
+        self.resolve(&stmt.stmts)?;
+        self.end_scope();
+
+        Ok(())
     }
 
     fn visit_if_stmt(&mut self, stmt: &IfStmt) -> ResolverRes {
@@ -185,7 +186,7 @@ impl<'a> VisitStmt<(), ResolverErr> for Resolver<'a> {
     }
 }
 
-impl<'a> VisitExpr<(), ResolverErr> for Resolver<'a> {
+impl VisitExpr<(), ResolverErr> for Resolver {
     fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> ResolverRes {
         self.resolve_expr(&expr.left)?;
         self.resolve_expr(&expr.right)
@@ -219,7 +220,7 @@ impl<'a> VisitExpr<(), ResolverErr> for Resolver<'a> {
             ));
         }
 
-        self.resolve_local(&expr.into(), &expr.name);
+        self.resolve_local(&expr.name);
 
         Ok(())
     }
@@ -230,7 +231,7 @@ impl<'a> VisitExpr<(), ResolverErr> for Resolver<'a> {
 
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> ResolverRes {
         self.resolve_expr(&expr.into())?;
-        self.resolve_local(&expr.into(), &expr.name);
+        self.resolve_local(&expr.name);
 
         Ok(())
     }
@@ -251,3 +252,39 @@ impl<'a> VisitExpr<(), ResolverErr> for Resolver<'a> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use crate::{resolver::ResolverErr, utils::lex_parse_resolve};
+
+    #[test]
+    fn depth() {
+        let code = "
+var a
+{
+    var b = a
+    var c
+    {
+        var d = c + a
+        {
+            var e
+            e = e + d + b + a
+        }
+    }
+}
+";
+        let resolver = lex_parse_resolve(code);
+    }
+
+    #[test]
+    fn local_var_in_its_init() {
+        let code = "
+var a
+{
+    var a = a
+}
+";
+        let resolver = lex_parse_resolve(code);
+        let err = resolver.err().unwrap().err;
+        assert_eq!(err, ResolverErr::LocalVarInOwnInit);
+    }
+}
