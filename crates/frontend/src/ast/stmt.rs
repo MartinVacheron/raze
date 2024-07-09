@@ -5,7 +5,7 @@ use ecow::EcoString;
 use super::expr::Expr;
 use tools::results::{Loc, PhyReport, PhyResult};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Stmt {
     Expr(ExprStmt),
     Print(PrintStmt),
@@ -18,32 +18,32 @@ pub enum Stmt {
     Return(ReturnStmt),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ExprStmt {
     pub expr: Expr,
     pub loc: Loc,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct PrintStmt {
     pub expr: Expr,
     pub loc: Loc,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct BlockStmt {
     pub stmts: Vec<Stmt>,
     pub loc: Loc,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct VarDeclStmt {
     pub name: EcoString,
     pub value: Option<Expr>,
     pub loc: Loc,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct IfStmt {
     pub condition: Expr,
     pub then_branch: Option<Box<Stmt>>,
@@ -51,14 +51,14 @@ pub struct IfStmt {
     pub loc: Loc,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct WhileStmt {
     pub condition: Expr,
     pub body: Box<Stmt>,
     pub loc: Loc,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ForStmt {
     pub placeholder: VarDeclStmt,
     pub range: ForRange,
@@ -66,13 +66,13 @@ pub struct ForStmt {
     pub loc: Loc,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ForRange {
     pub start: i64,
     pub end: Option<i64>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct FnDeclStmt {
     pub name: EcoString,
     pub params: Rc<Vec<EcoString>>,
@@ -80,7 +80,7 @@ pub struct FnDeclStmt {
     pub loc: Loc,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ReturnStmt {
     pub value: Option<Expr>,
     pub loc: Loc,

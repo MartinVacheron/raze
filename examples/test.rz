@@ -1,22 +1,15 @@
-fn makeCounter() {
-    var i = 0
+var a = 1
+{
+    var b = 2
+    {
+        var c = 3
+        {
+            var d = b
+            print d
+            b = 99
+            var c = 6
+        }
 
-    fn count() {
-        print i
-        i = i + 1
+        print  b
     }
-
-    return count
-}
-
-var count = makeCounter()
-count()
-count()
-
-var a = 0
-
-while a < 4 {
-    print "oui"
-    print "oui2"
-    a = a + 1
 }

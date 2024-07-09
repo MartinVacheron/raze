@@ -1,10 +1,9 @@
 use frontend::parser::utils::lex_and_parse;
-use tools::results::PhyResult;
 
-use crate::resolver::{Resolver, ResolverErr};
+use crate::resolver::{PhyResResolv, Resolver};
 
 
-pub fn lex_parse_resolve(code: &str) -> Result<Resolver, PhyResult<ResolverErr>> {
+pub fn lex_parse_resolve(code: &str) -> Result<Resolver, Vec<PhyResResolv>> {
     let nodes = lex_and_parse(code).unwrap();
     let mut resolver = Resolver::default();
     match resolver.resolve(&nodes) {

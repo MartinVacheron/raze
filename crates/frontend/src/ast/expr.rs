@@ -1,7 +1,10 @@
 use std::fmt::Display;
 
+use sha2::{Digest, Sha256};
 use ecow::EcoString;
-use tools::results::{Loc, PhyReport, PhyResult};
+
+use tools::{ToUuid, results::{Loc, PhyReport, PhyResult}};
+
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
@@ -83,11 +86,27 @@ pub struct StrLiteralExpr {
     pub loc: Loc,
 }
 
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct IdentifierExpr {
     pub name: EcoString,
     pub loc: Loc,
 }
+
+impl ToUuid for IdentifierExpr {
+    fn to_uuid(&self) -> String {
+        let mut hasher = Sha256::new();
+
+        hasher.update(self.name.as_bytes());
+        hasher.update(self.loc.start.to_be_bytes());
+        hasher.update(self.loc.end.to_be_bytes());
+
+        let res = hasher.finalize();
+
+        format!("{:x}", res)
+    }
+}
+
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct UnaryExpr {
@@ -96,12 +115,28 @@ pub struct UnaryExpr {
     pub loc: Loc,
 }
 
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct AssignExpr {
     pub name: EcoString,
     pub value: Box<Expr>,
     pub loc: Loc,
 }
+
+impl ToUuid for AssignExpr {
+    fn to_uuid(&self) -> String {
+        let mut hasher = Sha256::new();
+
+        hasher.update(self.name.as_bytes());
+        hasher.update(self.loc.start.to_be_bytes());
+        hasher.update(self.loc.end.to_be_bytes());
+
+        let res = hasher.finalize();
+
+        format!("{:x}", res)
+    }
+}
+
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct LogicalExpr {
@@ -156,16 +191,6 @@ impl From<&IdentifierExpr> for Expr {
     fn from(value: &IdentifierExpr) -> Self {
         Self::Identifier(IdentifierExpr {
             name: value.name.clone(),
-            loc: value.loc.clone(),
-        })
-    }
-}
-
-impl From<&AssignExpr> for Expr {
-    fn from(value: &AssignExpr) -> Self {
-        Self::Assign(AssignExpr {
-            name: value.name.clone(),
-            value: value.value.clone(),
             loc: value.loc.clone(),
         })
     }

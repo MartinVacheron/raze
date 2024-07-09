@@ -5,14 +5,18 @@ use std::rc::Rc;
 use colored::Colorize;
 use ecow::EcoString;
 use thiserror::Error;
-use tools::results::{PhyReport, PhyResult};
+use tools::{
+    results::{PhyReport, PhyResult},
+    ToUuid,
+};
 
 use crate::callable::Callable;
 use crate::environment::Env;
 use crate::native_functions::{NativeClock, PhyNativeFn};
 use crate::values::RtVal;
 use frontend::ast::expr::{
-    AssignExpr, BinaryExpr, CallExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
+    AssignExpr, BinaryExpr, CallExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr,
+    RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr,
 };
 use frontend::ast::stmt::{
     BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt,
@@ -91,11 +95,9 @@ pub(crate) type InterpRes = Result<RtVal, PhyResInterp>;
 //  Interpreting
 // --------------
 pub struct Interpreter {
-    // In RefCell because visitor methods only borrow (&) so we must be
-    // able to mutate thanks to RefCell and it can be multiple owners
     pub globals: Rc<RefCell<Env>>,
     pub env: Rc<RefCell<Env>>,
-    pub locals: HashMap<Rc<Expr>, usize>,
+    pub locals: HashMap<String, usize>,
 }
 
 impl Interpreter {
@@ -112,12 +114,18 @@ impl Interpreter {
 
         let env = globals.clone();
 
-        Self { globals, env, locals: HashMap::new() }
+        Self {
+            globals,
+            env,
+            locals: HashMap::new(),
+        }
     }
 }
 
 impl Interpreter {
-    pub fn interpret(&mut self, nodes: &Vec<Stmt>) -> InterpRes {
+    pub fn interpret(&mut self, nodes: &Vec<Stmt>, locals: HashMap<String, usize>) -> InterpRes {
+        self.locals = locals;
+
         let mut res: RtVal = RtVal::new_null();
 
         for node in nodes {
@@ -349,13 +357,18 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
             "true" => Ok(true.into()),
             "false" => Ok(false.into()),
             "null" => Ok(RtVal::new_null()),
-            _ => self
-                .env
-                .borrow()
-                .get_var(expr.name.clone())
-                .map_err(|e| {
+            _ => match self.locals.get(&expr.to_uuid()) {
+                Some(i) => self
+                    .env
+                    .borrow()
+                    .get_var_at(expr.name.clone(), i)
+                    .map_err(|e| {
+                        PhyResult::new(InterpErr::GetVarEnv(e.to_string()), Some(expr.loc.clone()))
+                    }),
+                None => self.env.borrow().get_var(expr.name.clone()).map_err(|e| {
                     PhyResult::new(InterpErr::GetVarEnv(e.to_string()), Some(expr.loc.clone()))
                 }),
+            },
         }
     }
 

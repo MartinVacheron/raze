@@ -65,6 +65,13 @@ impl Env {
         }
     }
 
+    pub fn get_var_at(&self, var_name: EcoString, depth: &usize) -> Result<RtVal, EnvErr> {
+        match depth {
+            0 => self.get_var(var_name),
+            _ => self.get_var_at(var_name, &(depth - 1))
+        }
+    }
+
     pub fn assign(&mut self, var_name: EcoString, value: RtVal) -> Result<(), EnvErr> {
         if let Occupied(mut v) = self.vars.entry(var_name.clone()) {
             v.insert(value);
@@ -73,6 +80,13 @@ impl Env {
             enclo.borrow_mut().assign(var_name, value)
         } else {
             Err(EnvErr::UndeclaredVar(var_name.into()))
+        }
+    }
+
+    pub fn assign_at(&mut self, var_name: EcoString, value: RtVal, depth: &usize) -> Result<(), EnvErr> {
+        match depth {
+            0 => self.assign(var_name, value),
+            _ => self.assign_at(var_name, value, &(depth - 1))
         }
     }
 }

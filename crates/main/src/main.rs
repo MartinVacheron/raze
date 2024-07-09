@@ -10,6 +10,7 @@ use colored::*;
 use frontend::{
     ast::ast_pretty_print::AstPrinter, lexer::Lexer, parser::Parser,
 };
+use resolver::Resolver;
 use runtime::{interpreter::Interpreter, values::RtVal};
 
 // --------
@@ -73,7 +74,7 @@ impl Repl {
         let mut stdout = io::stdout();
         let mut input = String::new();
 
-        println!("\n  {}", "Phy language interpreter v0.0".yellow());
+        println!("\n  {}", "Rev language interpreter v0.0".yellow());
 
         loop {
             input.clear();
@@ -106,7 +107,7 @@ impl Repl {
                 e.iter()
                     .for_each(|e| e.report(&"placeholder.rz".into(), &code));
 
-                return;
+                return
             }
         };
 
@@ -119,7 +120,8 @@ impl Repl {
             Err(e) => {
                 e.iter()
                     .for_each(|e| e.report(&"placeholder.rz".into(), &code));
-                return;
+                
+                return
             }
         };
 
@@ -129,7 +131,19 @@ impl Repl {
             }
         }
 
-        match self.interpreter.interpret(&nodes) {
+        let mut resolver = Resolver::default();
+
+        let locals = match resolver.resolve(&nodes) {
+            Ok(l) => l,
+            Err(e) => {
+                e.iter()
+                    .for_each(|e| e.report(&"placeholder.rz".into(), &code));
+
+                return
+            }
+        };
+
+        match self.interpreter.interpret(&nodes, locals) {
             Ok(res) => {
                 if res != RtVal::Null {
                     println!("{}", res);

@@ -9,3 +9,4 @@ tools = { path = "../tools" }
 thiserror = { workspace = true }
 colored = { workspace = true }
 ecow = { workspace = true }
+sha2 = { workspace = true }
