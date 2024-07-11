@@ -1,11 +1,12 @@
 program        → declaration* EOF ;
 
-declaration    → varDecl
+declaration    → structDecl
+               | varDecl
                | funcDecl
                | statement ;
 
+structDecl     → "struct" IDENTIFIER "{" funcDecl* "}" ;
 varDecl        → "var" IDENTIFIER ( "=" expression )? ;
-
 funcDecl       → "fn" function ;
 function       → IDENTIFIER "(" paramters? ")" block ;
 parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
@@ -39,7 +40,7 @@ factor         → unary ( ( "/" | "*" ) unary )* ;
 unary          → ( "!" | "-" ) unary
                | call ;
 
-call           → primary ( "(" arguments? ")" ) ;
+call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
 arguments      → expression ( "," expression )* ;
 
 primary        → "true" | "false" | "null"

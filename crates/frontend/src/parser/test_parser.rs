@@ -2,11 +2,10 @@ use ecow::EcoString;
 
 use crate::ast::{
     expr::{
-        AssignExpr, BinaryExpr, CallExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr,
-        LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr,
+        AssignExpr, BinaryExpr, CallExpr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
     },
     stmt::{
-        BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt
+        BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StructStmt, VarDeclStmt, VisitStmt, WhileStmt
     },
 };
 
@@ -210,6 +209,10 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         };
 
         Ok(StmtInfos { return_stmt: vec![value], ..Default::default() })
+    }
+    
+    fn visit_struct_stmt(&mut self, _stmt: &StructStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+        todo!()
     }
 }
 
@@ -510,5 +513,9 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         });
 
         Ok(infos)
+    }
+    
+    fn visit_get_expr(&mut self, expr: &GetExpr) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
+        todo!()
     }
 }

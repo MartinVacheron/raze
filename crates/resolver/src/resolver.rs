@@ -7,12 +7,10 @@ use tools::{results::{Loc, PhyReport, PhyResult}, ToUuid};
 
 use frontend::ast::{
     expr::{
-        AssignExpr, BinaryExpr, CallExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr,
-        LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr,
+        AssignExpr, BinaryExpr, CallExpr, Expr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
     },
     stmt::{
-        BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt,
-        VisitStmt, WhileStmt,
+        BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StructStmt, VarDeclStmt, VisitStmt, WhileStmt
     },
 };
 
@@ -237,6 +235,13 @@ impl VisitStmt<(), ResolverErr> for Resolver {
 
         Ok(())
     }
+
+    fn visit_struct_stmt(&mut self, stmt: &StructStmt) -> ResolverRes {
+        self.declare(stmt.name.clone(), &stmt.loc)?;
+        self.define(stmt.name.clone());
+
+        Ok(())
+    }
 }
 
 impl VisitExpr<(), ResolverErr> for Resolver {
@@ -300,6 +305,12 @@ impl VisitExpr<(), ResolverErr> for Resolver {
         for arg in &expr.args {
             self.resolve_expr(arg)?;
         }
+
+        Ok(())
+    }
+    
+    fn visit_get_expr(&mut self, expr: &GetExpr) -> Result<(), PhyResult<ResolverErr>> {
+        self.resolve_expr(&expr.object)?;
 
         Ok(())
     }

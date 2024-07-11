@@ -76,6 +76,10 @@ impl VisitStmt<String, AstPrinterErr> for AstPrinter {
     fn visit_return_stmt(&mut self, _stmt: &ReturnStmt) -> Result<String, PhyResult<AstPrinterErr>> {
         todo!()
     }
+    
+    fn visit_struct_stmt(&mut self, _stmt: &super::stmt::StructStmt) -> Result<String, PhyResult<AstPrinterErr>> {
+        todo!()
+    }
 }
 
 impl VisitExpr<String, AstPrinterErr> for AstPrinter {
@@ -117,6 +121,10 @@ impl VisitExpr<String, AstPrinterErr> for AstPrinter {
     }
 
     fn visit_call_expr(&mut self, _expr: &CallExpr) -> Result<String, PhyResult<AstPrinterErr>> {
+        todo!()
+    }
+    
+    fn visit_get_expr(&mut self, expr: &super::expr::GetExpr) -> Result<String, PhyResult<AstPrinterErr>> {
         todo!()
     }
 }

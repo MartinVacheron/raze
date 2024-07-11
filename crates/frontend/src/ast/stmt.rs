@@ -16,6 +16,7 @@ pub enum Stmt {
     For(ForStmt),
     FnDecl(FnDeclStmt),
     Return(ReturnStmt),
+    Struct(StructStmt),
 }
 
 #[derive(Debug, PartialEq)]
@@ -86,6 +87,13 @@ pub struct ReturnStmt {
     pub loc: Loc,
 }
 
+#[derive(Debug, PartialEq)]
+pub struct StructStmt {
+    pub name: EcoString,
+    pub methods: Vec<FnDeclStmt>,
+    pub loc: Loc,
+}
+
 impl Stmt {
     pub fn accept<T, U: PhyReport>(
         &self,
@@ -101,6 +109,7 @@ impl Stmt {
             Stmt::For(stmt) => visitor.visit_for_stmt(stmt),
             Stmt::FnDecl(stmt) => visitor.visit_fn_decl_stmt(stmt),
             Stmt::Return(stmt) => visitor.visit_return_stmt(stmt),
+            Stmt::Struct(stmt) => visitor.visit_struct_stmt(stmt),
         }
     }
 }
@@ -115,6 +124,7 @@ pub trait VisitStmt<T, U: PhyReport> {
     fn visit_for_stmt(&mut self, stmt: &ForStmt) -> Result<T, PhyResult<U>>;
     fn visit_fn_decl_stmt(&mut self, stmt: &FnDeclStmt) -> Result<T, PhyResult<U>>;
     fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Result<T, PhyResult<U>>;
+    fn visit_struct_stmt(&mut self, stmt: &StructStmt) -> Result<T, PhyResult<U>>;
 }
 
 // Into

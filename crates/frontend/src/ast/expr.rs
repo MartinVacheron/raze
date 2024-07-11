@@ -18,6 +18,7 @@ pub enum Expr {
     Assign(AssignExpr),
     Logical(LogicalExpr),
     Call(CallExpr),
+    Get(GetExpr),
 }
 
 impl Display for Expr {
@@ -33,6 +34,7 @@ impl Display for Expr {
             Expr::Assign(e) => write!(f, "{} {}", e.name, e.value),
             Expr::Logical(e) => write!(f, "{} {} {}", e.left, e.operator, e.right),
             Expr::Call(e) => write!(f, "{}: {:?}", e.callee, e.args),
+            Expr::Get(e) => write!(f, "{}: {:?}", e.object, e.name),
         }
     }
 }
@@ -50,6 +52,7 @@ impl Expr {
             Self::Assign(a) => a.loc.clone(),
             Self::Logical(l) => l.loc.clone(),
             Self::Call(c) => c.loc.clone(),
+            Self::Get(g) => g.loc.clone(),
         }
     }
 }
@@ -153,6 +156,13 @@ pub struct CallExpr {
     pub loc: Loc,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct GetExpr {
+    pub object: Box<Expr>,
+    pub name: EcoString,
+    pub loc: Loc,
+}
+
 impl Expr {
     pub fn accept<T, U: PhyReport>(
         &self,
@@ -169,6 +179,7 @@ impl Expr {
             Expr::Assign(e) => visitor.visit_assign_expr(e),
             Expr::Logical(l) => visitor.visit_logical_expr(l),
             Expr::Call(c) => visitor.visit_call_expr(c),
+            Expr::Get(g) => visitor.visit_get_expr(g),
         }
     }
 }
@@ -184,6 +195,7 @@ pub trait VisitExpr<T, U: PhyReport> {
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Result<T, PhyResult<U>>;
     fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> Result<T, PhyResult<U>>;
     fn visit_call_expr(&mut self, expr: &CallExpr) -> Result<T, PhyResult<U>>;
+    fn visit_get_expr(&mut self, expr: &GetExpr) -> Result<T, PhyResult<U>>;
 }
 
 // Into

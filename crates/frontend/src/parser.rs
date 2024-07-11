@@ -5,11 +5,11 @@ use ecow::EcoString;
 use thiserror::Error;
 
 use crate::ast::expr::{
-    AssignExpr, BinaryExpr, CallExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr
+    AssignExpr, BinaryExpr, CallExpr, Expr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr
 };
 use crate::lexer::{Token, TokenKind};
 use crate::ast::stmt::{
-    BlockStmt, ExprStmt, FnDeclStmt, ForRange, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt, WhileStmt
+    BlockStmt, ExprStmt, FnDeclStmt, ForRange, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StructStmt, VarDeclStmt, WhileStmt
 };
 use tools::results::{PhyReport, PhyResult, Loc};
 
@@ -152,6 +152,20 @@ pub enum ParserErr {
     #[error("missing '{{' before function body")]
     MissingFnOpenBrace,
 
+    // Structure declaration
+    #[error("missing structure name after 'struct' keyword")]
+    MissingStructName,
+
+    #[error("missing '{{' before structure body")]
+    MissingStructOpenBrace,
+
+    #[error("missing '}}' after structure body")]
+    MissingStructCloseBrace,
+
+    // Property
+    #[error("missing property name after '.'")]
+    MissingPropName,
+
     // Others
     #[error("unexpected end of file")]
     UnexpectedEof,
@@ -172,6 +186,7 @@ pub(crate) type ParserExprRes = Result<Expr, PhyResParser>;
 
 enum FnKind {
     Fn,
+    Method,
 }
 
 // ---------
@@ -276,6 +291,7 @@ impl<'a> Parser<'a> {
             TokenKind::For => self.parse_for_stmt(),
             TokenKind::Fn => self.parse_fn_decl_stmt(FnKind::Fn),
             TokenKind::Return => self.parse_return_stmt(),
+            TokenKind::Struct => self.parse_struct_stmt(),
             _ => self.parse_expr_stmt(),
         };
 
@@ -459,6 +475,10 @@ impl<'a> Parser<'a> {
     fn parse_fn_decl_stmt(&mut self, kind: FnKind) -> ParserStmtRes {
         self.eat()?;
 
+        Ok(Stmt::FnDecl(self.parse_fn_decl(kind)?))
+    }
+
+    fn parse_fn_decl(&mut self, kind: FnKind) -> Result<FnDeclStmt, PhyResParser> {
         let name = self.expect(TokenKind::Identifier)
             .map_err(|_| self.trigger_error(ParserErr::MissingFnName, true))?
             .value;
@@ -507,16 +527,16 @@ impl<'a> Parser<'a> {
 
         let body = Rc::new(self.parse_block()?);
 
-        Ok(Stmt::FnDecl(FnDeclStmt {
+        Ok(FnDeclStmt {
             name,
             params: Rc::new(params),
             body,
             loc: self.get_loc(),
-        }))
+        })
     }
 
     fn parse_return_stmt(&mut self) -> ParserStmtRes {
-        let _ = self.eat();
+        self.eat()?;
 
         let mut value = None;
         if !self.is_at(TokenKind::NewLine) {
@@ -524,6 +544,37 @@ impl<'a> Parser<'a> {
         }
         
         Ok(Stmt::Return(ReturnStmt { value, loc: self.get_loc() }))
+    }
+
+    fn parse_struct_stmt(&mut self) -> ParserStmtRes {
+        self.eat()?;
+
+        let name = self.expect(TokenKind::Identifier)
+            .map_err(|_| self.trigger_error(ParserErr::MissingStructName, true))?
+            .value;
+
+        self.expect(TokenKind::OpenBrace)
+            .map_err(|_| self.trigger_error(ParserErr::MissingStructOpenBrace, true))?;
+
+        // FIXME: Bancale le check sur le keyword...
+        let mut methods: Vec<FnDeclStmt> = vec![];
+        while !self.is_at(TokenKind::CloseBrace) && !self.eof() {
+            self.skip_new_lines();
+            
+            if self.is_at(TokenKind::Fn) {
+                self.eat()?;
+            }
+            methods.push(self.parse_fn_decl(FnKind::Method)?);
+        }
+
+        self.expect(TokenKind::CloseBrace)
+            .map_err(|_| self.trigger_error(ParserErr::MissingStructCloseBrace, true))?;
+
+        Ok(Stmt::Struct(StructStmt {
+            name,
+            methods,
+            loc: self.get_loc(),
+        }))
     }
 
     fn parse_expr_stmt(&mut self) -> ParserStmtRes {
@@ -706,13 +757,26 @@ impl<'a> Parser<'a> {
         let mut expr = self.parse_primary()?;
 
         loop {
-            if self.is_at(TokenKind::OpenParen) {
-                self.eat()?;
-                self.skip_new_lines();
+            match self.at().kind {
+                TokenKind::OpenParen => {
+                    self.eat()?;
+                    self.skip_new_lines();
 
-                expr = self.finish_call(expr)?;
-            } else {
-                break
+                    expr = self.finish_call(expr)?;
+                }
+                TokenKind::Dot => {
+                    self.eat()?;
+                    let prop_name = self.expect(TokenKind::Identifier)
+                        .map_err(|_| self.trigger_error(ParserErr::MissingPropName, true))?
+                        .value;
+
+                    expr = Expr::Get(GetExpr {
+                        object: Box::new(expr),
+                        name: prop_name,
+                        loc: self.get_loc(),
+                    })
+                }
+                _ => break
             }
         }
 

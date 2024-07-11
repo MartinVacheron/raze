@@ -1,12 +1,12 @@
 use colored::*;
 use ecow::EcoString;
 use frontend::ast::stmt::{FnDeclStmt, Stmt};
-use std::{cell::RefCell, fmt::Display, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
 use thiserror::Error;
 use tools::results::{PhyReport, PhyResult};
 
 use crate::{
-    callable::Callable,
+    callable::{Callable, CallErr},
     environment::Env,
     interpreter::{InterpErr, Interpreter},
     native_functions::PhyNativeFn,
@@ -32,11 +32,8 @@ pub enum RtValErr {
     StringManip(String),
 
     // Function
-    #[error("function parameter declaration")]
-    WrongFnParamDecl,
+    
 
-    #[error("{0}")]
-    FnExecution(String),
 
     // Others
     #[error("can't use a null value in a binary operation")]
@@ -61,8 +58,10 @@ pub enum RtVal {
     RealVal(Rc<RefCell<Real>>),
     StrVal(Rc<RefCell<Str>>),
     BoolVal(Rc<RefCell<Bool>>),
-    FuncVal(Rc<Function>),
-    NativeFnVal(Rc<PhyNativeFn>),
+    FuncVal(Function),
+    NativeFnVal(PhyNativeFn),
+    StructVal(Rc<RefCell<Struct>>),
+    InstanceVal(Rc<RefCell<Instance>>),
     Null,
 }
 
@@ -281,7 +280,7 @@ impl Operate<Bool> for Bool {
 // ------------
 //   Function
 // ------------
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Function {
     pub name: EcoString,
     pub params: Rc<Vec<EcoString>>,
@@ -291,12 +290,12 @@ pub struct Function {
 
 impl RtVal {
     pub fn new_fn(value: &FnDeclStmt, closure: Rc<RefCell<Env>>) -> Self {
-        RtVal::FuncVal(Rc::new(Function {
+        RtVal::FuncVal(Function {
             name: value.name.clone(),
             params: value.params.clone(),
             body: value.body.clone(),
             closure: closure.clone(),
-        }))
+        })
     }
 }
 
@@ -306,18 +305,18 @@ impl PartialEq for Function {
     }
 }
 
-impl Callable<RtValErr> for Function {
+impl Callable for Function {
     fn call(
         &self,
         interpreter: &mut Interpreter,
         args: Vec<RtVal>,
-    ) -> Result<RtVal, PhyResult<RtValErr>> {
+    ) -> Result<RtVal, PhyResult<CallErr>> {
         let mut new_env = Env::new(Some(self.closure.clone()));
 
         for (p, v) in self.params.iter().zip(args) {
             new_env
                 .declare_var(p.clone(), v)
-                .map_err(|_| PhyResult::new(RtValErr::WrongFnParamDecl, None))?;
+                .map_err(|_| PhyResult::new(CallErr::WrongFnParamDecl, None))?;
         }
 
         match interpreter.execute_block_stmt(&self.body, new_env) {
@@ -325,7 +324,7 @@ impl Callable<RtValErr> for Function {
             Err(e) => match e.err {
                 InterpErr::Return(v) => Ok(v),
                 _ => Err(PhyResult::new(
-                    RtValErr::FnExecution(e.err.to_string()),
+                    CallErr::FnExecution(e.err.to_string()),
                     None,
                 )),
             },
@@ -336,6 +335,44 @@ impl Callable<RtValErr> for Function {
         self.params.len()
     }
 }
+
+
+// -------------
+//   Structure
+// -------------
+#[derive(Debug, PartialEq)]
+pub struct Struct {
+    pub name: EcoString,
+}
+
+impl Callable for Rc<RefCell<Struct>> {
+    fn arity(&self) -> usize {
+        0
+    }
+
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        args: Vec<RtVal>,
+    ) -> Result<RtVal, PhyResult<CallErr>>
+    {
+        Ok(RtVal::InstanceVal(Rc::new(RefCell::new(Instance {
+            strukt: self.clone(),
+            fields: HashMap::new(),
+        }))))
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Instance {
+    pub strukt: Rc<RefCell<Struct>>,
+    pub fields: HashMap<EcoString, RtVal>,
+}
+
+// impl Instance {
+//     pub fn new(strukt: )
+// }
+
 
 // --------
 //   Into
@@ -386,6 +423,8 @@ impl Display for RtVal {
             RtVal::StrVal(s) => write!(f, "\"{}\"", s.borrow().value),
             RtVal::FuncVal(func) => write!(f, "<fn {}>", func.name),
             RtVal::NativeFnVal(func) => write!(f, "{}", func),
+            RtVal::StructVal(s) => write!(f, "<struct {}>", s.borrow().name),
+            RtVal::InstanceVal(i) => write!(f, "<{} instance>", i.borrow().strukt.borrow().name),
             RtVal::Null => write!(f, "null"),
         }
     }

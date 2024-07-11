@@ -1,23 +1,26 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use colored::Colorize;
 use ecow::EcoString;
+use frontend::ast::expr::GetExpr;
 use thiserror::Error;
 use tools::{
     results::{PhyReport, PhyResult},
     ToUuid,
 };
 
-use crate::callable::Callable;
+use crate::{callable::Callable, values::Struct};
 use crate::environment::Env;
-use crate::native_functions::{NativeClock, PhyNativeFn};
+use crate::native_functions::PhyNativeFn;
 use crate::values::RtVal;
-use frontend::ast::expr::{
+use crate::native_functions::NativeFnErr;
+use frontend::ast::{expr::{
     AssignExpr, BinaryExpr, CallExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr,
     RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr,
-};
+}, stmt::StructStmt};
 use frontend::ast::stmt::{
     BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt,
     VisitStmt, WhileStmt,
@@ -77,6 +80,13 @@ pub enum InterpErr {
     #[error("{0}")]
     FnCall(String),
 
+    // Property access
+    #[error("only structure instances have properties")]
+    NonInstPropAccess,
+
+    #[error("structure has no field '{0}'")]
+    InexistantField(EcoString),
+
     // Results
     #[error("return: {0}")]
     Return(RtVal),
@@ -104,12 +114,19 @@ impl Interpreter {
     pub fn new() -> Self {
         let globals = Rc::new(RefCell::new(Env::new(None)));
 
+
         let _ = globals.borrow_mut().declare_var(
             EcoString::from("clock"),
-            RtVal::NativeFnVal(Rc::new(PhyNativeFn {
+            RtVal::NativeFnVal(PhyNativeFn {
                 name: EcoString::from("clock"),
-                func: Rc::new(NativeClock),
-            })),
+                arity: 0,
+                func: |_, _| {
+                    match SystemTime::now().duration_since(UNIX_EPOCH) {
+                        Ok(t) => Ok((t.as_millis() as f64 / 1000.).into()),
+                        Err(_) => Err(PhyResult::new(NativeFnErr::GetTime.into(), None))
+                    }
+                },
+            }),
         );
 
         let env = globals.clone();
@@ -274,6 +291,34 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
         }
 
         Err(PhyResult::new(InterpErr::Return(value), None))
+    }
+    
+    fn visit_struct_stmt(&mut self, stmt: &StructStmt) -> Result<RtVal, PhyResult<InterpErr>> {
+        // Two steps: declaring and assigning. Allow the struct to reference itself
+        // in its methods
+        self.env
+            .borrow_mut()
+            .declare_var(stmt.name.clone(), RtVal::new_null())
+            .map_err(|_| {
+                PhyResult::new(
+                    InterpErr::VarDeclEnv(stmt.name.to_string()),
+                    Some(stmt.loc.clone()),
+                )
+            })?;
+        
+        let struct_val = RtVal::StructVal(Rc::new(RefCell::new(Struct { name: stmt.name.clone() })));
+
+        self.env
+            .borrow_mut()
+            .assign(stmt.name.clone(), struct_val)
+            .map_err(|_| {
+                PhyResult::new(
+                    InterpErr::VarDeclEnv(stmt.name.to_string()),
+                    Some(stmt.loc.clone()),
+                )
+            })?;
+
+        Ok(RtVal::new_null())
     }
 }
 
@@ -443,19 +488,35 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
             args.push(a.accept(self)?);
         }
 
-        if let RtVal::FuncVal(f) = callee {
-            if f.arity() != args.len() {
-                return Err(PhyResult::new(
-                    InterpErr::WrongArgsNb(f.arity(), args.len()),
-                    Some(expr.loc.clone()),
-                ));
-            }
+        let callable: Box<dyn Callable> = match callee {
+            RtVal::FuncVal(f) => Box::new(f),
+            RtVal::NativeFnVal(f) => Box::new(f),
+            RtVal::StructVal(s) => Box::new(s),
+            _ => return Err(PhyResult::new(InterpErr::NonFnCall, Some(expr.loc.clone())))
+        };
 
-            f.call(self, args).map_err(|e| {
-                PhyResult::new(InterpErr::FnCall(e.err.to_string()), Some(expr.loc.clone()))
-            })
+        if callable.arity() != args.len() {
+            return Err(PhyResult::new(
+                InterpErr::WrongArgsNb(callable.arity(), args.len()),
+                Some(expr.loc.clone()),
+            ));
+        }
+
+        callable.call(self, args).map_err(|e| {
+            PhyResult::new(InterpErr::FnCall(e.err.to_string()), Some(expr.loc.clone()))
+        })
+    }
+    
+    fn visit_get_expr(&mut self, expr: &GetExpr) -> Result<RtVal, PhyResult<InterpErr>> {
+        let obj = expr.object.accept(self)?;
+
+        if let RtVal::InstanceVal(inst) = obj {
+            match inst.borrow().fields.get(&expr.name) {
+                Some(v) => Ok(v.clone()),
+                None => Err(PhyResult::new(InterpErr::InexistantField(expr.name.clone()), Some(expr.loc.clone())))
+            }
         } else {
-            Err(PhyResult::new(InterpErr::NonFnCall, Some(expr.loc.clone())))
+            Err(PhyResult::new(InterpErr::NonInstPropAccess, Some(expr.loc.clone())))
         }
     }
 }
