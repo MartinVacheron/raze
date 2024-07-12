@@ -7,7 +7,7 @@ use tools::{results::{Loc, PhyReport, PhyResult}, ToUuid};
 
 use frontend::ast::{
     expr::{
-        AssignExpr, BinaryExpr, CallExpr, Expr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
+        AssignExpr, BinaryExpr, CallExpr, Expr, GetExpr, SetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
     },
     stmt::{
         BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StructStmt, VarDeclStmt, VisitStmt, WhileStmt
@@ -42,6 +42,7 @@ enum FnType {
     #[default]
     None,
     Function,
+    Method,
 }
 
 
@@ -240,6 +241,9 @@ impl VisitStmt<(), ResolverErr> for Resolver {
         self.declare(stmt.name.clone(), &stmt.loc)?;
         self.define(stmt.name.clone());
 
+        stmt.methods.iter().try_for_each(|m| self.resolve_fn(m, FnType::Method))?;
+
+
         Ok(())
     }
 }
@@ -311,6 +315,13 @@ impl VisitExpr<(), ResolverErr> for Resolver {
     
     fn visit_get_expr(&mut self, expr: &GetExpr) -> Result<(), PhyResult<ResolverErr>> {
         self.resolve_expr(&expr.object)?;
+
+        Ok(())
+    }
+    
+    fn visit_set_expr(&mut self, expr: &SetExpr) -> Result<(), PhyResult<ResolverErr>> {
+        self.resolve_expr(&expr.object)?;
+        self.resolve_expr(&expr.value)?;
 
         Ok(())
     }

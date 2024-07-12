@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use colored::Colorize;
 use ecow::EcoString;
-use frontend::ast::expr::GetExpr;
+use frontend::ast::expr::{GetExpr, SetExpr};
 use thiserror::Error;
 use tools::{
     results::{PhyReport, PhyResult},
@@ -15,7 +15,7 @@ use tools::{
 use crate::{callable::Callable, values::Struct};
 use crate::environment::Env;
 use crate::native_functions::PhyNativeFn;
-use crate::values::RtVal;
+use crate::values::{Function, RtVal};
 use crate::native_functions::NativeFnErr;
 use frontend::ast::{expr::{
     AssignExpr, BinaryExpr, CallExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr,
@@ -306,7 +306,12 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
                 )
             })?;
         
-        let struct_val = RtVal::StructVal(Rc::new(RefCell::new(Struct { name: stmt.name.clone() })));
+        let mut methods: HashMap<EcoString, Function> = HashMap::new();
+        stmt.methods.iter().for_each(|m| {
+            methods.insert(m.name.clone(), Function::new(m, self.env.clone()));
+        });
+
+        let struct_val = RtVal::new_struct(stmt, methods);
 
         self.env
             .borrow_mut()
@@ -507,16 +512,39 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
         })
     }
     
+    // FIXME: 
     fn visit_get_expr(&mut self, expr: &GetExpr) -> Result<RtVal, PhyResult<InterpErr>> {
         let obj = expr.object.accept(self)?;
 
         if let RtVal::InstanceVal(inst) = obj {
-            match inst.borrow().fields.get(&expr.name) {
-                Some(v) => Ok(v.clone()),
-                None => Err(PhyResult::new(InterpErr::InexistantField(expr.name.clone()), Some(expr.loc.clone())))
+            // Field
+            if let Some(v) = inst.borrow().fields.get(&expr.name) {
+                Ok(v.clone())
+            // Methods
+            } else if let Some(m) = inst.borrow().strukt.borrow().methods.get(&expr.name) {
+                Ok(RtVal::FuncVal(m.clone()))
+            } else {
+                Err(PhyResult::new(InterpErr::InexistantField(expr.name.clone()), Some(expr.loc.clone())))
             }
         } else {
             Err(PhyResult::new(InterpErr::NonInstPropAccess, Some(expr.loc.clone())))
+        }
+    }
+    
+    fn visit_set_expr(&mut self, expr: &SetExpr) -> Result<RtVal, PhyResult<InterpErr>> {
+        let object = expr.object.accept(self)?;
+
+        match object {
+            RtVal::InstanceVal(inst) => {
+                let val = expr.value.accept(self)?;
+
+                inst.borrow_mut()
+                    .set(expr.name.clone(), val.clone())
+                    .map_err(|_| PhyResult::new(InterpErr::InexistantField(expr.name.clone()), Some(expr.loc.clone())))?;
+
+                Ok(val)
+            },
+            _ => Err(PhyResult::new(InterpErr::NonInstPropAccess, Some(expr.loc.clone())))
         }
     }
 }

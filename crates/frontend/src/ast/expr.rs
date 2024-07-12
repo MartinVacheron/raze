@@ -19,6 +19,7 @@ pub enum Expr {
     Logical(LogicalExpr),
     Call(CallExpr),
     Get(GetExpr),
+    Set(SetExpr),
 }
 
 impl Display for Expr {
@@ -34,7 +35,8 @@ impl Display for Expr {
             Expr::Assign(e) => write!(f, "{} {}", e.name, e.value),
             Expr::Logical(e) => write!(f, "{} {} {}", e.left, e.operator, e.right),
             Expr::Call(e) => write!(f, "{}: {:?}", e.callee, e.args),
-            Expr::Get(e) => write!(f, "{}: {:?}", e.object, e.name),
+            Expr::Get(e) => write!(f, "{}: {}", e.object, e.name),
+            Expr::Set(e) => write!(f, "{}: {} {}", e.object, e.name, e.value),
         }
     }
 }
@@ -53,6 +55,7 @@ impl Expr {
             Self::Logical(l) => l.loc.clone(),
             Self::Call(c) => c.loc.clone(),
             Self::Get(g) => g.loc.clone(),
+            Self::Set(s) => s.loc.clone(),
         }
     }
 }
@@ -163,6 +166,14 @@ pub struct GetExpr {
     pub loc: Loc,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct SetExpr {
+    pub object: Box<Expr>,
+    pub name: EcoString,
+    pub value: Box<Expr>,
+    pub loc: Loc,
+}
+
 impl Expr {
     pub fn accept<T, U: PhyReport>(
         &self,
@@ -177,9 +188,10 @@ impl Expr {
             Expr::Identifier(e) => visitor.visit_identifier_expr(e),
             Expr::Unary(e) => visitor.visit_unary_expr(e),
             Expr::Assign(e) => visitor.visit_assign_expr(e),
-            Expr::Logical(l) => visitor.visit_logical_expr(l),
-            Expr::Call(c) => visitor.visit_call_expr(c),
-            Expr::Get(g) => visitor.visit_get_expr(g),
+            Expr::Logical(e) => visitor.visit_logical_expr(e),
+            Expr::Call(e) => visitor.visit_call_expr(e),
+            Expr::Get(e) => visitor.visit_get_expr(e),
+            Expr::Set(e) => visitor.visit_set_expr(e),
         }
     }
 }
@@ -196,6 +208,7 @@ pub trait VisitExpr<T, U: PhyReport> {
     fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> Result<T, PhyResult<U>>;
     fn visit_call_expr(&mut self, expr: &CallExpr) -> Result<T, PhyResult<U>>;
     fn visit_get_expr(&mut self, expr: &GetExpr) -> Result<T, PhyResult<U>>;
+    fn visit_set_expr(&mut self, expr: &SetExpr) -> Result<T, PhyResult<U>>;
 }
 
 // Into

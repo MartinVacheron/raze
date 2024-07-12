@@ -2,7 +2,7 @@ use ecow::EcoString;
 
 use crate::ast::{
     expr::{
-        AssignExpr, BinaryExpr, CallExpr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
+        AssignExpr, BinaryExpr, CallExpr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, SetExpr, StrLiteralExpr, UnaryExpr, VisitExpr
     },
     stmt::{
         BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StructStmt, VarDeclStmt, VisitStmt, WhileStmt
@@ -516,6 +516,10 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
     }
     
     fn visit_get_expr(&mut self, expr: &GetExpr) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
+        todo!()
+    }
+    
+    fn visit_set_expr(&mut self, expr: &SetExpr) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
         todo!()
     }
 }

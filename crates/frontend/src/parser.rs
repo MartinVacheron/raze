@@ -5,7 +5,7 @@ use ecow::EcoString;
 use thiserror::Error;
 
 use crate::ast::expr::{
-    AssignExpr, BinaryExpr, CallExpr, Expr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr
+    AssignExpr, BinaryExpr, CallExpr, Expr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, SetExpr, StrLiteralExpr, UnaryExpr
 };
 use crate::lexer::{Token, TokenKind};
 use crate::ast::stmt::{
@@ -593,22 +593,32 @@ impl<'a> Parser<'a> {
     fn parse_assign(&mut self) -> ParserExprRes {
         let assigne = self.parse_or()?;
 
-        if self.is_at(TokenKind::Equal) {
-            self.eat()?;
-            let value = self.parse_assign()?;
+        match self.at().kind {
+            TokenKind::Equal => {
+                self.eat()?;
+                let value = Box::new(self.parse_assign()?);
 
-            if let Expr::Identifier(e) = assigne {
-                return Ok(Expr::Assign(AssignExpr {
-                    name: e.name.clone(),
-                    value: Box::new(value),
-                    loc: self.get_loc(),
-                }));
-            } else {
-                return Err(self.trigger_error(ParserErr::InvalidAssignTarget, true));
+                match assigne {
+                    Expr::Identifier(e) => {
+                        Ok(Expr::Assign(AssignExpr {
+                            name: e.name.clone(),
+                            value,
+                            loc: self.get_loc(),
+                        }))
+                    }
+                    Expr::Get(e) => {
+                        Ok(Expr::Set(SetExpr {
+                            object: e.object,
+                            name: e.name,
+                            value,
+                            loc: self.get_loc(),
+                        }))
+                    }
+                    _ => Err(self.trigger_error(ParserErr::InvalidAssignTarget, true))
+                }
             }
+            _ => Ok(assigne)
         }
-
-        Ok(assigne)
     }
 
     fn parse_or(&mut self) -> ParserExprRes {
@@ -621,7 +631,7 @@ impl<'a> Parser<'a> {
                 || self.is_at(TokenKind::Eof)
                 || self.is_at(TokenKind::NewLine)
             {
-                return Err(self.trigger_error(ParserErr::OrWithNoCond, true));
+                return Err(self.trigger_error(ParserErr::OrWithNoCond, true))
             }
 
             let right = self.parse_and()?;
@@ -631,7 +641,7 @@ impl<'a> Parser<'a> {
                 operator: EcoString::from("or"),
                 right: Box::new(right),
                 loc: self.get_loc(),
-            }));
+            }))
         }
 
         Ok(left)

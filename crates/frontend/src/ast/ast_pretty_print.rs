@@ -127,4 +127,8 @@ impl VisitExpr<String, AstPrinterErr> for AstPrinter {
     fn visit_get_expr(&mut self, expr: &super::expr::GetExpr) -> Result<String, PhyResult<AstPrinterErr>> {
         todo!()
     }
+    
+    fn visit_set_expr(&mut self, expr: &super::expr::SetExpr) -> Result<String, PhyResult<AstPrinterErr>> {
+        todo!()
+    }
 }

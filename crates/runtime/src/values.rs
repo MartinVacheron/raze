@@ -1,12 +1,20 @@
 use colored::*;
 use ecow::EcoString;
-use frontend::ast::stmt::{FnDeclStmt, Stmt};
-use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
+use frontend::ast::stmt::{FnDeclStmt, Stmt, StructStmt};
+use std::{
+    cell::RefCell,
+    collections::{
+        hash_map::Entry::{Occupied, Vacant},
+        HashMap,
+    },
+    fmt::Display,
+    rc::Rc,
+};
 use thiserror::Error;
 use tools::results::{PhyReport, PhyResult};
 
 use crate::{
-    callable::{Callable, CallErr},
+    callable::{CallErr, Callable},
     environment::Env,
     interpreter::{InterpErr, Interpreter},
     native_functions::PhyNativeFn,
@@ -31,9 +39,9 @@ pub enum RtValErr {
     #[error("operator '{0}' is not supported for string manipulation")]
     StringManip(String),
 
-    // Function
-    
-
+    // Instance
+    #[error("structure dosen't have field '{0}'")]
+    MissingFieldInStruct(EcoString),
 
     // Others
     #[error("can't use a null value in a binary operation")]
@@ -288,14 +296,29 @@ pub struct Function {
     pub closure: Rc<RefCell<Env>>,
 }
 
-impl RtVal {
-    pub fn new_fn(value: &FnDeclStmt, closure: Rc<RefCell<Env>>) -> Self {
-        RtVal::FuncVal(Function {
-            name: value.name.clone(),
-            params: value.params.clone(),
-            body: value.body.clone(),
+impl Function {
+    pub fn new(stmt: &FnDeclStmt, closure: Rc<RefCell<Env>>) -> Self {
+        Self {
+            name: stmt.name.clone(),
+            params: stmt.params.clone(),
+            body: stmt.body.clone(),
             closure: closure.clone(),
-        })
+        }
+    }
+}
+
+impl RtVal {
+    pub fn new_fn(stmt: &FnDeclStmt, closure: Rc<RefCell<Env>>) -> Self {
+        RtVal::FuncVal(Function::new(stmt, closure))
+    }
+
+    pub fn new_struct(stmt: &StructStmt, methods: HashMap<EcoString, Function>) -> Self {
+        RtVal::StructVal(Rc::new(RefCell::new(
+            Struct {
+                name: stmt.name.clone(),
+                methods,
+            }
+        )))
     }
 }
 
@@ -343,6 +366,7 @@ impl Callable for Function {
 #[derive(Debug, PartialEq)]
 pub struct Struct {
     pub name: EcoString,
+    pub methods: HashMap<EcoString, Function>,
 }
 
 impl Callable for Rc<RefCell<Struct>> {
@@ -354,8 +378,7 @@ impl Callable for Rc<RefCell<Struct>> {
         &self,
         interpreter: &mut Interpreter,
         args: Vec<RtVal>,
-    ) -> Result<RtVal, PhyResult<CallErr>>
-    {
+    ) -> Result<RtVal, PhyResult<CallErr>> {
         Ok(RtVal::InstanceVal(Rc::new(RefCell::new(Instance {
             strukt: self.clone(),
             fields: HashMap::new(),
@@ -363,16 +386,31 @@ impl Callable for Rc<RefCell<Struct>> {
     }
 }
 
+impl Struct {
+    pub fn find_method(&self, name: EcoString) -> Option<Function> {
+        self.methods.get(&name).cloned()
+    }
+}
+
+// ------------
+//   Instance
+// ------------
 #[derive(Debug, PartialEq)]
 pub struct Instance {
     pub strukt: Rc<RefCell<Struct>>,
     pub fields: HashMap<EcoString, RtVal>,
 }
 
-// impl Instance {
-//     pub fn new(strukt: )
-// }
-
+impl Instance {
+    pub fn set(&mut self, name: EcoString, value: RtVal) -> Result<(), RtValErr> {
+        if let Occupied(mut v) = self.fields.entry(name.clone()) {
+            v.insert(value);
+            Ok(())
+        } else {
+            Err(RtValErr::MissingFieldInStruct(name))
+        }
+    }
+}
 
 // --------
 //   Into
