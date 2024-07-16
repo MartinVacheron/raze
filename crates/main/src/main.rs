@@ -145,8 +145,8 @@ impl Repl {
 
         match self.interpreter.interpret(&nodes, locals) {
             Ok(res) => {
-                if res != RtVal::Null {
-                    println!("{}", res);
+                if *res.borrow() != RtVal::Null {
+                    println!("{}", *res.borrow());
                 }
             }
             Err(e) => e.report(&"placeholder.rz".into(), &code),

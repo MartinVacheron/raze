@@ -90,9 +90,24 @@ pub struct ReturnStmt {
 #[derive(Debug, PartialEq)]
 pub struct StructStmt {
     pub name: EcoString,
+    pub fields: Vec<StructMember>,
     pub methods: Vec<FnDeclStmt>,
     pub loc: Loc,
 }
+
+#[derive(Debug, PartialEq)]
+pub struct StructMember {
+    pub name: EcoString,
+    pub is_const: bool,
+    pub value: Option<Expr>,
+}
+
+impl StructMember {
+    pub fn new(name: EcoString, is_const: bool, value: Option<Expr>) -> Self {
+        Self { name, is_const, value }
+    }
+}
+
 
 impl Stmt {
     pub fn accept<T, U: PhyReport>(

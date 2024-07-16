@@ -7,7 +7,7 @@ use tools::{results::{Loc, PhyReport, PhyResult}, ToUuid};
 
 use frontend::ast::{
     expr::{
-        AssignExpr, BinaryExpr, CallExpr, Expr, GetExpr, SetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
+        AssignExpr, BinaryExpr, CallExpr, Expr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, SelfExpr, SetExpr, StrLiteralExpr, UnaryExpr, VisitExpr
     },
     stmt::{
         BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StructStmt, VarDeclStmt, VisitStmt, WhileStmt
@@ -25,6 +25,15 @@ pub enum ResolverErr {
 
     #[error("Can't return from top level code")]
     TopLevelReturn,
+
+    #[error("use of self outside of a structure")]
+    SelfOutsideStruct,
+
+    #[error("can't call init function")]
+    InitCall,
+
+    #[error("can't return a value from the constructor")]
+    ReturnFromInit,
 }
 
 impl PhyReport for ResolverErr {
@@ -42,8 +51,16 @@ enum FnType {
     #[default]
     None,
     Function,
+    Init,
     Method,
 }
+
+
+// TEST:
+//   can't call constructor
+//   can't have same name for field and method because other wise 
+//     we don't know which we get when: foo.name if there is a method "name" too
+//     or transforme it into a getter
 
 
 // Bool is for tracking if the variable is initialized, avoiding weird cases
@@ -56,7 +73,8 @@ enum FnType {
 pub struct Resolver {
     scopes: Vec<HashMap<EcoString, bool>>,
     locals: HashMap<String, usize>,
-    current_fn: FnType,
+    fn_type: FnType,
+    in_struct: bool,
 }
 
 // If we can’t find it in the stack of local scopes, we assume it must be global
@@ -133,8 +151,8 @@ impl Resolver {
     }
 
     fn resolve_fn(&mut self, stmt: &FnDeclStmt, typ: FnType) -> ResolverRes {
-        let prev_fn_type = self.current_fn;
-        self.current_fn = typ;
+        let prev_fn_type = self.fn_type;
+        self.fn_type = typ;
 
         self.begin_scope();
 
@@ -147,7 +165,7 @@ impl Resolver {
 
         self.end_scope();
 
-        self.current_fn = prev_fn_type;
+        self.fn_type = prev_fn_type;
 
         Ok(())
     }
@@ -211,8 +229,14 @@ impl VisitStmt<(), ResolverErr> for Resolver {
     }
 
     fn visit_for_stmt(&mut self, stmt: &ForStmt) -> ResolverRes {
+        // Different from book because don't handle for loops the same.
+        // I need a scope to declare the placeholder
+        self.begin_scope();
         self.resolve_stmt(&(&stmt.placeholder).into())?;
-        self.resolve_stmt(&stmt.body)
+        self.resolve_stmt(&stmt.body)?;
+        self.end_scope();
+
+        Ok(())
     }
 
     fn visit_fn_decl_stmt(&mut self, stmt: &FnDeclStmt) -> ResolverRes {
@@ -223,26 +247,46 @@ impl VisitStmt<(), ResolverErr> for Resolver {
     }
 
     fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> ResolverRes {
-        if self.current_fn == FnType::None {
-            return Err(PhyResult::new(
+        match self.fn_type {
+            FnType::None => return Err(PhyResult::new(
                 ResolverErr::TopLevelReturn,
                 Some(stmt.loc.clone()),
-            ))
-        }
-
-        if let Some(v) = &stmt.value {
-            self.resolve_expr(v)?;
+            )),
+            FnType::Init => return Err(PhyResult::new(
+                ResolverErr::ReturnFromInit, Some(stmt.loc.clone())
+            )),
+            _ => {
+                if let Some(v) = &stmt.value {
+                    self.resolve_expr(v)?;
+                }
+            }
         }
 
         Ok(())
     }
 
     fn visit_struct_stmt(&mut self, stmt: &StructStmt) -> ResolverRes {
+        self.in_struct = true;
+
         self.declare(stmt.name.clone(), &stmt.loc)?;
         self.define(stmt.name.clone());
 
-        stmt.methods.iter().try_for_each(|m| self.resolve_fn(m, FnType::Method))?;
+        self.begin_scope();
+        self.scopes.last_mut().unwrap().insert("self".into(), true);
 
+        stmt.methods.iter().try_for_each(|m| {
+            let typ = if m.name == EcoString::from("init") {
+                FnType::Init
+            } else {
+                FnType::Method
+            };
+
+            self.resolve_fn(m, typ)
+        })?;
+
+        self.end_scope();
+
+        self.in_struct = false;
 
         Ok(())
     }
@@ -305,23 +349,30 @@ impl VisitExpr<(), ResolverErr> for Resolver {
 
     fn visit_call_expr(&mut self, expr: &CallExpr) -> ResolverRes {
         self.resolve_expr(&expr.callee)?;
-
-        for arg in &expr.args {
-            self.resolve_expr(arg)?;
-        }
+        expr.args.iter().try_for_each(|arg| self.resolve_expr(arg))?;
 
         Ok(())
     }
     
-    fn visit_get_expr(&mut self, expr: &GetExpr) -> Result<(), PhyResult<ResolverErr>> {
+    fn visit_get_expr(&mut self, expr: &GetExpr) -> ResolverRes {
         self.resolve_expr(&expr.object)?;
 
         Ok(())
     }
     
-    fn visit_set_expr(&mut self, expr: &SetExpr) -> Result<(), PhyResult<ResolverErr>> {
+    fn visit_set_expr(&mut self, expr: &SetExpr) -> ResolverRes {
         self.resolve_expr(&expr.object)?;
         self.resolve_expr(&expr.value)?;
+
+        Ok(())
+    }
+    
+    fn visit_self_expr(&mut self, expr: &SelfExpr) -> ResolverRes {
+        if !self.in_struct {
+            return Err(PhyResult::new(ResolverErr::SelfOutsideStruct, Some(expr.loc.clone())))
+        }
+
+        self.resolve_local(expr, &expr.name);
 
         Ok(())
     }
@@ -350,13 +401,13 @@ var a
     }
 }
 ";
-        let resolver = lex_parse_resolve(code).unwrap();
+        let locals = lex_parse_resolve(code).unwrap();
 
-        assert_eq!(resolver.locals.len(), 9);
+        assert_eq!(locals.len(), 9);
 
         // We have to sort because (key, value) aren't inserted in the hashmap
         // in the same order as insertion
-        let mut depths = resolver.locals.into_values().collect::<Vec<usize>>();
+        let mut depths = locals.into_values().collect::<Vec<usize>>();
         depths.sort();
 
         assert_eq!(
@@ -379,13 +430,13 @@ var a
     }
 }
 ";
-        let resolver = lex_parse_resolve(code).unwrap();
+        let locals = lex_parse_resolve(code).unwrap();
 
-        assert_eq!(resolver.locals.len(), 2);
+        assert_eq!(locals.len(), 2);
 
         // We have to sort because (key, value) aren't inserted in the hashmap
         // in the same order as insertion
-        let mut depths = resolver.locals.into_values().collect::<Vec<usize>>();
+        let mut depths = locals.into_values().collect::<Vec<usize>>();
         depths.sort();
 
         assert_eq!(
@@ -428,5 +479,27 @@ return
         let resolver = lex_parse_resolve(code);
         let errs = resolver.err().unwrap();
         assert_eq!(errs[0].err, ResolverErr::TopLevelReturn);
+    }
+
+    #[test]
+    fn self_no_struct() {
+        let code = "
+self.foo
+";
+        let resolver = lex_parse_resolve(code);
+        let errs = resolver.err().unwrap();
+        assert_eq!(errs[0].err, ResolverErr::SelfOutsideStruct);
+    }
+
+    #[test]
+    fn return_from_init() {
+        let code = "
+struct Foo {
+    fn init() { return 1 }
+}
+";
+        let resolver = lex_parse_resolve(code);
+        let errs = resolver.err().unwrap();
+        assert_eq!(errs[0].err, ResolverErr::ReturnFromInit);
     }
 }

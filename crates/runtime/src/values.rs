@@ -4,7 +4,7 @@ use frontend::ast::stmt::{FnDeclStmt, Stmt, StructStmt};
 use std::{
     cell::RefCell,
     collections::{
-        hash_map::Entry::{Occupied, Vacant},
+        hash_map::Entry::Occupied,
         HashMap,
     },
     fmt::Display,
@@ -62,14 +62,14 @@ impl PhyReport for RtValErr {
 // ----------------
 #[derive(Debug, PartialEq, Clone)]
 pub enum RtVal {
-    IntVal(Rc<RefCell<Int>>),
-    RealVal(Rc<RefCell<Real>>),
-    StrVal(Rc<RefCell<Str>>),
-    BoolVal(Rc<RefCell<Bool>>),
+    IntVal(Int),
+    RealVal(Real),
+    StrVal(Str),
+    BoolVal(Bool),
     FuncVal(Function),
     NativeFnVal(PhyNativeFn),
     StructVal(Rc<RefCell<Struct>>),
-    InstanceVal(Rc<RefCell<Instance>>),
+    InstanceVal(Instance),
     Null,
 }
 
@@ -82,15 +82,15 @@ trait Operate<Rhs> {
 }
 
 impl RtVal {
-    pub fn new_null() -> Self {
-        RtVal::Null
+    pub fn new_null() -> Rc<RefCell<RtVal>> {
+        RtVal::Null.into()
     }
 
-    pub fn negate(&self) -> Result<(), RtValErr> {
-        match &self {
-            RtVal::IntVal(i) => i.borrow_mut().negate(),
-            RtVal::RealVal(r) => r.borrow_mut().negate(),
-            RtVal::BoolVal(b) => b.borrow_mut().negate(),
+    pub fn negate(&mut self) -> Result<(), RtValErr> {
+        match self {
+            RtVal::IntVal(i) => i.negate(),
+            RtVal::RealVal(r) => r.negate(),
+            RtVal::BoolVal(b) => b.negate(),
             _ => return Err(RtValErr::UnNegatable),
         }
 
@@ -100,17 +100,17 @@ impl RtVal {
     // TODO: Error handling for other operation
     pub fn operate(&self, rhs: &RtVal, operator: &str) -> Result<RtVal, RtValErr> {
         match (&self, &rhs) {
-            (RtVal::IntVal(i1), RtVal::IntVal(i2)) => i1.borrow().operate(&*i2.borrow(), operator),
+            (RtVal::IntVal(i1), RtVal::IntVal(i2)) => i1.operate(&*i2, operator),
             (RtVal::RealVal(r1), RtVal::RealVal(r2)) => {
-                r1.borrow().operate(&*r2.borrow(), operator)
+                r1.operate(&*r2, operator)
             }
-            (RtVal::IntVal(i1), RtVal::RealVal(r1)) => i1.borrow().operate(&*r1.borrow(), operator),
-            (RtVal::RealVal(r1), RtVal::IntVal(i1)) => r1.borrow().operate(&*i1.borrow(), operator),
-            (RtVal::StrVal(s1), RtVal::StrVal(s2)) => s1.borrow().operate(&*s2.borrow(), operator),
-            (RtVal::StrVal(s1), RtVal::IntVal(i1)) => s1.borrow().operate(&*i1.borrow(), operator),
-            (RtVal::IntVal(i1), RtVal::StrVal(s1)) => i1.borrow().operate(&*s1.borrow(), operator),
+            (RtVal::IntVal(i1), RtVal::RealVal(r1)) => i1.operate(&*r1, operator),
+            (RtVal::RealVal(r1), RtVal::IntVal(i1)) => r1.operate(&*i1, operator),
+            (RtVal::StrVal(s1), RtVal::StrVal(s2)) => s1.operate(&*s2, operator),
+            (RtVal::StrVal(s1), RtVal::IntVal(i1)) => s1.operate(&*i1, operator),
+            (RtVal::IntVal(i1), RtVal::StrVal(s1)) => i1.operate(&*s1, operator),
             (RtVal::BoolVal(b1), RtVal::BoolVal(b2)) => {
-                b1.borrow().operate(&*b2.borrow(), operator)
+                b1.operate(&*b2, operator)
             }
             (RtVal::Null, _) | (_, RtVal::Null) => Err(RtValErr::OperationOnNull),
             _ => Err(RtValErr::UnknownOperation),
@@ -118,10 +118,18 @@ impl RtVal {
     }
 }
 
+impl From<RtVal> for Rc<RefCell<RtVal>> {
+    fn from(value: RtVal) -> Self {
+        match value {
+            v @ _ => Rc::new(RefCell::new(v))
+        }
+    }
+}
+
 // -------
 //   Int
 // -------
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Int {
     pub value: i64,
 }
@@ -182,7 +190,7 @@ impl Operate<Str> for Int {
 // --------
 //   Real
 // --------
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Real {
     pub value: f64,
 }
@@ -234,7 +242,7 @@ impl Operate<Real> for Real {
 // ----------
 //   String
 // ----------
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Str {
     pub value: EcoString,
 }
@@ -262,7 +270,7 @@ impl Operate<Int> for Str {
 // --------
 //   Bool
 // --------
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Bool {
     pub value: bool,
 }
@@ -302,7 +310,26 @@ impl Function {
             name: stmt.name.clone(),
             params: stmt.params.clone(),
             body: stmt.body.clone(),
-            closure: closure.clone(),
+            closure: Rc::new(RefCell::new(Env::new(Some(closure)))),
+        }
+    }
+
+    pub fn wrap_bind(&self, instance: Rc<RefCell<RtVal>>) -> Rc<RefCell<RtVal>> {
+        Rc::new(RefCell::new(RtVal::FuncVal(self.bind(instance))))
+    }
+
+    pub fn bind(&self, instance: Rc<RefCell<RtVal>>) -> Function {
+        let mut env = Env::new(Some(self.closure.clone()));
+
+        env
+            .declare_var("self".into(), instance)
+            .expect("already declared self");
+
+        Function {
+            name: self.name.clone(),
+            params: self.params.clone(),
+            body: self.body.clone(),
+            closure: Rc::new(RefCell::new(env)),
         }
     }
 }
@@ -310,15 +337,6 @@ impl Function {
 impl RtVal {
     pub fn new_fn(stmt: &FnDeclStmt, closure: Rc<RefCell<Env>>) -> Self {
         RtVal::FuncVal(Function::new(stmt, closure))
-    }
-
-    pub fn new_struct(stmt: &StructStmt, methods: HashMap<EcoString, Function>) -> Self {
-        RtVal::StructVal(Rc::new(RefCell::new(
-            Struct {
-                name: stmt.name.clone(),
-                methods,
-            }
-        )))
     }
 }
 
@@ -332,8 +350,8 @@ impl Callable for Function {
     fn call(
         &self,
         interpreter: &mut Interpreter,
-        args: Vec<RtVal>,
-    ) -> Result<RtVal, PhyResult<CallErr>> {
+        args: Vec<Rc<RefCell<RtVal>>>,
+    ) -> Result<Rc<RefCell<RtVal>>, PhyResult<CallErr>> {
         let mut new_env = Env::new(Some(self.closure.clone()));
 
         for (p, v) in self.params.iter().zip(args) {
@@ -366,43 +384,73 @@ impl Callable for Function {
 #[derive(Debug, PartialEq)]
 pub struct Struct {
     pub name: EcoString,
+    pub fields: HashMap<EcoString, Rc<RefCell<RtVal>>>,
     pub methods: HashMap<EcoString, Function>,
+}
+
+impl RtVal {
+    pub fn new_struct(
+        stmt: &StructStmt,
+        fields: HashMap<EcoString, Rc<RefCell<RtVal>>>,
+        methods: HashMap<EcoString, Function>
+    ) -> Self{
+        RtVal::StructVal(Rc::new(RefCell::new(
+            Struct {
+                name: stmt.name.clone(),
+                fields,
+                methods,
+            }
+        )))
+    }
 }
 
 impl Callable for Rc<RefCell<Struct>> {
     fn arity(&self) -> usize {
-        0
+        let tmp = self.borrow();
+        let initializer = tmp.methods.get("init".into());
+
+        match initializer {
+            Some(f) => f.arity(),
+            None => 0
+        }
     }
 
     fn call(
         &self,
         interpreter: &mut Interpreter,
-        args: Vec<RtVal>,
-    ) -> Result<RtVal, PhyResult<CallErr>> {
-        Ok(RtVal::InstanceVal(Rc::new(RefCell::new(Instance {
+        args: Vec<Rc<RefCell<RtVal>>>,
+    ) -> Result<Rc<RefCell<RtVal>>, PhyResult<CallErr>> {
+        let instance = Rc::new(RefCell::new(RtVal::InstanceVal(Instance {
             strukt: self.clone(),
-            fields: HashMap::new(),
-        }))))
+            fields: self.borrow().fields.clone(),
+        })));
+
+        let tmp = self.borrow();
+        let initializer = tmp.methods.get("init".into());
+
+        if let Some(f) = initializer {
+            f.bind(instance).call(interpreter, args)?;
+        }
+
+        Ok(RtVal::InstanceVal(Instance {
+            strukt: self.clone(),
+            fields: self.borrow().fields.clone(),
+        }).into())
     }
 }
 
-impl Struct {
-    pub fn find_method(&self, name: EcoString) -> Option<Function> {
-        self.methods.get(&name).cloned()
-    }
-}
 
 // ------------
 //   Instance
 // ------------
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Instance {
     pub strukt: Rc<RefCell<Struct>>,
-    pub fields: HashMap<EcoString, RtVal>,
+    pub fields: HashMap<EcoString, Rc<RefCell<RtVal>>>,
 }
 
 impl Instance {
-    pub fn set(&mut self, name: EcoString, value: RtVal) -> Result<(), RtValErr> {
+    pub fn set(&mut self, name: EcoString, value: Rc<RefCell<RtVal>>) -> Result<(), RtValErr> {
         if let Occupied(mut v) = self.fields.entry(name.clone()) {
             v.insert(value);
             Ok(())
@@ -417,35 +465,49 @@ impl Instance {
 // --------
 impl From<i64> for RtVal {
     fn from(value: i64) -> Self {
-        RtVal::IntVal(Rc::new(RefCell::new(Int { value })))
+        RtVal::IntVal(Int { value })
     }
 }
 
 impl From<f64> for RtVal {
     fn from(value: f64) -> Self {
-        RtVal::RealVal(Rc::new(RefCell::new(Real { value })))
+        RtVal::RealVal(Real { value })
     }
 }
 
 impl From<EcoString> for RtVal {
     fn from(value: EcoString) -> Self {
-        RtVal::StrVal(Rc::new(RefCell::new(Str {
-            value: value.clone(),
-        })))
+        RtVal::StrVal(Str { value: value.clone() })
     }
 }
 
 impl From<String> for RtVal {
     fn from(value: String) -> Self {
-        RtVal::StrVal(Rc::new(RefCell::new(Str {
-            value: value.into(),
-        })))
+        RtVal::StrVal( Str { value: value.into() })
     }
 }
 
 impl From<bool> for RtVal {
     fn from(value: bool) -> Self {
-        RtVal::BoolVal(Rc::new(RefCell::new(Bool { value })))
+        RtVal::BoolVal(Bool { value })
+    }
+}
+
+impl RtVal {
+    pub fn new_int(value: i64) -> Self {
+        value.into()
+    }
+
+    pub fn new_real(value: f64) -> Self {
+        value.into()
+    }
+
+    pub fn new_str(value: EcoString) -> Self {
+        value.into()
+    }
+
+    pub fn new_bool(value: bool) -> Self {
+        value.into()
     }
 }
 
@@ -455,14 +517,14 @@ impl From<bool> for RtVal {
 impl Display for RtVal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            RtVal::IntVal(i) => write!(f, "{}", i.borrow().value),
-            RtVal::RealVal(r) => write!(f, "{}", r.borrow().value),
-            RtVal::BoolVal(b) => write!(f, "{}", b.borrow().value),
-            RtVal::StrVal(s) => write!(f, "\"{}\"", s.borrow().value),
+            RtVal::IntVal(i) => write!(f, "{}", i.value),
+            RtVal::RealVal(r) => write!(f, "{}", r.value),
+            RtVal::BoolVal(b) => write!(f, "{}", b.value),
+            RtVal::StrVal(s) => write!(f, "\"{}\"", s.value),
             RtVal::FuncVal(func) => write!(f, "<fn {}>", func.name),
             RtVal::NativeFnVal(func) => write!(f, "{}", func),
             RtVal::StructVal(s) => write!(f, "<struct {}>", s.borrow().name),
-            RtVal::InstanceVal(i) => write!(f, "<{} instance>", i.borrow().strukt.borrow().name),
+            RtVal::InstanceVal(i) => write!(f, "<{} instance>", i.strukt.borrow().name),
             RtVal::Null => write!(f, "null"),
         }
     }

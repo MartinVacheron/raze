@@ -5,14 +5,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use colored::Colorize;
 use ecow::EcoString;
-use frontend::ast::expr::{GetExpr, SetExpr};
+use frontend::ast::expr::{GetExpr, SelfExpr, SetExpr};
 use thiserror::Error;
 use tools::{
     results::{PhyReport, PhyResult},
     ToUuid,
 };
 
-use crate::{callable::Callable, values::Struct};
+use crate::callable::Callable;
 use crate::environment::Env;
 use crate::native_functions::PhyNativeFn;
 use crate::values::{Function, RtVal};
@@ -88,8 +88,8 @@ pub enum InterpErr {
     InexistantField(EcoString),
 
     // Results
-    #[error("return: {0}")]
-    Return(RtVal),
+    #[error("return")]
+    Return(Rc<RefCell<RtVal>>),
 }
 
 impl PhyReport for InterpErr {
@@ -99,7 +99,7 @@ impl PhyReport for InterpErr {
 }
 
 pub(crate) type PhyResInterp = PhyResult<InterpErr>;
-pub(crate) type InterpRes = Result<RtVal, PhyResInterp>;
+pub(crate) type InterpRes = Result<Rc<RefCell<RtVal>>, PhyResInterp>;
 
 // --------------
 //  Interpreting
@@ -117,16 +117,16 @@ impl Interpreter {
 
         let _ = globals.borrow_mut().declare_var(
             EcoString::from("clock"),
-            RtVal::NativeFnVal(PhyNativeFn {
+            Rc::new(RefCell::new(RtVal::NativeFnVal(PhyNativeFn {
                 name: EcoString::from("clock"),
                 arity: 0,
                 func: |_, _| {
                     match SystemTime::now().duration_since(UNIX_EPOCH) {
-                        Ok(t) => Ok((t.as_millis() as f64 / 1000.).into()),
+                        Ok(t) => Ok(RtVal::new_real(t.as_millis() as f64 / 1000.).into()),
                         Err(_) => Err(PhyResult::new(NativeFnErr::GetTime.into(), None))
                     }
                 },
-            }),
+            }))),
         );
 
         let env = globals.clone();
@@ -143,11 +143,11 @@ impl Interpreter {
     pub fn interpret(&mut self, nodes: &Vec<Stmt>, locals: HashMap<String, usize>) -> InterpRes {
         self.locals = locals;
 
-        let mut res: RtVal = RtVal::new_null();
+        let mut res = RtVal::new_null();
 
         for node in nodes {
             match node.accept(self) {
-                Ok(r) => res = r,
+                Ok(r) => res = r.into(),
                 Err(e) => return Err(e),
             }
         }
@@ -156,14 +156,14 @@ impl Interpreter {
     }
 }
 
-impl VisitStmt<RtVal, InterpErr> for Interpreter {
+impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
     fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> InterpRes {
         stmt.expr.accept(self)
     }
 
     fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> InterpRes {
         let value = stmt.expr.accept(self)?;
-        println!("{}", value);
+        println!("{}", value.borrow());
 
         Ok(RtVal::new_null())
     }
@@ -192,9 +192,10 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
 
     fn visit_if_stmt(&mut self, stmt: &IfStmt) -> InterpRes {
         let cond = stmt.condition.accept(self)?;
+        let tmp = &*cond.borrow();
 
-        match cond {
-            RtVal::BoolVal(b) => match b.borrow().value {
+        match tmp {
+            RtVal::BoolVal(b) => match b.value {
                 true => {
                     if let Some(t) = &stmt.then_branch {
                         t.accept(self)
@@ -220,9 +221,10 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
     fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> InterpRes {
         loop {
             let cond = stmt.condition.accept(self)?;
+            let tmp = &*cond.borrow();
 
-            match cond {
-                RtVal::BoolVal(b) => match b.borrow().value {
+            match tmp {
+                RtVal::BoolVal(b) => match b.value {
                     true => {
                         stmt.body.accept(self)?;
                     }
@@ -254,7 +256,7 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
         for i in range {
             self.env
                 .borrow_mut()
-                .assign(stmt.placeholder.name.clone(), i.into())
+                .assign(stmt.placeholder.name.clone(), RtVal::new_int(i).into())
                 .map_err(|e| {
                     PhyResult::new(InterpErr::ForLoop(e.to_string()), Some(stmt.loc.clone()))
                 })?;
@@ -267,12 +269,12 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
         Ok(RtVal::new_null())
     }
 
-    fn visit_fn_decl_stmt(&mut self, stmt: &FnDeclStmt) -> Result<RtVal, PhyResult<InterpErr>> {
+    fn visit_fn_decl_stmt(&mut self, stmt: &FnDeclStmt) -> InterpRes {
         let func = RtVal::new_fn(stmt, self.env.clone());
 
         self.env
             .borrow_mut()
-            .declare_var(stmt.name.clone(), func)
+            .declare_var(stmt.name.clone(), func.into())
             .map_err(|_| {
                 PhyResult::new(
                     InterpErr::VarDeclEnv(stmt.name.to_string()),
@@ -283,7 +285,7 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
         Ok(RtVal::new_null())
     }
 
-    fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Result<RtVal, PhyResult<InterpErr>> {
+    fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> InterpRes {
         let mut value = RtVal::new_null();
 
         if let Some(v) = &stmt.value {
@@ -293,7 +295,12 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
         Err(PhyResult::new(InterpErr::Return(value), None))
     }
     
-    fn visit_struct_stmt(&mut self, stmt: &StructStmt) -> Result<RtVal, PhyResult<InterpErr>> {
+    fn visit_struct_stmt(&mut self, stmt: &StructStmt) -> InterpRes {
+        let mut methods: HashMap<EcoString, Function> = HashMap::new();
+        stmt.methods.iter().for_each(|m| {
+            methods.insert(m.name.clone(), Function::new(m, self.env.clone()));
+        });
+
         // Two steps: declaring and assigning. Allow the struct to reference itself
         // in its methods
         self.env
@@ -305,17 +312,22 @@ impl VisitStmt<RtVal, InterpErr> for Interpreter {
                     Some(stmt.loc.clone()),
                 )
             })?;
-        
-        let mut methods: HashMap<EcoString, Function> = HashMap::new();
-        stmt.methods.iter().for_each(|m| {
-            methods.insert(m.name.clone(), Function::new(m, self.env.clone()));
-        });
 
-        let struct_val = RtVal::new_struct(stmt, methods);
+        let mut fields: HashMap<EcoString, Rc<RefCell<RtVal>>> = HashMap::new();
+        for f in &stmt.fields {
+            let value = match &f.value {
+                Some(v) => v.accept(self)?,
+                None => RtVal::new_null(),
+            };
+
+            fields.insert(f.name.clone(), value);
+        }
+
+        let struct_val = RtVal::new_struct(stmt, fields, methods);
 
         self.env
             .borrow_mut()
-            .assign(stmt.name.clone(), struct_val)
+            .assign(stmt.name.clone(), Rc::new(RefCell::new(struct_val.clone())))
             .map_err(|_| {
                 PhyResult::new(
                     InterpErr::VarDeclEnv(stmt.name.to_string()),
@@ -346,7 +358,7 @@ impl Interpreter {
     }
 }
 
-impl VisitExpr<RtVal, InterpErr> for Interpreter {
+impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
     fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> InterpRes {
         let lhs = expr.left.accept(self)?;
         if lhs == RtVal::new_null() {
@@ -364,8 +376,10 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
             ));
         }
 
-        match lhs.operate(&rhs, &expr.operator) {
-            Ok(res) => Ok(res),
+        let tmp = rhs.borrow();
+        let tmp2 = lhs.borrow();
+        match tmp2.operate(&*tmp, &expr.operator) {
+            Ok(res) => Ok(res.into()),
             Err(e) => Err(PhyResult::new(
                 InterpErr::OperationEvaluation(e.to_string()),
                 Some(expr.loc.clone()),
@@ -391,21 +405,21 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
     }
 
     fn visit_int_literal_expr(&mut self, expr: &IntLiteralExpr) -> InterpRes {
-        Ok(expr.value.into())
+        Ok(RtVal::new_int(expr.value).into())
     }
 
     fn visit_real_literal_expr(&mut self, expr: &RealLiteralExpr) -> InterpRes {
-        Ok(expr.value.into())
+        Ok(RtVal::new_real(expr.value).into())
     }
 
     fn visit_str_literal_expr(&mut self, expr: &StrLiteralExpr) -> InterpRes {
-        Ok(expr.value.clone().into())
+        Ok(RtVal::new_str(expr.value.clone()).into())
     }
 
     fn visit_identifier_expr(&mut self, expr: &IdentifierExpr) -> InterpRes {
         match expr.name.as_str() {
-            "true" => Ok(true.into()),
-            "false" => Ok(false.into()),
+            "true" => Ok(RtVal::new_bool(true).into()),
+            "false" => Ok(RtVal::new_bool(false).into()),
             "null" => Ok(RtVal::new_null()),
             _ => match self.locals.get(&expr.to_uuid()) {
                 Some(i) => self
@@ -415,7 +429,7 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
                     .map_err(|e| {
                         PhyResult::new(InterpErr::GetVarEnv(e.to_string()), Some(expr.loc.clone()))
                     }),
-                None => self.env.borrow().get_var(expr.name.clone()).map_err(|e| {
+                None => self.globals.borrow().get_var(expr.name.clone()).map_err(|e| {
                     PhyResult::new(InterpErr::GetVarEnv(e.to_string()), Some(expr.loc.clone()))
                 }),
             },
@@ -425,7 +439,7 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> InterpRes {
         let value = expr.right.accept(self)?;
 
-        match (&value, expr.operator.as_str()) {
+        match (&*value.borrow(), expr.operator.as_str()) {
             (RtVal::IntVal(..) | RtVal::RealVal(..), "!") => {
                 return Err(PhyResult::new(
                     InterpErr::BangOpOnNonBool,
@@ -441,7 +455,7 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
             _ => {}
         }
 
-        value.negate().map_err(|e| {
+        value.borrow_mut().negate().map_err(|e| {
             PhyResult::new(InterpErr::Negation(e.to_string()), Some(expr.loc.clone()))
         })?;
 
@@ -453,9 +467,9 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
         let op = expr.operator.as_str();
 
         if op == "or" {
-            match &left {
+            match &*left.clone().borrow() {
                 RtVal::BoolVal(b) => {
-                    if b.borrow().value {
+                    if b.value {
                         return Ok(left);
                     }
                 }
@@ -467,9 +481,9 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
                 }
             }
         } else if op == "and" {
-            match &left {
+            match &*left.clone().borrow() {
                 RtVal::BoolVal(b) => {
-                    if !b.borrow().value {
+                    if !b.value {
                         return Ok(left);
                     }
                 }
@@ -488,12 +502,14 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
     fn visit_call_expr(&mut self, expr: &CallExpr) -> InterpRes {
         let callee = expr.callee.accept(self)?;
 
-        let mut args: Vec<RtVal> = vec![];
+        let mut args: Vec<Rc<RefCell<RtVal>>> = vec![];
         for a in &expr.args {
             args.push(a.accept(self)?);
         }
 
-        let callable: Box<dyn Callable> = match callee {
+        let tmp = &*callee.borrow();
+
+        let callable: Box<&dyn Callable> = match tmp {
             RtVal::FuncVal(f) => Box::new(f),
             RtVal::NativeFnVal(f) => Box::new(f),
             RtVal::StructVal(s) => Box::new(s),
@@ -512,17 +528,17 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
         })
     }
     
-    // FIXME: 
-    fn visit_get_expr(&mut self, expr: &GetExpr) -> Result<RtVal, PhyResult<InterpErr>> {
+    fn visit_get_expr(&mut self, expr: &GetExpr) -> InterpRes {
         let obj = expr.object.accept(self)?;
+        let tmp = &*obj.borrow();
 
-        if let RtVal::InstanceVal(inst) = obj {
+        if let RtVal::InstanceVal(inst) = tmp {
             // Field
-            if let Some(v) = inst.borrow().fields.get(&expr.name) {
-                Ok(v.clone())
+            if let Some(v) = inst.fields.get(&expr.name) {
+                Ok(v.clone().into())
             // Methods
-            } else if let Some(m) = inst.borrow().strukt.borrow().methods.get(&expr.name) {
-                Ok(RtVal::FuncVal(m.clone()))
+            } else if let Some(m) = inst.strukt.borrow().methods.get(&expr.name) {
+                Ok(m.wrap_bind(obj.clone()))
             } else {
                 Err(PhyResult::new(InterpErr::InexistantField(expr.name.clone()), Some(expr.loc.clone())))
             }
@@ -531,15 +547,15 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
         }
     }
     
-    fn visit_set_expr(&mut self, expr: &SetExpr) -> Result<RtVal, PhyResult<InterpErr>> {
-        let object = expr.object.accept(self)?;
+    fn visit_set_expr(&mut self, expr: &SetExpr) -> InterpRes {
+        let obj = expr.object.accept(self)?;
+        let mut tmp = obj.borrow_mut();
 
-        match object {
+        match &mut *tmp {
             RtVal::InstanceVal(inst) => {
                 let val = expr.value.accept(self)?;
 
-                inst.borrow_mut()
-                    .set(expr.name.clone(), val.clone())
+                inst.set(expr.name.clone(), val.clone())
                     .map_err(|_| PhyResult::new(InterpErr::InexistantField(expr.name.clone()), Some(expr.loc.clone())))?;
 
                 Ok(val)
@@ -547,25 +563,39 @@ impl VisitExpr<RtVal, InterpErr> for Interpreter {
             _ => Err(PhyResult::new(InterpErr::NonInstPropAccess, Some(expr.loc.clone())))
         }
     }
+    
+    fn visit_self_expr(&mut self, expr: &SelfExpr) -> Result<Rc<RefCell<RtVal>>, PhyResult<InterpErr>> {
+        self.env.borrow()
+            .get_var(expr.name.clone())
+            .map_err(|e| {
+                    PhyResult::new(InterpErr::GetVarEnv(e.to_string()), Some(expr.loc.clone()))
+            })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use ecow::EcoString;
 
-    use crate::{interpreter::InterpErr, utils::lex_parse_interp};
+    use crate::{interpreter::InterpErr, utils::lex_parse_resolve_interp};
 
     #[test]
     fn interp_literals() {
         let code = "1";
-        assert_eq!(lex_parse_interp(code).unwrap(), 1.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            1.into()
+        );
 
         let code = "-45.";
-        assert_eq!(lex_parse_interp(code).unwrap(), (-45f64).into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            (-45f64).into()
+        );
 
         let code = "\"hello world!\"";
         assert_eq!(
-            lex_parse_interp(code).unwrap(),
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
             EcoString::from("hello world!").into()
         );
     }
@@ -573,45 +603,54 @@ mod tests {
     #[test]
     fn interp_binop() {
         let code = "1 +2";
-        assert_eq!(lex_parse_interp(code).unwrap(), 3.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            3.into()
+        );
 
         let code = "1. + -2 *24";
-        assert_eq!(lex_parse_interp(code).unwrap(), (-47f64).into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            (-47f64).into()
+        );
 
         let code = "5 + (6 * (2+3)) - (((6)))";
-        assert_eq!(lex_parse_interp(code).unwrap(), 29.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            29.into()
+        );
     }
 
     #[test]
     fn interp_str_op() {
         let code = "\"foo\" * 4";
         assert_eq!(
-            lex_parse_interp(code).unwrap(),
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
             EcoString::from("foofoofoofoo").into()
         );
 
         let code = "4 * \"foo\"";
         assert_eq!(
-            lex_parse_interp(code).unwrap(),
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
             EcoString::from("foofoofoofoo").into()
         );
 
         let code = "\"foo\" + \" \" + \"bar\"";
         assert_eq!(
-            lex_parse_interp(code).unwrap(),
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
             EcoString::from("foo bar").into()
         );
 
         // Errors
         let code = "\"foo\" * 3.5";
         matches!(
-            lex_parse_interp(code).err().unwrap().err,
+            lex_parse_resolve_interp(code).err().unwrap().err,
             InterpErr::OperationEvaluation { .. }
         );
 
         let code = "\"foo\" + 56";
         matches!(
-            lex_parse_interp(code).err().unwrap().err,
+            lex_parse_resolve_interp(code).err().unwrap().err,
             InterpErr::OperationEvaluation { .. }
         );
     }
@@ -619,27 +658,39 @@ mod tests {
     #[test]
     fn interp_negation() {
         let code = "-3";
-        assert_eq!(lex_parse_interp(code).unwrap(), (-3).into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            (-3).into()
+        );
 
         let code = "-3.";
-        assert_eq!(lex_parse_interp(code).unwrap(), (-3f64).into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            (-3f64).into()
+        );
 
         let code = "!true";
-        assert_eq!(lex_parse_interp(code).unwrap(), false.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            false.into()
+        );
 
         let code = "!false";
-        assert_eq!(lex_parse_interp(code).unwrap(), true.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            true.into()
+        );
 
         // Errors
         let code = "- \"foo\"";
         assert_eq!(
-            lex_parse_interp(code).err().unwrap().err,
+            lex_parse_resolve_interp(code).err().unwrap().err,
             InterpErr::NegateNonNumeric
         );
 
         let code = "!8";
         assert_eq!(
-            lex_parse_interp(code).err().unwrap().err,
+            lex_parse_resolve_interp(code).err().unwrap().err,
             InterpErr::BangOpOnNonBool
         );
     }
@@ -648,24 +699,30 @@ mod tests {
     fn variable() {
         let code = "var a = -8
 a";
-        assert_eq!(lex_parse_interp(code).unwrap(), (-8).into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            (-8).into()
+        );
 
         let code = "var a = -8
 a = 4 + a*2
 a";
-        assert_eq!(lex_parse_interp(code).unwrap(), (-12).into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            (-12).into()
+        );
 
         // Errors
         let code = "a = 5";
         assert!(matches!(
-            lex_parse_interp(code).err().unwrap().err,
+            lex_parse_resolve_interp(code).err().unwrap().err,
             InterpErr::AssignEnv { .. }
         ));
 
         let code = "var b
 3 + b";
         assert_eq!(
-            lex_parse_interp(code).err().unwrap().err,
+            lex_parse_resolve_interp(code).err().unwrap().err,
             InterpErr::UninitializedValue
         );
     }
@@ -679,7 +736,10 @@ a";
     a = b
 }
 a";
-        assert_eq!(lex_parse_interp(code).unwrap(), 1.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            1.into()
+        );
     }
 
     #[test]
@@ -690,7 +750,10 @@ var b = 0
 if a { b = 1 } else {}
 b
 ";
-        assert_eq!(lex_parse_interp(code).unwrap(), 1.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            1.into()
+        );
 
         let code = "
 var a = false
@@ -698,7 +761,10 @@ var b = 0
 if a { b = 8 } else { b = 1 }
 b
 ";
-        assert_eq!(lex_parse_interp(code).unwrap(), 1.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            1.into()
+        );
 
         let code = "
 var a = false
@@ -706,14 +772,19 @@ var b = 42
 if a {} else {}
 b
 ";
-        assert_eq!(lex_parse_interp(code).unwrap(), 42.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            42.into()
+        );
 
         // Errors
         let code = "
 var a = 5
 if a {} else {}
 ";
-        assert!(lex_parse_interp(code).err().unwrap().err == InterpErr::NonBoolIfCond);
+        assert!(
+            lex_parse_resolve_interp(code).err().unwrap().err == InterpErr::NonBoolIfCond
+        );
     }
 
     #[test]
@@ -724,7 +795,10 @@ var b = 0
 if a and b == 0 { b = 1 }
 b
 ";
-        assert_eq!(lex_parse_interp(code).unwrap(), 1.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            1.into()
+        );
 
         let code = "
 var a = true
@@ -732,7 +806,10 @@ var b = 0
 if a and 2 + 2 == 5 { } else { b = 1 }
 b
 ";
-        assert_eq!(lex_parse_interp(code).unwrap(), 1.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            1.into()
+        );
 
         let code = "
 var a = true
@@ -740,7 +817,10 @@ var b = 0
 if a or false { b = 1 }
 b
 ";
-        assert_eq!(lex_parse_interp(code).unwrap(), 1.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            1.into()
+        );
 
         let code = "
 var a = false
@@ -748,7 +828,10 @@ var b = 0
 if a or false {} else { b = 1 }
 b
 ";
-        assert_eq!(lex_parse_interp(code).unwrap(), 1.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            1.into()
+        );
 
         let code = "
 var a = true
@@ -756,7 +839,10 @@ var b = 42
 if a and b == 41 or b == 42 and false {} else { b = 45 }
 b
 ";
-        assert_eq!(lex_parse_interp(code).unwrap(), 45.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            45.into()
+        );
     }
 
     #[test]
@@ -768,7 +854,10 @@ while a < 5 {
 }
 a
 ";
-        assert_eq!(lex_parse_interp(code).unwrap(), 5.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            5.into()
+        );
     }
 
     #[test]
@@ -778,14 +867,20 @@ var a = 0
 for i in 5 { a = a + i }
 a
 ";
-        assert_eq!(lex_parse_interp(code).unwrap(), 10.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            10.into()
+        );
 
         let code = "
 var a = 0
 for i in 5..10 { a = a + i }
 a
 ";
-        assert_eq!(lex_parse_interp(code).unwrap(), 35.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            35.into()
+        );
     }
 
     #[test]
@@ -798,7 +893,10 @@ fn add(a, b) {
 add(5, 6)
 res
 ";
-        assert_eq!(lex_parse_interp(code).unwrap(), 11.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            11.into()
+        );
     }
 
     #[test]
@@ -808,7 +906,10 @@ fn add(a, b) { return a+b }
 var c = add
 c(1, 2)
 ";
-        assert_eq!(lex_parse_interp(code).unwrap(), 3.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            3.into()
+        );
     }
 
     #[test]
@@ -822,7 +923,10 @@ fn fib(n) {
 
 fib(20)
 ";
-        assert_eq!(lex_parse_interp(code).unwrap(), 6765.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            6765.into()
+        );
     }
 
     #[test]
@@ -844,6 +948,32 @@ a = counter()
 a = counter()
 a
 ";
-        assert_eq!(lex_parse_interp(code).unwrap(), 2.into());
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            2.into()
+        );
+    }
+
+    #[test]
+    fn block_closure() {
+        let code = "
+var x = 4
+var a 
+{
+  fn add() {
+    return x + 1
+  }
+
+  print add()
+  var x=2
+  a = add()
+}
+
+a
+";
+        assert_eq!(
+            *lex_parse_resolve_interp(code).unwrap().borrow(),
+            5.into()
+        );
     }
 }

@@ -522,4 +522,8 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
     fn visit_set_expr(&mut self, expr: &SetExpr) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
         todo!()
     }
+    
+    fn visit_self_expr(&mut self, expr: &crate::ast::expr::SelfExpr) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
+        todo!()
+    }
 }

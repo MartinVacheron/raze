@@ -9,7 +9,7 @@ use std::{
 };
 use thiserror::Error;
 
-use crate::values::RtVal;
+use crate::values::{RtVal, Struct};
 
 // -----------------
 //  Error managment
@@ -31,7 +31,7 @@ type EnvWrapper = Rc<RefCell<Env>>;
 #[derive(Debug, Default)]
 pub struct Env {
     pub enclosing: Option<Rc<RefCell<Env>>>,
-    pub vars: HashMap<EcoString, RtVal>,
+    pub vars: HashMap<EcoString, Rc<RefCell<RtVal>>>,
 }
 
 impl Env {
@@ -42,7 +42,7 @@ impl Env {
         }
     }
 
-    pub fn declare_var(&mut self, var_name: EcoString, value: RtVal) -> Result<(), EnvErr> {
+    pub fn declare_var(&mut self, var_name: EcoString, value: Rc<RefCell<RtVal>>) -> Result<(), EnvErr> {
         if let Vacant(v) = self.vars.entry(var_name.clone()) {
             v.insert(value);
         } else {
@@ -52,7 +52,7 @@ impl Env {
         Ok(())
     }
 
-    pub fn get_var(&self, var_name: EcoString) -> Result<RtVal, EnvErr> {
+    pub fn get_var(&self, var_name: EcoString) -> Result<Rc<RefCell<RtVal>>, EnvErr> {
         match self.vars.get(&var_name) {
             Some(v) => Ok(v.clone()),
             None => {
@@ -65,16 +65,23 @@ impl Env {
         }
     }
 
-    pub fn get_var_at(&self, var_name: EcoString, depth: &usize) -> Result<RtVal, EnvErr> {
+    pub fn get_var_at(&self, var_name: EcoString, depth: &usize) -> Result<Rc<RefCell<RtVal>>, EnvErr> {
         match depth {
             0 => self.get_var(var_name),
             _ => self.get_var_at(var_name, &(depth - 1))
         }
     }
 
-    pub fn assign(&mut self, var_name: EcoString, value: RtVal) -> Result<(), EnvErr> {
+    pub fn assign(&mut self, var_name: EcoString, value: Rc<RefCell<RtVal>>) -> Result<(), EnvErr> {
+        // println!("Regitering {}", var_name);
+        // println!("Value to register: {:?}", value);
+        // println!("Actual vars: {:?}", self.vars);
+
         if let Occupied(mut v) = self.vars.entry(var_name.clone()) {
+            // println!("Lets go for insertion");
             v.insert(value);
+            // println!("Inserted, vars: {:#?}", v);
+
             Ok(())
         } else if let Some(enclo) = &self.enclosing {
             enclo.borrow_mut().assign(var_name, value)
@@ -83,7 +90,7 @@ impl Env {
         }
     }
 
-    pub fn assign_at(&mut self, var_name: EcoString, value: RtVal, depth: &usize) -> Result<(), EnvErr> {
+    pub fn assign_at(&mut self, var_name: EcoString, value: Rc<RefCell<RtVal>>, depth: &usize) -> Result<(), EnvErr> {
         match depth {
             0 => self.assign(var_name, value),
             _ => self.assign_at(var_name, value, &(depth - 1))
@@ -114,8 +121,8 @@ mod tests {
     #[test]
     fn get_var() {
         let mut env = Env::default();
-        assert!(env.declare_var(EcoString::from("foo"), 3.into()).is_ok());
-        assert_eq!(env.get_var(EcoString::from("foo")).unwrap(), 3.into());
+        assert!(env.declare_var(EcoString::from("foo"), RtVal::new_int(3).into()).is_ok());
+        assert_eq!(env.get_var(EcoString::from("foo")).unwrap(), RtVal::new_int(3).into());
         assert!(matches!(
             env.get_var(EcoString::from("bar")).err().unwrap(),
             EnvErr::UndeclaredVar { .. }

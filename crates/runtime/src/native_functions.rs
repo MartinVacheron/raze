@@ -1,10 +1,10 @@
 use colored::*;
 use ecow::EcoString;
-use std::fmt;
+use std::{cell::RefCell, fmt, rc::Rc};
 use thiserror::Error;
 
 use crate::{
-    callable::{ CallRes, Callable},
+    callable::{CallRes, Callable},
     interpreter::Interpreter,
     values::RtVal,
 };
@@ -28,7 +28,7 @@ impl PhyReport for NativeFnErr {
 pub struct PhyNativeFn {
     pub name: EcoString,
     pub arity: usize,
-    pub func: fn(&mut Interpreter, Vec<RtVal>) -> CallRes,
+    pub func: fn(&mut Interpreter, Vec<Rc<RefCell<RtVal>>>) -> CallRes,
 }
 
 impl Callable for PhyNativeFn {
@@ -36,7 +36,7 @@ impl Callable for PhyNativeFn {
         self.arity
     }
 
-    fn call(&self, interp: &mut Interpreter, args: Vec<RtVal>) -> CallRes {
+    fn call(&self, interp: &mut Interpreter, args: Vec<Rc<RefCell<RtVal>>>) -> CallRes {
         (self.func)(interp, args)
     }
 }

@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 frontend = { path = "../frontend" }
 tools = { path = "../tools" }
+resolver = { path = "../resolver" }
 colored = { workspace = true }
 ecow = { workspace = true }
 thiserror = { workspace = true }

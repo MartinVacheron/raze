@@ -20,6 +20,7 @@ pub enum Expr {
     Call(CallExpr),
     Get(GetExpr),
     Set(SetExpr),
+    Selff(SelfExpr),
 }
 
 impl Display for Expr {
@@ -37,6 +38,7 @@ impl Display for Expr {
             Expr::Call(e) => write!(f, "{}: {:?}", e.callee, e.args),
             Expr::Get(e) => write!(f, "{}: {}", e.object, e.name),
             Expr::Set(e) => write!(f, "{}: {} {}", e.object, e.name, e.value),
+            Expr::Selff(_) => write!(f, "self"),
         }
     }
 }
@@ -56,6 +58,7 @@ impl Expr {
             Self::Call(c) => c.loc.clone(),
             Self::Get(g) => g.loc.clone(),
             Self::Set(s) => s.loc.clone(),
+            Self::Selff(s) => s.loc.clone(),
         }
     }
 }
@@ -174,6 +177,26 @@ pub struct SetExpr {
     pub loc: Loc,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct SelfExpr {
+    pub name: EcoString,
+    pub loc: Loc,
+}
+
+impl ToUuid for SelfExpr {
+    fn to_uuid(&self) -> String {
+        let mut hasher = Sha256::new();
+
+        hasher.update(self.name.as_bytes());
+        hasher.update(self.loc.start.to_be_bytes());
+        hasher.update(self.loc.end.to_be_bytes());
+
+        let res = hasher.finalize();
+
+        format!("{:x}", res)
+    }
+}
+
 impl Expr {
     pub fn accept<T, U: PhyReport>(
         &self,
@@ -192,6 +215,7 @@ impl Expr {
             Expr::Call(e) => visitor.visit_call_expr(e),
             Expr::Get(e) => visitor.visit_get_expr(e),
             Expr::Set(e) => visitor.visit_set_expr(e),
+            Expr::Selff(e) => visitor.visit_self_expr(e),
         }
     }
 }
@@ -209,6 +233,7 @@ pub trait VisitExpr<T, U: PhyReport> {
     fn visit_call_expr(&mut self, expr: &CallExpr) -> Result<T, PhyResult<U>>;
     fn visit_get_expr(&mut self, expr: &GetExpr) -> Result<T, PhyResult<U>>;
     fn visit_set_expr(&mut self, expr: &SetExpr) -> Result<T, PhyResult<U>>;
+    fn visit_self_expr(&mut self, expr: &SelfExpr) -> Result<T, PhyResult<U>>;
 }
 
 // Into

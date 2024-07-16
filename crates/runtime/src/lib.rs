@@ -6,5 +6,6 @@ pub mod native_functions;
 
 mod utils;
 
+extern crate resolver;
 extern crate frontend;
 extern crate tools;

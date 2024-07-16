@@ -5,18 +5,19 @@ use ecow::EcoString;
 use thiserror::Error;
 
 use crate::ast::expr::{
-    AssignExpr, BinaryExpr, CallExpr, Expr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, SetExpr, StrLiteralExpr, UnaryExpr
+    AssignExpr, BinaryExpr, CallExpr, Expr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr,
+    LogicalExpr, RealLiteralExpr, SelfExpr, SetExpr, StrLiteralExpr, UnaryExpr,
+};
+use crate::ast::stmt::{
+    BlockStmt, ExprStmt, FnDeclStmt, ForRange, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt,
+    StructMember, StructStmt, VarDeclStmt, WhileStmt,
 };
 use crate::lexer::{Token, TokenKind};
-use crate::ast::stmt::{
-    BlockStmt, ExprStmt, FnDeclStmt, ForRange, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StructStmt, VarDeclStmt, WhileStmt
-};
-use tools::results::{PhyReport, PhyResult, Loc};
-
+use tools::results::{Loc, PhyReport, PhyResult};
 
 // Children mods
-pub mod utils;
 pub mod test_parser;
+pub mod utils;
 
 // ----------------
 // Error managment
@@ -161,6 +162,9 @@ pub enum ParserErr {
 
     #[error("missing '}}' after structure body")]
     MissingStructCloseBrace,
+
+    #[error("member declaration after methods")]
+    MemberDeclAfterFn,
 
     // Property
     #[error("missing property name after '.'")]
@@ -417,7 +421,11 @@ impl<'a> Parser<'a> {
             .map_err(|_| self.trigger_error(ParserErr::MissingVarNameFor, true))?
             .value;
 
-        let placeholder = VarDeclStmt { name: var_name, value: None, loc: self.get_loc() };
+        let placeholder = VarDeclStmt {
+            name: var_name,
+            value: None,
+            loc: self.get_loc(),
+        };
 
         self.expect(TokenKind::In)
             .map_err(|_| self.trigger_error(ParserErr::MissingInFor, true))?;
@@ -425,10 +433,9 @@ impl<'a> Parser<'a> {
         self.is_at_brace_or_end_of(ParserErr::MissingForRange)?;
 
         if self.is_at(TokenKind::DotDot) {
-            return Err(self.trigger_error(ParserErr::MissingStartForRange, true))
-        }
-        else if self.is_at(TokenKind::Minus) {
-            return Err(self.trigger_error(ParserErr::NegativeForRange, true))
+            return Err(self.trigger_error(ParserErr::MissingStartForRange, true));
+        } else if self.is_at(TokenKind::Minus) {
+            return Err(self.trigger_error(ParserErr::NegativeForRange, true));
         }
 
         let start = self
@@ -449,17 +456,17 @@ impl<'a> Parser<'a> {
                     .map_err(|_| self.trigger_error(ParserErr::NonIntForRange, true))?
                     .value
                     .parse::<i64>()
-                    .map_err(|_| self.trigger_error(ParserErr::ParsingInt, true))?
+                    .map_err(|_| self.trigger_error(ParserErr::ParsingInt, true))?,
             );
 
             if Some(start) > end {
-                return Err(self.trigger_error(ParserErr::LesserEndForRange, true))
+                return Err(self.trigger_error(ParserErr::LesserEndForRange, true));
             }
         }
 
         self.skip_new_lines();
         if !self.is_at(TokenKind::OpenBrace) {
-            return Err(self.trigger_error(ParserErr::MissingForOpenBrace, true))
+            return Err(self.trigger_error(ParserErr::MissingForOpenBrace, true));
         }
 
         let body = Box::new(self.parse_stmt()?);
@@ -479,7 +486,8 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_fn_decl(&mut self, kind: FnKind) -> Result<FnDeclStmt, PhyResParser> {
-        let name = self.expect(TokenKind::Identifier)
+        let name = self
+            .expect(TokenKind::Identifier)
             .map_err(|_| self.trigger_error(ParserErr::MissingFnName, true))?
             .value;
 
@@ -492,12 +500,13 @@ impl<'a> Parser<'a> {
         if !self.is_at(TokenKind::CloseParen) {
             loop {
                 if params.len() >= 255 {
-                    return Err(self.trigger_error(ParserErr::MaxFnArgs, true))
+                    return Err(self.trigger_error(ParserErr::MaxFnArgs, true));
                 }
 
-                params.push(self.expect(TokenKind::Identifier)
-                    .map_err(|_| self.trigger_error(ParserErr::WrongFnArgType, true))?
-                    .value
+                params.push(
+                    self.expect(TokenKind::Identifier)
+                        .map_err(|_| self.trigger_error(ParserErr::WrongFnArgType, true))?
+                        .value,
                 );
 
                 self.skip_new_lines();
@@ -505,12 +514,14 @@ impl<'a> Parser<'a> {
                 if self.is_at(TokenKind::Comma) {
                     let _ = self.eat();
                     self.skip_new_lines();
-                    
-                    if self.is_at(TokenKind::CloseParen) { break }
+
+                    if self.is_at(TokenKind::CloseParen) {
+                        break;
+                    }
                 } else if !self.is_at(TokenKind::CloseParen) {
-                    return Err(self.trigger_error(ParserErr::MissingArgsComma, true))
+                    return Err(self.trigger_error(ParserErr::MissingArgsComma, true));
                 } else {
-                    break
+                    break;
                 }
             }
         }
@@ -519,9 +530,9 @@ impl<'a> Parser<'a> {
         self.skip_new_lines();
 
         if !self.is_at(TokenKind::OpenBrace) {
-            return Err(self.trigger_error(ParserErr::MissingFnOpenBrace, true))
+            return Err(self.trigger_error(ParserErr::MissingFnOpenBrace, true));
         }
-        
+
         self.eat()?;
         self.skip_new_lines();
 
@@ -542,29 +553,53 @@ impl<'a> Parser<'a> {
         if !self.is_at(TokenKind::NewLine) {
             value = Some(self.parse_expr()?);
         }
-        
-        Ok(Stmt::Return(ReturnStmt { value, loc: self.get_loc() }))
+
+        Ok(Stmt::Return(ReturnStmt {
+            value,
+            loc: self.get_loc(),
+        }))
     }
 
     fn parse_struct_stmt(&mut self) -> ParserStmtRes {
         self.eat()?;
 
-        let name = self.expect(TokenKind::Identifier)
+        let name = self
+            .expect(TokenKind::Identifier)
             .map_err(|_| self.trigger_error(ParserErr::MissingStructName, true))?
             .value;
 
         self.expect(TokenKind::OpenBrace)
             .map_err(|_| self.trigger_error(ParserErr::MissingStructOpenBrace, true))?;
 
-        // FIXME: Bancale le check sur le keyword...
-        let mut methods: Vec<FnDeclStmt> = vec![];
-        while !self.is_at(TokenKind::CloseBrace) && !self.eof() {
-            self.skip_new_lines();
-            
-            if self.is_at(TokenKind::Fn) {
+        self.skip_new_lines();
+
+        // Fields parsing
+        let mut fields: Vec<StructMember> = vec![];
+        while !self.is_at(TokenKind::CloseBrace) && !self.eof() && self.is_at(TokenKind::Identifier)
+        {
+            let name = self.eat()?.value.clone();
+
+            let mut value: Option<Expr> = None;
+            if self.is_at(TokenKind::Equal) {
                 self.eat()?;
+                value = Some(self.parse_primary()?);
             }
+
+            fields.push(StructMember::new(name, false, value));
+
+            self.skip_new_lines();
+        }
+
+        let mut methods: Vec<FnDeclStmt> = vec![];
+        while !self.is_at(TokenKind::CloseBrace) && !self.eof() && self.is_at(TokenKind::Fn) {
+            self.eat()?;
             methods.push(self.parse_fn_decl(FnKind::Method)?);
+
+            self.skip_new_lines();
+        }
+
+        if self.is_at(TokenKind::Identifier) {
+            return Err(self.trigger_error(ParserErr::MemberDeclAfterFn, true))
         }
 
         self.expect(TokenKind::CloseBrace)
@@ -572,6 +607,7 @@ impl<'a> Parser<'a> {
 
         Ok(Stmt::Struct(StructStmt {
             name,
+            fields,
             methods,
             loc: self.get_loc(),
         }))
@@ -599,25 +635,21 @@ impl<'a> Parser<'a> {
                 let value = Box::new(self.parse_assign()?);
 
                 match assigne {
-                    Expr::Identifier(e) => {
-                        Ok(Expr::Assign(AssignExpr {
-                            name: e.name.clone(),
-                            value,
-                            loc: self.get_loc(),
-                        }))
-                    }
-                    Expr::Get(e) => {
-                        Ok(Expr::Set(SetExpr {
-                            object: e.object,
-                            name: e.name,
-                            value,
-                            loc: self.get_loc(),
-                        }))
-                    }
-                    _ => Err(self.trigger_error(ParserErr::InvalidAssignTarget, true))
+                    Expr::Identifier(e) => Ok(Expr::Assign(AssignExpr {
+                        name: e.name.clone(),
+                        value,
+                        loc: self.get_loc(),
+                    })),
+                    Expr::Get(e) => Ok(Expr::Set(SetExpr {
+                        object: e.object,
+                        name: e.name,
+                        value,
+                        loc: self.get_loc(),
+                    })),
+                    _ => Err(self.trigger_error(ParserErr::InvalidAssignTarget, true)),
                 }
             }
-            _ => Ok(assigne)
+            _ => Ok(assigne),
         }
     }
 
@@ -631,7 +663,7 @@ impl<'a> Parser<'a> {
                 || self.is_at(TokenKind::Eof)
                 || self.is_at(TokenKind::NewLine)
             {
-                return Err(self.trigger_error(ParserErr::OrWithNoCond, true))
+                return Err(self.trigger_error(ParserErr::OrWithNoCond, true));
             }
 
             let right = self.parse_and()?;
@@ -641,7 +673,7 @@ impl<'a> Parser<'a> {
                 operator: EcoString::from("or"),
                 right: Box::new(right),
                 loc: self.get_loc(),
-            }))
+            }));
         }
 
         Ok(left)
@@ -776,7 +808,8 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::Dot => {
                     self.eat()?;
-                    let prop_name = self.expect(TokenKind::Identifier)
+                    let prop_name = self
+                        .expect(TokenKind::Identifier)
                         .map_err(|_| self.trigger_error(ParserErr::MissingPropName, true))?
                         .value;
 
@@ -786,7 +819,7 @@ impl<'a> Parser<'a> {
                         loc: self.get_loc(),
                     })
                 }
-                _ => break
+                _ => break,
             }
         }
 
@@ -799,7 +832,7 @@ impl<'a> Parser<'a> {
         if !self.is_at(TokenKind::CloseParen) {
             loop {
                 if args.len() >= 255 {
-                    return Err(self.trigger_error(ParserErr::TooManyCallArgs, true))
+                    return Err(self.trigger_error(ParserErr::TooManyCallArgs, true));
                 }
 
                 args.push(self.parse_expr()?);
@@ -809,13 +842,13 @@ impl<'a> Parser<'a> {
                     let _ = self.eat();
                     self.skip_new_lines();
 
-                    if self.is_at(TokenKind::CloseParen) { break }
-                }
-                else if !self.is_at(TokenKind::CloseParen) {
-                    return Err(self.trigger_error(ParserErr::MissingArgsComma, true))
-                }
-                else {
-                    break
+                    if self.is_at(TokenKind::CloseParen) {
+                        break;
+                    }
+                } else if !self.is_at(TokenKind::CloseParen) {
+                    return Err(self.trigger_error(ParserErr::MissingArgsComma, true));
+                } else {
+                    break;
                 }
             }
 
@@ -828,7 +861,7 @@ impl<'a> Parser<'a> {
         Ok(Expr::Call(CallExpr {
             callee: Box::new(callee),
             args,
-            loc: self.get_loc()
+            loc: self.get_loc(),
         }))
     }
 
@@ -844,6 +877,10 @@ impl<'a> Parser<'a> {
             TokenKind::Real => self.parse_real_literal(),
             TokenKind::String => self.parse_str_literal(),
             TokenKind::OpenParen => self.parse_grouping(),
+            TokenKind::SelfKw => Ok(Expr::Selff(SelfExpr {
+                name: "self".into(),
+                loc: self.get_loc(),
+            })),
             TokenKind::NewLine => Err(self.trigger_error(ParserErr::UnexpectedEol, false)),
             tk => {
                 match tk {
@@ -1053,9 +1090,9 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use tools::results::Loc;
-    use crate::parser::{ParserErr, utils::*};
+    use crate::parser::{utils::*, ParserErr};
     use ecow::EcoString;
+    use tools::results::Loc;
 
     #[test]
     fn parse_primary() {
@@ -1475,17 +1512,11 @@ for foo_b4r in 5..10
         let infos = get_stmt_nodes_infos(code);
         let for_stmt = &infos.for_stmt[0];
         assert_eq!(for_stmt.placeholder, EcoString::from("a"));
-        assert_eq!(
-            for_stmt.range,
-            (5, None)
-        );
+        assert_eq!(for_stmt.range, (5, None));
 
         let for_stmt = &infos.for_stmt[1];
         assert_eq!(for_stmt.placeholder, EcoString::from("foo_b4r"));
-        assert_eq!(
-            for_stmt.range,
-            (5, Some(10))
-        );
+        assert_eq!(for_stmt.range, (5, Some(10)));
 
         // Errors
         let code = "
@@ -1537,7 +1568,7 @@ c,
         assert_eq!(arg1.0.get_int_values()[0], &4);
         assert_eq!(arg1.1, EcoString::from("-"));
         assert_eq!(arg1.2.get_int_values()[0], &1);
-        
+
         // 2
         let call = &infos.expr.call[2];
         assert_eq!(call.callee.get_ident_values()[0], EcoString::from("foo"));
@@ -1573,7 +1604,10 @@ fn add(a, b,)
         // 1
         let decl = &infos.fn_decl[1];
         assert_eq!(decl.name, EcoString::from("add"));
-        assert_eq!(decl.params, vec![EcoString::from("a"), EcoString::from("b")]);
+        assert_eq!(
+            decl.params,
+            vec![EcoString::from("a"), EcoString::from("b")]
+        );
 
         assert_eq!(decl.body[0].print[0], String::from("a"));
 
@@ -1603,6 +1637,9 @@ return 4
         // 0
         let infos = get_stmt_nodes_infos(code);
         assert_eq!(&infos.return_stmt[0], &None);
-        assert_eq!(&infos.return_stmt[1].as_ref().unwrap().get_int_values()[0], &&4);
+        assert_eq!(
+            &infos.return_stmt[1].as_ref().unwrap().get_int_values()[0],
+            &&4
+        );
     }
 }
