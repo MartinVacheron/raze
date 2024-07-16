@@ -13,7 +13,7 @@ use crate::ast::stmt::{
     StructMember, StructStmt, VarDeclStmt, WhileStmt,
 };
 use crate::lexer::{Token, TokenKind};
-use tools::results::{Loc, PhyReport, PhyResult};
+use tools::results::{Loc, RevReport, RevResult};
 
 // Children mods
 pub mod test_parser;
@@ -178,20 +178,16 @@ pub enum ParserErr {
     ExpectedToken(String, String),
 }
 
-impl PhyReport for ParserErr {
+impl RevReport for ParserErr {
     fn get_err_msg(&self) -> String {
         format!("{} {}", "Parser error:".red(), self)
     }
 }
 
-pub(crate) type PhyResParser = PhyResult<ParserErr>;
-pub(crate) type ParserStmtRes = Result<Stmt, PhyResParser>;
-pub(crate) type ParserExprRes = Result<Expr, PhyResParser>;
+pub(crate) type RevResParser = RevResult<ParserErr>;
+pub(crate) type ParserStmtRes = Result<Stmt, RevResParser>;
+pub(crate) type ParserExprRes = Result<Expr, RevResParser>;
 
-enum FnKind {
-    Fn,
-    Method,
-}
 
 // ---------
 //  Parsing
@@ -209,11 +205,11 @@ pub struct Parser<'a> {
 //  Il faudrait faire une stack d'appel avec des localisations locales et
 //  remonter.
 impl<'a> Parser<'a> {
-    pub fn parse(&mut self, tokens: &'a [Token]) -> Result<Vec<Stmt>, Vec<PhyResParser>> {
+    pub fn parse(&mut self, tokens: &'a [Token]) -> Result<Vec<Stmt>, Vec<RevResParser>> {
         self.tokens = tokens;
 
         let mut stmts: Vec<Stmt> = vec![];
-        let mut errors: Vec<PhyResParser> = vec![];
+        let mut errors: Vec<RevResParser> = vec![];
 
         while !self.eof() {
             self.skip_new_lines();
@@ -293,7 +289,7 @@ impl<'a> Parser<'a> {
             TokenKind::If => self.parse_if_stmt(),
             TokenKind::While => self.parse_while_stmt(),
             TokenKind::For => self.parse_for_stmt(),
-            TokenKind::Fn => self.parse_fn_decl_stmt(FnKind::Fn),
+            TokenKind::Fn => self.parse_fn_decl_stmt(),
             TokenKind::Return => self.parse_return_stmt(),
             TokenKind::Struct => self.parse_struct_stmt(),
             _ => self.parse_expr_stmt(),
@@ -326,7 +322,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_block(&mut self) -> Result<Vec<Stmt>, PhyResParser> {
+    fn parse_block(&mut self) -> Result<Vec<Stmt>, RevResParser> {
         let mut stmts: Vec<Stmt> = vec![];
 
         while !self.is_at(TokenKind::CloseBrace) && !self.eof() {
@@ -479,13 +475,13 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_fn_decl_stmt(&mut self, kind: FnKind) -> ParserStmtRes {
+    fn parse_fn_decl_stmt(&mut self) -> ParserStmtRes {
         self.eat()?;
 
-        Ok(Stmt::FnDecl(self.parse_fn_decl(kind)?))
+        Ok(Stmt::FnDecl(self.parse_fn_decl()?))
     }
 
-    fn parse_fn_decl(&mut self, kind: FnKind) -> Result<FnDeclStmt, PhyResParser> {
+    fn parse_fn_decl(&mut self) -> Result<FnDeclStmt, RevResParser> {
         let name = self
             .expect(TokenKind::Identifier)
             .map_err(|_| self.trigger_error(ParserErr::MissingFnName, true))?
@@ -593,7 +589,7 @@ impl<'a> Parser<'a> {
         let mut methods: Vec<FnDeclStmt> = vec![];
         while !self.is_at(TokenKind::CloseBrace) && !self.eof() && self.is_at(TokenKind::Fn) {
             self.eat()?;
-            methods.push(self.parse_fn_decl(FnKind::Method)?);
+            methods.push(self.parse_fn_decl()?);
 
             self.skip_new_lines();
         }
@@ -934,7 +930,7 @@ impl<'a> Parser<'a> {
             Ok(expr) => expr,
             Err(e) => match e.err {
                 ParserErr::UnexpectedEof | ParserErr::UnexpectedEol => {
-                    return Err(PhyResult::new(
+                    return Err(RevResult::new(
                         ParserErr::ParenNeverClosed,
                         Some(self.get_loc()),
                     ))
@@ -944,7 +940,7 @@ impl<'a> Parser<'a> {
         };
 
         self.expect(TokenKind::CloseParen)
-            .map_err(|_| PhyResult::new(ParserErr::ParenNeverClosed, Some(self.get_loc())))?;
+            .map_err(|_| RevResult::new(ParserErr::ParenNeverClosed, Some(self.get_loc())))?;
 
         Ok(Expr::Grouping(GroupingExpr {
             expr: Box::new(expr),
@@ -956,9 +952,9 @@ impl<'a> Parser<'a> {
         self.tokens.get(self.current).unwrap()
     }
 
-    fn eat(&mut self) -> Result<&Token, PhyResParser> {
+    fn eat(&mut self) -> Result<&Token, RevResParser> {
         if self.eof() {
-            return Err(PhyResult::new(
+            return Err(RevResult::new(
                 ParserErr::UnexpectedEof,
                 Some(self.get_loc()),
             ));
@@ -968,26 +964,26 @@ impl<'a> Parser<'a> {
         Ok(self.prev())
     }
 
-    fn expect(&mut self, kind: TokenKind) -> Result<Token, PhyResParser> {
+    fn expect(&mut self, kind: TokenKind) -> Result<Token, RevResParser> {
         let tk = self.eat()?;
 
         match tk.kind == kind {
             true => Ok(self.prev().clone()),
-            false => Err(PhyResult::new(
+            false => Err(RevResult::new(
                 ParserErr::ExpectedToken(format!("{:?}", kind), format!("{:?}", tk.kind)),
                 Some(self.get_loc()),
             )),
         }
     }
 
-    fn expect_and_skip(&mut self, kind: TokenKind) -> Result<(), PhyResParser> {
+    fn expect_and_skip(&mut self, kind: TokenKind) -> Result<(), RevResParser> {
         self.expect(kind)?;
         self.skip_new_lines();
 
         Ok(())
     }
 
-    fn skip_expect_and_skip(&mut self, kind: TokenKind) -> Result<(), PhyResParser> {
+    fn skip_expect_and_skip(&mut self, kind: TokenKind) -> Result<(), RevResParser> {
         self.skip_new_lines();
         self.expect(kind)?;
         self.skip_new_lines();
@@ -1020,15 +1016,15 @@ impl<'a> Parser<'a> {
     // We dont have to activate the synchro each time, if the error occured
     // because we ate a '\n' that wasn't supposed to be here, we are already
     // past the error, we are on the new line. No need to synchronize
-    fn trigger_error(&mut self, err: ParserErr, synchro: bool) -> PhyResParser {
+    fn trigger_error(&mut self, err: ParserErr, synchro: bool) -> RevResParser {
         if synchro {
             self.synchronize();
         }
 
-        PhyResult::new(err, Some(self.get_loc()))
+        RevResult::new(err, Some(self.get_loc()))
     }
 
-    fn is_at_brace_or_end_of(&mut self, err: ParserErr) -> Result<(), PhyResParser> {
+    fn is_at_brace_or_end_of(&mut self, err: ParserErr) -> Result<(), RevResParser> {
         if self.is_at(TokenKind::OpenBrace)
             || self.is_at(TokenKind::Eof)
             || self.is_at(TokenKind::NewLine)
@@ -1039,7 +1035,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn is_not_at_brace_or_end_of(&mut self, err: ParserErr) -> Result<(), PhyResParser> {
+    fn is_not_at_brace_or_end_of(&mut self, err: ParserErr) -> Result<(), RevResParser> {
         if !self.is_at(TokenKind::OpenBrace)
             || self.is_at(TokenKind::Eof)
             || self.is_at(TokenKind::NewLine)

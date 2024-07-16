@@ -1,0 +1,4 @@
+struct Foo {}
+
+var foo = Foo()
+foo() // error: only functions and structures are callable

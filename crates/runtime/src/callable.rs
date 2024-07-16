@@ -2,12 +2,12 @@ use std::{cell::RefCell, rc::Rc};
 
 use colored::Colorize;
 use thiserror::Error;
-use tools::results::{PhyReport, PhyResult};
+use tools::results::{RevReport, RevResult};
 
 use crate::{interpreter::Interpreter, native_functions::NativeFnErr, values::RtVal};
 
 
-pub type CallRes = Result<Rc<RefCell<RtVal>>, PhyResult<CallErr>>;
+pub type CallRes = Result<Rc<RefCell<RtVal>>, RevResult<CallErr>>;
 
 #[derive(Debug, Error)]
 pub enum CallErr {
@@ -21,7 +21,7 @@ pub enum CallErr {
     NativeFn(#[from] NativeFnErr),
 }
 
-impl PhyReport for CallErr {
+impl RevReport for CallErr {
     fn get_err_msg(&self) -> String {
         format!("{}: {}", "Call error".red(), self)
     }
@@ -33,7 +33,7 @@ pub trait Callable {
         &self,
         interpreter: &mut Interpreter,
         args: Vec<Rc<RefCell<RtVal>>>,
-    ) -> Result<Rc<RefCell<RtVal>>, PhyResult<CallErr>>;
+    ) -> Result<Rc<RefCell<RtVal>>, RevResult<CallErr>>;
 
     fn arity(&self) -> usize;
 }

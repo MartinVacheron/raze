@@ -3,7 +3,7 @@ use std::fmt::Display;
 use sha2::{Digest, Sha256};
 use ecow::EcoString;
 
-use tools::{ToUuid, results::{Loc, PhyReport, PhyResult}};
+use tools::{ToUuid, results::{Loc, RevReport, RevResult}};
 
 
 #[derive(Debug, PartialEq, Clone)]
@@ -198,10 +198,10 @@ impl ToUuid for SelfExpr {
 }
 
 impl Expr {
-    pub fn accept<T, U: PhyReport>(
+    pub fn accept<T, U: RevReport>(
         &self,
         visitor: &mut impl VisitExpr<T, U>,
-    ) -> Result<T, PhyResult<U>> {
+    ) -> Result<T, RevResult<U>> {
         match self {
             Expr::Binary(e) => visitor.visit_binary_expr(e),
             Expr::Grouping(e) => visitor.visit_grouping_expr(e),
@@ -220,20 +220,20 @@ impl Expr {
     }
 }
 
-pub trait VisitExpr<T, U: PhyReport> {
-    fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> Result<T, PhyResult<U>>;
-    fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> Result<T, PhyResult<U>>;
-    fn visit_int_literal_expr(&mut self, expr: &IntLiteralExpr) -> Result<T, PhyResult<U>>;
-    fn visit_real_literal_expr(&mut self, expr: &RealLiteralExpr) -> Result<T, PhyResult<U>>;
-    fn visit_str_literal_expr(&mut self, expr: &StrLiteralExpr) -> Result<T, PhyResult<U>>;
-    fn visit_identifier_expr(&mut self, expr: &IdentifierExpr) -> Result<T, PhyResult<U>>;
-    fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Result<T, PhyResult<U>>;
-    fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Result<T, PhyResult<U>>;
-    fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> Result<T, PhyResult<U>>;
-    fn visit_call_expr(&mut self, expr: &CallExpr) -> Result<T, PhyResult<U>>;
-    fn visit_get_expr(&mut self, expr: &GetExpr) -> Result<T, PhyResult<U>>;
-    fn visit_set_expr(&mut self, expr: &SetExpr) -> Result<T, PhyResult<U>>;
-    fn visit_self_expr(&mut self, expr: &SelfExpr) -> Result<T, PhyResult<U>>;
+pub trait VisitExpr<T, U: RevReport> {
+    fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> Result<T, RevResult<U>>;
+    fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> Result<T, RevResult<U>>;
+    fn visit_int_literal_expr(&mut self, expr: &IntLiteralExpr) -> Result<T, RevResult<U>>;
+    fn visit_real_literal_expr(&mut self, expr: &RealLiteralExpr) -> Result<T, RevResult<U>>;
+    fn visit_str_literal_expr(&mut self, expr: &StrLiteralExpr) -> Result<T, RevResult<U>>;
+    fn visit_identifier_expr(&mut self, expr: &IdentifierExpr) -> Result<T, RevResult<U>>;
+    fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Result<T, RevResult<U>>;
+    fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Result<T, RevResult<U>>;
+    fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> Result<T, RevResult<U>>;
+    fn visit_call_expr(&mut self, expr: &CallExpr) -> Result<T, RevResult<U>>;
+    fn visit_get_expr(&mut self, expr: &GetExpr) -> Result<T, RevResult<U>>;
+    fn visit_set_expr(&mut self, expr: &SetExpr) -> Result<T, RevResult<U>>;
+    fn visit_self_expr(&mut self, expr: &SelfExpr) -> Result<T, RevResult<U>>;
 }
 
 // Into

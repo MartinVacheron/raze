@@ -3,7 +3,7 @@ use std::rc::Rc;
 use ecow::EcoString;
 
 use super::expr::Expr;
-use tools::results::{Loc, PhyReport, PhyResult};
+use tools::results::{Loc, RevReport, RevResult};
 
 #[derive(Debug, PartialEq)]
 pub enum Stmt {
@@ -110,10 +110,10 @@ impl StructMember {
 
 
 impl Stmt {
-    pub fn accept<T, U: PhyReport>(
+    pub fn accept<T, U: RevReport>(
         &self,
         visitor: &mut impl VisitStmt<T, U>,
-    ) -> Result<T, PhyResult<U>> {
+    ) -> Result<T, RevResult<U>> {
         match self {
             Stmt::Expr(stmt) => visitor.visit_expr_stmt(stmt),
             Stmt::Print(stmt) => visitor.visit_print_stmt(stmt),
@@ -129,17 +129,17 @@ impl Stmt {
     }
 }
 
-pub trait VisitStmt<T, U: PhyReport> {
-    fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> Result<T, PhyResult<U>>;
-    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Result<T, PhyResult<U>>;
-    fn visit_var_decl_stmt(&mut self, stmt: &VarDeclStmt) -> Result<T, PhyResult<U>>;
-    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Result<T, PhyResult<U>>;
-    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Result<T, PhyResult<U>>;
-    fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Result<T, PhyResult<U>>;
-    fn visit_for_stmt(&mut self, stmt: &ForStmt) -> Result<T, PhyResult<U>>;
-    fn visit_fn_decl_stmt(&mut self, stmt: &FnDeclStmt) -> Result<T, PhyResult<U>>;
-    fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Result<T, PhyResult<U>>;
-    fn visit_struct_stmt(&mut self, stmt: &StructStmt) -> Result<T, PhyResult<U>>;
+pub trait VisitStmt<T, U: RevReport> {
+    fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> Result<T, RevResult<U>>;
+    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Result<T, RevResult<U>>;
+    fn visit_var_decl_stmt(&mut self, stmt: &VarDeclStmt) -> Result<T, RevResult<U>>;
+    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Result<T, RevResult<U>>;
+    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Result<T, RevResult<U>>;
+    fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Result<T, RevResult<U>>;
+    fn visit_for_stmt(&mut self, stmt: &ForStmt) -> Result<T, RevResult<U>>;
+    fn visit_fn_decl_stmt(&mut self, stmt: &FnDeclStmt) -> Result<T, RevResult<U>>;
+    fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Result<T, RevResult<U>>;
+    fn visit_struct_stmt(&mut self, stmt: &StructStmt) -> Result<T, RevResult<U>>;
 }
 
 // Into

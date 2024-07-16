@@ -11,13 +11,13 @@ use std::{
     rc::Rc,
 };
 use thiserror::Error;
-use tools::results::{PhyReport, PhyResult};
+use tools::results::{RevReport, RevResult};
 
 use crate::{
     callable::{CallErr, Callable},
     environment::Env,
     interpreter::{InterpErr, Interpreter},
-    native_functions::PhyNativeFn,
+    native_functions::RevNativeFn,
 };
 
 // -----------------
@@ -51,7 +51,7 @@ pub enum RtValErr {
     UnknownOperation,
 }
 
-impl PhyReport for RtValErr {
+impl RevReport for RtValErr {
     fn get_err_msg(&self) -> String {
         format!("{}: {}", "Function error".red(), self)
     }
@@ -67,7 +67,7 @@ pub enum RtVal {
     StrVal(Str),
     BoolVal(Bool),
     FuncVal(Function),
-    NativeFnVal(PhyNativeFn),
+    NativeFnVal(RevNativeFn),
     StructVal(Rc<RefCell<Struct>>),
     InstanceVal(Instance),
     Null,
@@ -351,20 +351,20 @@ impl Callable for Function {
         &self,
         interpreter: &mut Interpreter,
         args: Vec<Rc<RefCell<RtVal>>>,
-    ) -> Result<Rc<RefCell<RtVal>>, PhyResult<CallErr>> {
+    ) -> Result<Rc<RefCell<RtVal>>, RevResult<CallErr>> {
         let mut new_env = Env::new(Some(self.closure.clone()));
 
         for (p, v) in self.params.iter().zip(args) {
             new_env
                 .declare_var(p.clone(), v)
-                .map_err(|_| PhyResult::new(CallErr::WrongFnParamDecl, None))?;
+                .map_err(|_| RevResult::new(CallErr::WrongFnParamDecl, None))?;
         }
 
         match interpreter.execute_block_stmt(&self.body, new_env) {
             Ok(_) => Ok(RtVal::new_null()),
             Err(e) => match e.err {
                 InterpErr::Return(v) => Ok(v),
-                _ => Err(PhyResult::new(
+                _ => Err(RevResult::new(
                     CallErr::FnExecution(e.err.to_string()),
                     None,
                 )),
@@ -419,7 +419,7 @@ impl Callable for Rc<RefCell<Struct>> {
         &self,
         interpreter: &mut Interpreter,
         args: Vec<Rc<RefCell<RtVal>>>,
-    ) -> Result<Rc<RefCell<RtVal>>, PhyResult<CallErr>> {
+    ) -> Result<Rc<RefCell<RtVal>>, RevResult<CallErr>> {
         let instance = Rc::new(RefCell::new(RtVal::InstanceVal(Instance {
             strukt: self.clone(),
             fields: self.borrow().fields.clone(),
@@ -429,13 +429,10 @@ impl Callable for Rc<RefCell<Struct>> {
         let initializer = tmp.methods.get("init".into());
 
         if let Some(f) = initializer {
-            f.bind(instance).call(interpreter, args)?;
+            f.bind(instance.clone()).call(interpreter, args)?;
         }
 
-        Ok(RtVal::InstanceVal(Instance {
-            strukt: self.clone(),
-            fields: self.borrow().fields.clone(),
-        }).into())
+        Ok(instance)
     }
 }
 

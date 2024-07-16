@@ -9,18 +9,18 @@ use crate::ast::{
     },
 };
 
-use tools::results::{PhyReport, PhyResult, Loc};
+use tools::results::{RevReport, RevResult, Loc};
 
 #[derive(Debug)]
 pub enum ParserTestErr {}
 
-impl PhyReport for ParserTestErr {
+impl RevReport for ParserTestErr {
     fn get_err_msg(&self) -> String {
         String::from("")
     }
 }
 
-type PhyResParserTestErr = PhyResult<ParserTestErr>;
+type RevResParserTestErr = RevResult<ParserTestErr>;
 
 // ------
 //  Stmt
@@ -80,7 +80,7 @@ impl StmtInfos {
 }
 
 impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
-    fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+    fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> Result<StmtInfos, RevResult<ParserTestErr>> {
         let expr = stmt.expr.accept(self)?;
         Ok(StmtInfos {
             expr,
@@ -88,7 +88,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         })
     }
 
-    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Result<StmtInfos, RevResult<ParserTestErr>> {
         let expr = stmt.expr.accept(self)?;
         let mut infos = StmtInfos::default();
 
@@ -109,7 +109,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
     fn visit_var_decl_stmt(
         &mut self,
         stmt: &VarDeclStmt,
-    ) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+    ) -> Result<StmtInfos, RevResult<ParserTestErr>> {
         let mut infos = StmtInfos::default();
 
         let val = if let Some(v) = &stmt.value {
@@ -122,7 +122,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Result<StmtInfos, RevResult<ParserTestErr>> {
         let mut all_infos: StmtInfos = StmtInfos::default();
 
         for s in &stmt.stmts {
@@ -135,7 +135,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         })
     }
 
-    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Result<StmtInfos, RevResult<ParserTestErr>> {
         let condition = stmt.condition.accept(self)?;
 
         let mut then_branch = None;
@@ -159,7 +159,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         })
     }
 
-    fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+    fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Result<StmtInfos, RevResult<ParserTestErr>> {
         let condition = stmt.condition.accept(self)?;
         let body = stmt.body.accept(self)?;
 
@@ -169,7 +169,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         })
     }
 
-    fn visit_for_stmt(&mut self, stmt: &ForStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+    fn visit_for_stmt(&mut self, stmt: &ForStmt) -> Result<StmtInfos, RevResult<ParserTestErr>> {
         let placeholder = stmt.placeholder.name.clone();
         let range = (stmt.range.start, stmt.range.end);
         let body = stmt.body.accept(self)?;
@@ -184,7 +184,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         })
     }
 
-    fn visit_fn_decl_stmt(&mut self, stmt: &FnDeclStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+    fn visit_fn_decl_stmt(&mut self, stmt: &FnDeclStmt) -> Result<StmtInfos, RevResult<ParserTestErr>> {
         let name = stmt.name.clone();
 
         let mut body: Vec<StmtInfos> = vec![];
@@ -202,7 +202,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         })
     }
 
-    fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+    fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Result<StmtInfos, RevResult<ParserTestErr>> {
         let value = match &stmt.value {
             Some(v) => Some(v.accept(self)?),
             None => None,
@@ -211,7 +211,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         Ok(StmtInfos { return_stmt: vec![value], ..Default::default() })
     }
     
-    fn visit_struct_stmt(&mut self, _stmt: &StructStmt) -> Result<StmtInfos, PhyResult<ParserTestErr>> {
+    fn visit_struct_stmt(&mut self, _stmt: &StructStmt) -> Result<StmtInfos, RevResult<ParserTestErr>> {
         todo!()
     }
 }
@@ -368,7 +368,7 @@ pub struct TestParser {
 }
 
 impl TestParser {
-    pub fn get_all_infos(&mut self, nodes: &[Stmt]) -> Result<&StmtInfos, PhyResParserTestErr> {
+    pub fn get_all_infos(&mut self, nodes: &[Stmt]) -> Result<&StmtInfos, RevResParserTestErr> {
         for node in nodes {
             let mut res = node.accept(self).unwrap();
             self.infos.concat(&mut res);
@@ -382,7 +382,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
     fn visit_int_literal_expr(
         &mut self,
         expr: &IntLiteralExpr,
-    ) -> Result<ExprInfos, PhyResParserTestErr> {
+    ) -> Result<ExprInfos, RevResParserTestErr> {
         let mut infos = ExprInfos::default();
         let int_infos = IntInfo {
             value: expr.value,
@@ -393,7 +393,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> Result<ExprInfos, PhyResParserTestErr> {
+    fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> Result<ExprInfos, RevResParserTestErr> {
         let mut infos = ExprInfos::default();
         let binop_infos = BinopInfo {
             left: expr.left.accept(self).unwrap(),
@@ -406,7 +406,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> Result<ExprInfos, PhyResParserTestErr> {
+    fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> Result<ExprInfos, RevResParserTestErr> {
         let mut infos = ExprInfos::default();
         let grouping_info = GroupingInfo {
             expr: expr.expr.accept(self).unwrap(),
@@ -420,7 +420,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
     fn visit_real_literal_expr(
         &mut self,
         expr: &RealLiteralExpr,
-    ) -> Result<ExprInfos, PhyResParserTestErr> {
+    ) -> Result<ExprInfos, RevResParserTestErr> {
         let mut infos = ExprInfos::default();
         let real_infos = RealInfo {
             value: expr.value,
@@ -434,7 +434,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
     fn visit_str_literal_expr(
         &mut self,
         expr: &StrLiteralExpr,
-    ) -> Result<ExprInfos, PhyResParserTestErr> {
+    ) -> Result<ExprInfos, RevResParserTestErr> {
         let mut infos = ExprInfos::default();
         let str_infos = StrInfo {
             value: expr.value.clone(),
@@ -448,7 +448,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
     fn visit_identifier_expr(
         &mut self,
         expr: &IdentifierExpr,
-    ) -> Result<ExprInfos, PhyResParserTestErr> {
+    ) -> Result<ExprInfos, RevResParserTestErr> {
         let mut infos = ExprInfos::default();
         let ident_info = IdentifierInfo {
             name: expr.name.clone(),
@@ -458,7 +458,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Result<ExprInfos, PhyResParserTestErr> {
+    fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Result<ExprInfos, RevResParserTestErr> {
         let mut infos = ExprInfos::default();
         let unary_info = UnaryInfo {
             expr: expr.right.accept(self).unwrap(),
@@ -470,7 +470,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
+    fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Result<ExprInfos, RevResult<ParserTestErr>> {
         let mut infos = ExprInfos::default();
         let assign_infos = AssignInfo {
             name: expr.name.clone(),
@@ -484,7 +484,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
     fn visit_logical_expr(
         &mut self,
         expr: &LogicalExpr,
-    ) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
+    ) -> Result<ExprInfos, RevResult<ParserTestErr>> {
         let mut infos = ExprInfos::default();
         let logical_infos = LogicalInfo {
             left: expr.left.accept(self).unwrap(),
@@ -497,7 +497,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_call_expr(&mut self, expr: &CallExpr) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
+    fn visit_call_expr(&mut self, expr: &CallExpr) -> Result<ExprInfos, RevResult<ParserTestErr>> {
         let mut infos = ExprInfos::default();
         let callee = expr.callee.accept(self)?;
         let mut args: Vec<ExprInfos> = vec![];
@@ -515,15 +515,15 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
     
-    fn visit_get_expr(&mut self, expr: &GetExpr) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
+    fn visit_get_expr(&mut self, _: &GetExpr) -> Result<ExprInfos, RevResult<ParserTestErr>> {
         todo!()
     }
     
-    fn visit_set_expr(&mut self, expr: &SetExpr) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
+    fn visit_set_expr(&mut self, _: &SetExpr) -> Result<ExprInfos, RevResult<ParserTestErr>> {
         todo!()
     }
     
-    fn visit_self_expr(&mut self, expr: &crate::ast::expr::SelfExpr) -> Result<ExprInfos, PhyResult<ParserTestErr>> {
+    fn visit_self_expr(&mut self, _: &crate::ast::expr::SelfExpr) -> Result<ExprInfos, RevResult<ParserTestErr>> {
         todo!()
     }
 }

@@ -1,0 +1,1 @@
+true() // error: only functions and structures are callable

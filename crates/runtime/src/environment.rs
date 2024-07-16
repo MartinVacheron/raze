@@ -9,7 +9,7 @@ use std::{
 };
 use thiserror::Error;
 
-use crate::values::{RtVal, Struct};
+use crate::values::RtVal;
 
 // -----------------
 //  Error managment
@@ -73,14 +73,8 @@ impl Env {
     }
 
     pub fn assign(&mut self, var_name: EcoString, value: Rc<RefCell<RtVal>>) -> Result<(), EnvErr> {
-        // println!("Regitering {}", var_name);
-        // println!("Value to register: {:?}", value);
-        // println!("Actual vars: {:?}", self.vars);
-
         if let Occupied(mut v) = self.vars.entry(var_name.clone()) {
-            // println!("Lets go for insertion");
             v.insert(value);
-            // println!("Inserted, vars: {:#?}", v);
 
             Ok(())
         } else if let Some(enclo) = &self.enclosing {

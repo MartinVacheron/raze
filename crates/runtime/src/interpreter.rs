@@ -8,13 +8,13 @@ use ecow::EcoString;
 use frontend::ast::expr::{GetExpr, SelfExpr, SetExpr};
 use thiserror::Error;
 use tools::{
-    results::{PhyReport, PhyResult},
+    results::{RevReport, RevResult},
     ToUuid,
 };
 
 use crate::callable::Callable;
 use crate::environment::Env;
-use crate::native_functions::PhyNativeFn;
+use crate::native_functions::RevNativeFn;
 use crate::values::{Function, RtVal};
 use crate::native_functions::NativeFnErr;
 use frontend::ast::{expr::{
@@ -92,14 +92,14 @@ pub enum InterpErr {
     Return(Rc<RefCell<RtVal>>),
 }
 
-impl PhyReport for InterpErr {
+impl RevReport for InterpErr {
     fn get_err_msg(&self) -> String {
         format!("{} {}", "Interpreter error:".red(), self)
     }
 }
 
-pub(crate) type PhyResInterp = PhyResult<InterpErr>;
-pub(crate) type InterpRes = Result<Rc<RefCell<RtVal>>, PhyResInterp>;
+pub(crate) type RevResInterp = RevResult<InterpErr>;
+pub(crate) type InterpRes = Result<Rc<RefCell<RtVal>>, RevResInterp>;
 
 // --------------
 //  Interpreting
@@ -117,17 +117,30 @@ impl Interpreter {
 
         let _ = globals.borrow_mut().declare_var(
             EcoString::from("clock"),
-            Rc::new(RefCell::new(RtVal::NativeFnVal(PhyNativeFn {
+            Rc::new(RefCell::new(RtVal::NativeFnVal(RevNativeFn {
                 name: EcoString::from("clock"),
                 arity: 0,
                 func: |_, _| {
                     match SystemTime::now().duration_since(UNIX_EPOCH) {
                         Ok(t) => Ok(RtVal::new_real(t.as_millis() as f64 / 1000.).into()),
-                        Err(_) => Err(PhyResult::new(NativeFnErr::GetTime.into(), None))
+                        Err(_) => Err(RevResult::new(NativeFnErr::GetTime.into(), None))
                     }
                 },
             }))),
         );
+
+        // let _ = globals.borrow_mut().declare_var(
+        //     EcoString::from("print"),
+        //     Rc::new(RefCell::new(RtVal::NativeFnVal(RevNativeFn {
+        //         name: EcoString::from("print"),
+        //         arity: 0,
+        //         func: |_, args| {
+        //             args.iter().for_each(|a| println!("{}", a.borrow()));
+
+        //             Ok(RtVal::new_null())
+        //         },
+        //     }))),
+        // );
 
         let env = globals.clone();
 
@@ -177,7 +190,7 @@ impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
             .borrow_mut()
             .declare_var(stmt.name.clone(), value)
             .map_err(|e| {
-                PhyResult::new(InterpErr::VarDeclEnv(e.to_string()), Some(stmt.loc.clone()))
+                RevResult::new(InterpErr::VarDeclEnv(e.to_string()), Some(stmt.loc.clone()))
             })?;
 
         Ok(RtVal::new_null())
@@ -211,7 +224,7 @@ impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
                     }
                 }
             },
-            _ => Err(PhyResult::new(
+            _ => Err(RevResult::new(
                 InterpErr::NonBoolIfCond,
                 Some(stmt.loc.clone()),
             )),
@@ -231,7 +244,7 @@ impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
                     false => break,
                 },
                 _ => {
-                    return Err(PhyResult::new(
+                    return Err(RevResult::new(
                         InterpErr::NonBoolWhileCond,
                         Some(stmt.loc.clone()),
                     ))
@@ -258,7 +271,7 @@ impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
                 .borrow_mut()
                 .assign(stmt.placeholder.name.clone(), RtVal::new_int(i).into())
                 .map_err(|e| {
-                    PhyResult::new(InterpErr::ForLoop(e.to_string()), Some(stmt.loc.clone()))
+                    RevResult::new(InterpErr::ForLoop(e.to_string()), Some(stmt.loc.clone()))
                 })?;
 
             stmt.body.accept(self)?;
@@ -276,7 +289,7 @@ impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
             .borrow_mut()
             .declare_var(stmt.name.clone(), func.into())
             .map_err(|_| {
-                PhyResult::new(
+                RevResult::new(
                     InterpErr::VarDeclEnv(stmt.name.to_string()),
                     Some(stmt.loc.clone()),
                 )
@@ -292,7 +305,7 @@ impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
             value = v.accept(self)?;
         }
 
-        Err(PhyResult::new(InterpErr::Return(value), None))
+        Err(RevResult::new(InterpErr::Return(value), None))
     }
     
     fn visit_struct_stmt(&mut self, stmt: &StructStmt) -> InterpRes {
@@ -307,7 +320,7 @@ impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
             .borrow_mut()
             .declare_var(stmt.name.clone(), RtVal::new_null())
             .map_err(|_| {
-                PhyResult::new(
+                RevResult::new(
                     InterpErr::VarDeclEnv(stmt.name.to_string()),
                     Some(stmt.loc.clone()),
                 )
@@ -329,7 +342,7 @@ impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
             .borrow_mut()
             .assign(stmt.name.clone(), Rc::new(RefCell::new(struct_val.clone())))
             .map_err(|_| {
-                PhyResult::new(
+                RevResult::new(
                     InterpErr::VarDeclEnv(stmt.name.to_string()),
                     Some(stmt.loc.clone()),
                 )
@@ -362,7 +375,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
     fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> InterpRes {
         let lhs = expr.left.accept(self)?;
         if lhs == RtVal::new_null() {
-            return Err(PhyResult::new(
+            return Err(RevResult::new(
                 InterpErr::UninitializedValue,
                 Some(expr.left.get_loc()),
             ));
@@ -370,7 +383,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
 
         let rhs = expr.right.accept(self)?;
         if rhs == RtVal::new_null() {
-            return Err(PhyResult::new(
+            return Err(RevResult::new(
                 InterpErr::UninitializedValue,
                 Some(expr.right.get_loc()),
             ));
@@ -380,7 +393,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
         let tmp2 = lhs.borrow();
         match tmp2.operate(&*tmp, &expr.operator) {
             Ok(res) => Ok(res.into()),
-            Err(e) => Err(PhyResult::new(
+            Err(e) => Err(RevResult::new(
                 InterpErr::OperationEvaluation(e.to_string()),
                 Some(expr.loc.clone()),
             )),
@@ -392,12 +405,12 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
 
         self.env
             .borrow_mut()
-            .assign(expr.name.clone(), value)
+            .assign(expr.name.clone(), value.clone())
             .map_err(|e| {
-                PhyResult::new(InterpErr::AssignEnv(e.to_string()), Some(expr.loc.clone()))
+                RevResult::new(InterpErr::AssignEnv(e.to_string()), Some(expr.loc.clone()))
             })?;
 
-        Ok(RtVal::new_null())
+        Ok(value)
     }
 
     fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> InterpRes {
@@ -427,10 +440,10 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
                     .borrow()
                     .get_var_at(expr.name.clone(), i)
                     .map_err(|e| {
-                        PhyResult::new(InterpErr::GetVarEnv(e.to_string()), Some(expr.loc.clone()))
+                        RevResult::new(InterpErr::GetVarEnv(e.to_string()), Some(expr.loc.clone()))
                     }),
                 None => self.globals.borrow().get_var(expr.name.clone()).map_err(|e| {
-                    PhyResult::new(InterpErr::GetVarEnv(e.to_string()), Some(expr.loc.clone()))
+                    RevResult::new(InterpErr::GetVarEnv(e.to_string()), Some(expr.loc.clone()))
                 }),
             },
         }
@@ -441,13 +454,13 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
 
         match (&*value.borrow(), expr.operator.as_str()) {
             (RtVal::IntVal(..) | RtVal::RealVal(..), "!") => {
-                return Err(PhyResult::new(
+                return Err(RevResult::new(
                     InterpErr::BangOpOnNonBool,
                     Some(expr.loc.clone()),
                 ))
             }
             (RtVal::BoolVal(..) | RtVal::StrVal(..) | RtVal::Null, "-") => {
-                return Err(PhyResult::new(
+                return Err(RevResult::new(
                     InterpErr::NegateNonNumeric,
                     Some(expr.loc.clone()),
                 ))
@@ -456,7 +469,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
         }
 
         value.borrow_mut().negate().map_err(|e| {
-            PhyResult::new(InterpErr::Negation(e.to_string()), Some(expr.loc.clone()))
+            RevResult::new(InterpErr::Negation(e.to_string()), Some(expr.loc.clone()))
         })?;
 
         Ok(value)
@@ -474,7 +487,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
                     }
                 }
                 _ => {
-                    return Err(PhyResult::new(
+                    return Err(RevResult::new(
                         InterpErr::NonBoolIfCond,
                         Some(expr.loc.clone()),
                     ))
@@ -488,7 +501,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
                     }
                 }
                 _ => {
-                    return Err(PhyResult::new(
+                    return Err(RevResult::new(
                         InterpErr::NonBoolIfCond,
                         Some(expr.loc.clone()),
                     ))
@@ -513,18 +526,18 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
             RtVal::FuncVal(f) => Box::new(f),
             RtVal::NativeFnVal(f) => Box::new(f),
             RtVal::StructVal(s) => Box::new(s),
-            _ => return Err(PhyResult::new(InterpErr::NonFnCall, Some(expr.loc.clone())))
+            _ => return Err(RevResult::new(InterpErr::NonFnCall, Some(expr.loc.clone())))
         };
 
         if callable.arity() != args.len() {
-            return Err(PhyResult::new(
+            return Err(RevResult::new(
                 InterpErr::WrongArgsNb(callable.arity(), args.len()),
                 Some(expr.loc.clone()),
             ));
         }
 
         callable.call(self, args).map_err(|e| {
-            PhyResult::new(InterpErr::FnCall(e.err.to_string()), Some(expr.loc.clone()))
+            RevResult::new(InterpErr::FnCall(e.err.to_string()), Some(expr.loc.clone()))
         })
     }
     
@@ -540,10 +553,10 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
             } else if let Some(m) = inst.strukt.borrow().methods.get(&expr.name) {
                 Ok(m.wrap_bind(obj.clone()))
             } else {
-                Err(PhyResult::new(InterpErr::InexistantField(expr.name.clone()), Some(expr.loc.clone())))
+                Err(RevResult::new(InterpErr::InexistantField(expr.name.clone()), Some(expr.loc.clone())))
             }
         } else {
-            Err(PhyResult::new(InterpErr::NonInstPropAccess, Some(expr.loc.clone())))
+            Err(RevResult::new(InterpErr::NonInstPropAccess, Some(expr.loc.clone())))
         }
     }
     
@@ -556,19 +569,19 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
                 let val = expr.value.accept(self)?;
 
                 inst.set(expr.name.clone(), val.clone())
-                    .map_err(|_| PhyResult::new(InterpErr::InexistantField(expr.name.clone()), Some(expr.loc.clone())))?;
+                    .map_err(|_| RevResult::new(InterpErr::InexistantField(expr.name.clone()), Some(expr.loc.clone())))?;
 
                 Ok(val)
             },
-            _ => Err(PhyResult::new(InterpErr::NonInstPropAccess, Some(expr.loc.clone())))
+            _ => Err(RevResult::new(InterpErr::NonInstPropAccess, Some(expr.loc.clone())))
         }
     }
     
-    fn visit_self_expr(&mut self, expr: &SelfExpr) -> Result<Rc<RefCell<RtVal>>, PhyResult<InterpErr>> {
+    fn visit_self_expr(&mut self, expr: &SelfExpr) -> Result<Rc<RefCell<RtVal>>, RevResult<InterpErr>> {
         self.env.borrow()
             .get_var(expr.name.clone())
             .map_err(|e| {
-                    PhyResult::new(InterpErr::GetVarEnv(e.to_string()), Some(expr.loc.clone()))
+                    RevResult::new(InterpErr::GetVarEnv(e.to_string()), Some(expr.loc.clone()))
             })
     }
 }

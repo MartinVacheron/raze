@@ -1,0 +1,9 @@
+{
+    struct Bizar {
+        fn return_self() {
+            return Bizar
+        }
+    }
+
+    print Bizar().return_self() // expect: <struct Bizar>
+}

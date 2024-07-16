@@ -17,7 +17,7 @@ impl Loc {
     }
 }
 
-pub trait PhyReport {
+pub trait RevReport {
     fn get_err_msg(&self) -> String;
 }
 
@@ -28,14 +28,14 @@ struct ReportContext<'a> {
 }
 
 #[derive(Debug)]
-pub struct PhyResult<T: PhyReport> {
+pub struct RevResult<T: RevReport> {
     pub err: T,
     pub loc: Option<Loc>,
 }
 
-impl<'a, T: PhyReport> PhyResult<T> {
-    pub fn new(err: T, loc: Option<Loc>) -> PhyResult<T> {
-        PhyResult { err, loc }
+impl<'a, T: RevReport> RevResult<T> {
+    pub fn new(err: T, loc: Option<Loc>) -> RevResult<T> {
+        RevResult { err, loc }
     }
 
     pub fn report(&self, file_name: &String, code: &str) {

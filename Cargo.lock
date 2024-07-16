@@ -203,17 +203,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
 
 [[package]]
-name = "phy"
-version = "0.1.0"
-dependencies = [
- "clap",
- "colored",
- "frontend",
- "resolver",
- "runtime",
-]
-
-[[package]]
 name = "proc-macro2"
 version = "1.0.82"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -241,6 +230,17 @@ dependencies = [
  "sha2",
  "thiserror",
  "tools",
+]
+
+[[package]]
+name = "rev"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "colored",
+ "frontend",
+ "resolver",
+ "runtime",
 ]
 
 [[package]]

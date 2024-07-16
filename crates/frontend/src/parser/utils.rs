@@ -1,12 +1,12 @@
 use crate::{
     ast::stmt::Stmt,
     lexer::Lexer,
-    parser::{Parser, PhyResParser},
+    parser::{Parser, RevResParser},
 };
 
 use super::test_parser::{StmtInfos, ExprInfos, TestParser};
 
-pub fn lex_and_parse(code: &str) -> Result<Vec<Stmt>, Vec<PhyResParser>> {
+pub fn lex_and_parse(code: &str) -> Result<Vec<Stmt>, Vec<RevResParser>> {
     let mut lexer = Lexer::new();
     let tokens = lexer.tokenize(code).unwrap();
     let mut parser = Parser::default();

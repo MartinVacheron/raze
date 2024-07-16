@@ -8,7 +8,7 @@ use crate::{
     interpreter::Interpreter,
     values::RtVal,
 };
-use tools::results::PhyReport;
+use tools::results::RevReport;
 
 
 #[derive(Debug, Error)]
@@ -17,7 +17,7 @@ pub enum NativeFnErr {
     GetTime,
 }
 
-impl PhyReport for NativeFnErr {
+impl RevReport for NativeFnErr {
     fn get_err_msg(&self) -> String {
         format!("{} {}", "Function error:".red(), self)
     }
@@ -25,13 +25,13 @@ impl PhyReport for NativeFnErr {
 
 
 #[derive(Clone)]
-pub struct PhyNativeFn {
+pub struct RevNativeFn {
     pub name: EcoString,
     pub arity: usize,
     pub func: fn(&mut Interpreter, Vec<Rc<RefCell<RtVal>>>) -> CallRes,
 }
 
-impl Callable for PhyNativeFn {
+impl Callable for RevNativeFn {
     fn arity(&self) -> usize {
         self.arity
     }
@@ -42,19 +42,19 @@ impl Callable for PhyNativeFn {
 }
 
 
-impl fmt::Debug for PhyNativeFn {
+impl fmt::Debug for RevNativeFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "<native fn>")
     }
 }
 
-impl PartialEq for PhyNativeFn {
+impl PartialEq for RevNativeFn {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name 
     }
 }
 
-impl fmt::Display for PhyNativeFn {
+impl fmt::Display for RevNativeFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "<native fn>")
     }

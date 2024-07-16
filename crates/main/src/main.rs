@@ -19,7 +19,7 @@ use runtime::{interpreter::Interpreter, values::RtVal};
 
 #[derive(ClapParser)]
 #[command(version)]
-#[command(about = "Interpreter for Phy language")]
+#[command(about = "Interpreter for Rev language")]
 struct Cli {
     #[arg(short, long)]
     /// Path to the file to parse
@@ -105,7 +105,7 @@ impl Repl {
             Ok(tk) => tk,
             Err(e) => {
                 e.iter()
-                    .for_each(|e| e.report(&"placeholder.rz".into(), &code));
+                    .for_each(|e| e.report(&"placeholder.rev".into(), &code));
 
                 return
             }
@@ -119,7 +119,7 @@ impl Repl {
             Ok(n) => n,
             Err(e) => {
                 e.iter()
-                    .for_each(|e| e.report(&"placeholder.rz".into(), &code));
+                    .for_each(|e| e.report(&"placeholder.rev".into(), &code));
                 
                 return
             }
@@ -137,7 +137,7 @@ impl Repl {
             Ok(l) => l,
             Err(e) => {
                 e.iter()
-                    .for_each(|e| e.report(&"placeholder.rz".into(), &code));
+                    .for_each(|e| e.report(&"placeholder.rev".into(), &code));
 
                 return
             }
@@ -149,7 +149,7 @@ impl Repl {
                     println!("{}", *res.borrow());
                 }
             }
-            Err(e) => e.report(&"placeholder.rz".into(), &code),
+            Err(e) => e.report(&"placeholder.rev".into(), &code),
         }
     }
 }

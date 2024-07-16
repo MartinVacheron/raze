@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use colored::Colorize;
 use ecow::EcoString;
 use thiserror::Error;
-use tools::{results::{Loc, PhyReport, PhyResult}, ToUuid};
+use tools::{results::{Loc, RevReport, RevResult}, ToUuid};
 
 use frontend::ast::{
     expr::{
@@ -36,14 +36,14 @@ pub enum ResolverErr {
     ReturnFromInit,
 }
 
-impl PhyReport for ResolverErr {
+impl RevReport for ResolverErr {
     fn get_err_msg(&self) -> String {
         format!("{}: ", "Resolver error".red())
     }
 }
 
-pub type PhyResResolv = PhyResult<ResolverErr>;
-pub type ResolverRes = Result<(), PhyResResolv>;
+pub type RevResResolv = RevResult<ResolverErr>;
+pub type ResolverRes = Result<(), RevResResolv>;
 
 
 #[derive(Default, Clone, Copy, PartialEq)]
@@ -79,8 +79,8 @@ pub struct Resolver {
 
 // If we can’t find it in the stack of local scopes, we assume it must be global
 impl Resolver {
-    pub fn resolve(&mut self, stmts: &[Stmt]) -> Result<HashMap<String, usize>, Vec<PhyResResolv>> {
-        let mut errors: Vec<PhyResResolv> = vec![];
+    pub fn resolve(&mut self, stmts: &[Stmt]) -> Result<HashMap<String, usize>, Vec<RevResResolv>> {
+        let mut errors: Vec<RevResResolv> = vec![];
 
         for s in stmts {
             match self.resolve_stmt(s) {
@@ -125,7 +125,7 @@ impl Resolver {
         }
 
         if self.scopes.last().unwrap().contains_key(&name) {
-            return Err(PhyResult::new(
+            return Err(RevResult::new(
                 ResolverErr::AlreadyDeclInLocal,
                 Some(loc.clone()),
             ))
@@ -248,11 +248,11 @@ impl VisitStmt<(), ResolverErr> for Resolver {
 
     fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> ResolverRes {
         match self.fn_type {
-            FnType::None => return Err(PhyResult::new(
+            FnType::None => return Err(RevResult::new(
                 ResolverErr::TopLevelReturn,
                 Some(stmt.loc.clone()),
             )),
-            FnType::Init => return Err(PhyResult::new(
+            FnType::Init => return Err(RevResult::new(
                 ResolverErr::ReturnFromInit, Some(stmt.loc.clone())
             )),
             _ => {
@@ -320,7 +320,7 @@ impl VisitExpr<(), ResolverErr> for Resolver {
         if !self.scopes.is_empty()
             && self.scopes.last().unwrap().get(&expr.name) == Some(&false)
         {
-            return Err(PhyResult::new(
+            return Err(RevResult::new(
                 ResolverErr::LocalVarInOwnInit,
                 Some(expr.loc.clone()),
             ))
@@ -369,7 +369,7 @@ impl VisitExpr<(), ResolverErr> for Resolver {
     
     fn visit_self_expr(&mut self, expr: &SelfExpr) -> ResolverRes {
         if !self.in_struct {
-            return Err(PhyResult::new(ResolverErr::SelfOutsideStruct, Some(expr.loc.clone())))
+            return Err(RevResult::new(ResolverErr::SelfOutsideStruct, Some(expr.loc.clone())))
         }
 
         self.resolve_local(expr, &expr.name);

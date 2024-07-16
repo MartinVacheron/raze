@@ -3,7 +3,7 @@ use ecow::EcoString;
 use thiserror::Error;
 use colored::*;
 
-use tools::results::{PhyReport, PhyResult, Loc};
+use tools::results::{RevReport, RevResult, Loc};
 
 
 // ----------------
@@ -27,13 +27,13 @@ pub enum LexerErr {
     NonNumericDecimal(char),
 }
 
-impl PhyReport for LexerErr {
+impl RevReport for LexerErr {
     fn get_err_msg(&self) -> String {
         format!("{} {}", "Lexer error:".red(), self)
     }
 }
 
-type PhyResLex = PhyResult<LexerErr>;
+type RevResLex = RevResult<LexerErr>;
 
 
 // --------
@@ -149,10 +149,10 @@ impl Lexer {
         self.keywords = map;
     }
 
-    pub fn tokenize(&mut self, code: &str) -> Result<&Vec<Token>, Vec<PhyResLex>> {
+    pub fn tokenize(&mut self, code: &str) -> Result<&Vec<Token>, Vec<RevResLex>> {
         self.code = code.chars().collect();
 
-        let mut errors: Vec<PhyResLex> = vec![];
+        let mut errors: Vec<RevResLex> = vec![];
         
         while !self.eof() {
             self.start = self.current;
@@ -273,7 +273,7 @@ impl Lexer {
         }
     }
 
-    fn lex_string(&mut self) -> Result<(), PhyResLex> {
+    fn lex_string(&mut self) -> Result<(), RevResLex> {
         while !self.eof() && self.at() != '\"' {
             if self.at() == '\n' {
                 self.eat();
@@ -296,7 +296,7 @@ impl Lexer {
         Ok(())
     }
 
-    fn lex_number(&mut self) -> Result<(), PhyResLex> {
+    fn lex_number(&mut self) -> Result<(), RevResLex> {
         while self.at().is_numeric() {
             self.eat();
         }
@@ -336,7 +336,7 @@ impl Lexer {
         Ok(())
     }
 
-    fn lex_identifier(&mut self) -> Result<(), PhyResLex> {
+    fn lex_identifier(&mut self) -> Result<(), RevResLex> {
         while self.at().is_alphanumeric() || self.at() == '_' {
             self.eat();
         }
@@ -393,9 +393,9 @@ impl Lexer {
         true
     }
 
-    fn trigger_error(&mut self, err: LexerErr) -> PhyResLex {
+    fn trigger_error(&mut self, err: LexerErr) -> RevResLex {
         self.synchronize();
-        PhyResult::new(err, Some(self.get_loc()))
+        RevResult::new(err, Some(self.get_loc()))
     }
 
     // Function used when an error is encountered. We skip until next
