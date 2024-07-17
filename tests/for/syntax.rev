@@ -1,0 +1,13 @@
+// Single-expression body.
+// for c in 0..3 print c = c + 1  // todo
+// expect: 1
+// expect: 2
+// expect: 3
+
+// Block body.
+for i in 0..3 {
+  print a
+}
+// expect: 0
+// expect: 1
+// expect: 2

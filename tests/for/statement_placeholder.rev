@@ -1,0 +1,1 @@
+for {} in 0..3 {} // error: missing variable name in 'for' loop

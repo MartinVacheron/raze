@@ -1,0 +1,2 @@
+undefined1.bar = undefined2 // error: undeclared variable 'undefined1'
+  

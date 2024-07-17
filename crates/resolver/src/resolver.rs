@@ -38,7 +38,7 @@ pub enum ResolverErr {
 
 impl RevReport for ResolverErr {
     fn get_err_msg(&self) -> String {
-        format!("{}: ", "Resolver error".red())
+        format!("{} {}", "Resolver error:".red(), self)
     }
 }
 

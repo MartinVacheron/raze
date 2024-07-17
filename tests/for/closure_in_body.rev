@@ -1,0 +1,20 @@
+var f1
+var f2
+var f3
+
+for i in 0..4 {
+    var j = i
+
+    fn f() {
+        print i
+        print j
+    }
+
+    if (j == 1) f1 = f
+    else f3 = f
+}
+
+f1() // expect: 3
+     // expect: 1
+f3() // expect: 3
+     // expect: 3

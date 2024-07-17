@@ -1,0 +1,1 @@
+for i in {} {} // error: missing range in 'for' loop

@@ -1,0 +1,1 @@
+for i in 4 struct Foo {} // error: missing block start '{' after 'for' condition

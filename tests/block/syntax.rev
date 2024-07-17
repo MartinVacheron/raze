@@ -1,0 +1,5 @@
+// Correct regression
+{
+    var a }
+
+print "ok" // expect: ok

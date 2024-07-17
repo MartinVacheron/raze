@@ -1,0 +1,6 @@
+struct Foo { bar }
+
+var foo = Foo()
+foo.bar = "not fn"
+
+foo.bar() // error: only functions and structures are callable

@@ -1,0 +1,13 @@
+fn f() {
+    var a = "a"
+    var b = "b"
+
+    fn g() {
+        print a // expect: a
+        print b // expect: b
+    }
+
+  g()
+}
+
+f()

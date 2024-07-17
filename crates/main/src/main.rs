@@ -41,6 +41,7 @@ struct Cli {
 struct Repl {
     cli: Cli,
     ast_printer: AstPrinter,
+    resolver: Resolver,
     interpreter: Interpreter,
 }
 
@@ -48,6 +49,7 @@ fn main() {
     let mut repl = Repl {
         cli: Cli::parse(),
         ast_printer: AstPrinter {},
+        resolver: Resolver::default(),
         interpreter: Interpreter::new(),
     };
 
@@ -131,9 +133,7 @@ impl Repl {
             }
         }
 
-        let mut resolver = Resolver::default();
-
-        let locals = match resolver.resolve(&nodes) {
+        let locals = match self.resolver.resolve(&nodes) {
             Ok(l) => l,
             Err(e) => {
                 e.iter()

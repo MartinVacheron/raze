@@ -1,0 +1,3 @@
+struct Foo {}
+
+Foo.bar // error: only structure instances have properties

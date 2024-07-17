@@ -1,0 +1,4 @@
+struct Foo {}
+
+var foo = Foo()
+foo.bar // error: structure has no field 'bar'
