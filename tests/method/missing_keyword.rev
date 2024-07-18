@@ -1,0 +1,5 @@
+struct Foo {
+    bar() {}
+}
+
+print Foo().bar() // error: missing 'fn' keyword before method definition

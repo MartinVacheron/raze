@@ -1,0 +1,7 @@
+struct Foo {
+    fn method() {
+        print method // error: undeclared variable 'method'
+    }
+}
+
+Foo().method()

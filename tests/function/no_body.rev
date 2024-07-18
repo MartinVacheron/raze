@@ -1,0 +1,1 @@
+fn f() 123 // error: missing '{' before function body

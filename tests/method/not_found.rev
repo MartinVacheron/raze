@@ -1,0 +1,3 @@
+struct Foo {}
+
+Foo().unknown() // error: structure has no field 'unknown'
