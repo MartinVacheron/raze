@@ -11,7 +11,7 @@ pub enum Expr {
     Binary(BinaryExpr),
     Grouping(GroupingExpr),
     IntLiteral(IntLiteralExpr),
-    RealLiteral(RealLiteralExpr),
+    FloatLiteral(FloatLiteralExpr),
     StrLiteral(StrLiteralExpr),
     Identifier(IdentifierExpr),
     Unary(UnaryExpr),
@@ -29,7 +29,7 @@ impl Display for Expr {
             Expr::Binary(e) => write!(f, "{} {} {}", e.left, e.operator, e.right),
             Expr::Grouping(e) => write!(f, "{}", e.expr),
             Expr::IntLiteral(e) => write!(f, "{}", e.value),
-            Expr::RealLiteral(e) => write!(f, "{}", e.value),
+            Expr::FloatLiteral(e) => write!(f, "{}", e.value),
             Expr::StrLiteral(e) => write!(f, "{}", e.value),
             Expr::Identifier(e) => write!(f, "{}", e.name),
             Expr::Unary(e) => write!(f, "{} {}", e.operator, e.right),
@@ -49,7 +49,7 @@ impl Expr {
             Self::Binary(b) => b.loc.clone(),
             Self::Grouping(g) => g.loc.clone(),
             Self::IntLiteral(i) => i.loc.clone(),
-            Self::RealLiteral(r) => r.loc.clone(),
+            Self::FloatLiteral(r) => r.loc.clone(),
             Self::StrLiteral(s) => s.loc.clone(),
             Self::Identifier(i) => i.loc.clone(),
             Self::Unary(u) => u.loc.clone(),
@@ -84,7 +84,7 @@ pub struct IntLiteralExpr {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct RealLiteralExpr {
+pub struct FloatLiteralExpr {
     pub value: f64,
     pub loc: Loc,
 }
@@ -206,7 +206,7 @@ impl Expr {
             Expr::Binary(e) => visitor.visit_binary_expr(e),
             Expr::Grouping(e) => visitor.visit_grouping_expr(e),
             Expr::IntLiteral(e) => visitor.visit_int_literal_expr(e),
-            Expr::RealLiteral(e) => visitor.visit_real_literal_expr(e),
+            Expr::FloatLiteral(e) => visitor.visit_float_literal_expr(e),
             Expr::StrLiteral(e) => visitor.visit_str_literal_expr(e),
             Expr::Identifier(e) => visitor.visit_identifier_expr(e),
             Expr::Unary(e) => visitor.visit_unary_expr(e),
@@ -224,7 +224,7 @@ pub trait VisitExpr<T, U: RevReport> {
     fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> Result<T, RevResult<U>>;
     fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> Result<T, RevResult<U>>;
     fn visit_int_literal_expr(&mut self, expr: &IntLiteralExpr) -> Result<T, RevResult<U>>;
-    fn visit_real_literal_expr(&mut self, expr: &RealLiteralExpr) -> Result<T, RevResult<U>>;
+    fn visit_float_literal_expr(&mut self, expr: &FloatLiteralExpr) -> Result<T, RevResult<U>>;
     fn visit_str_literal_expr(&mut self, expr: &StrLiteralExpr) -> Result<T, RevResult<U>>;
     fn visit_identifier_expr(&mut self, expr: &IdentifierExpr) -> Result<T, RevResult<U>>;
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Result<T, RevResult<U>>;

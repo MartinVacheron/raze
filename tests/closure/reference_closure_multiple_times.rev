@@ -12,5 +12,5 @@ var f
 }
 
 f()
-// expect: a
-// expect: a
+// expect: "a"
+// expect: "a"

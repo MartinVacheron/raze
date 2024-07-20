@@ -1,0 +1,5 @@
+struct Foo {
+    fn init() {}
+}
+
+var f = Foo().init() // error: can't call the constructor directly

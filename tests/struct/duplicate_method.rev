@@ -1,0 +1,4 @@
+struct Foo {
+    fn a() {}
+    fn a() {} // error: a method with this name already exists
+}

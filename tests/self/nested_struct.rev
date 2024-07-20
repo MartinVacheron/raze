@@ -1,0 +1,21 @@
+struct Outer {
+    fn method() {
+        print self // expect: <Outer instance>
+
+        fn f() {
+            print self // expect: <Outer instance>
+
+            struct Inner {
+                fn method() {
+                    print self // expect: <Inner instance>
+                }
+            }
+
+            Inner().method()
+        }
+        
+        f()
+    }
+}
+
+Outer().method()

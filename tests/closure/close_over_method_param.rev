@@ -11,4 +11,4 @@ struct Foo {
 }
 
 Foo().method("param")
-f() // expect: param
+f() // expect: "param"

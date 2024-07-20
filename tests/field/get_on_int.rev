@@ -1,1 +1,1 @@
-123.bar // error: only structure instances have properties
+123.bar // error: decimal part is not a number

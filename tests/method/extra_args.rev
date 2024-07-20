@@ -5,4 +5,4 @@ struct Foo {
     }
 }
 
-Foo().method(1, 2, 3, 4) // error: wrong arguments number: expected 2 but got 4
+Foo().method(1, 2, 3, 4) // error: wrong arguments number, expected 2 but got 4

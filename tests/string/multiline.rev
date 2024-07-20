@@ -1,0 +1,11 @@
+var foo = "a
+a
+a
+a
+"
+
+print foo // expect: "a
+// expect: a
+// expect: a
+// expect: a
+// expect: "

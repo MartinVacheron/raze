@@ -1,0 +1,1 @@
+"foo" + true // error: operation not supported

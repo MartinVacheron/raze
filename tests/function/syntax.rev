@@ -1,0 +1,15 @@
+fn a(a, b) {}
+fn b(a, b,) {}
+
+fn c(
+    a,
+    b,
+) {}
+
+fn d(
+    a,
+    b,)
+{
+}
+
+print "ok" // expect: "ok"

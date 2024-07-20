@@ -10,4 +10,4 @@ var f
     f = f_
 }
 
-f() // expect: local
+f() // expect: "local"

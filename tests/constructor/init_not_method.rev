@@ -10,4 +10,4 @@ fn init() {
   print "not initializer"
 }
 
-init() // expect: not initializer
+init() // expect: "not initializer"

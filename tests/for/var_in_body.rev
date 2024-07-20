@@ -1,1 +1,3 @@
-for i in 0..2 { var a } // error: expect expression
+for i in 0..2 { var a }
+
+print "ok" // expect: "ok"

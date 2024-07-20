@@ -1,0 +1,1 @@
+1 <= "1" // error: can't use this operator for operations on string and int types

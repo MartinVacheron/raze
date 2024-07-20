@@ -1,7 +1,7 @@
 use tools::results::{RevReport, RevResult};
 
 use super::expr::{
-    AssignExpr, BinaryExpr, CallExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
+    AssignExpr, BinaryExpr, CallExpr, Expr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, FloatLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr
 };
 
 use super::stmt::{BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt, VisitStmt, WhileStmt};
@@ -95,7 +95,7 @@ impl VisitExpr<String, AstPrinterErr> for AstPrinter {
         Ok(format!("{}", expr.value))
     }
 
-    fn visit_real_literal_expr(&mut self, expr: &RealLiteralExpr) -> Result<String, RevResAstPrint> {
+    fn visit_float_literal_expr(&mut self, expr: &FloatLiteralExpr) -> Result<String, RevResAstPrint> {
         Ok(format!("{}", expr.value))
     }
 

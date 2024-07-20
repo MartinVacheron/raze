@@ -1,0 +1,1 @@
+true + false // error: operator '+' is not supported for operations on bool type

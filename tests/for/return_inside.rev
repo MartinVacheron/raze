@@ -6,4 +6,4 @@ fn f() {
 }
 
 print f()
-// expect: i
+// expect: "i"

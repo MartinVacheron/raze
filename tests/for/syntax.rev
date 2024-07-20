@@ -1,12 +1,12 @@
 // Single-expression body.
-// for c in 0..3 print c = c + 1  // todo
+for c in 0..3 { print c = c + 1 }
 // expect: 1
 // expect: 2
 // expect: 3
 
 // Block body.
 for i in 0..3 {
-  print a
+  print i
 }
 // expect: 0
 // expect: 1

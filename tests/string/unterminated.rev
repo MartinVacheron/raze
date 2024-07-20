@@ -1,0 +1,2 @@
+// error: string literal never closed with '"'
+"a

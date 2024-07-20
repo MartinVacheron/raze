@@ -1,17 +1,6 @@
 struct Foo {
-    field
-
-    fn init(arg) {
-        print "Foo.init(" + arg + ")"
-        self.field = "init"
-    }
+    fn init() {}
 }
 
-var foo = Foo("one") // expect: Foo.init(one)
-foo.field = "field"
-
-var foo2 = foo.init("two") // expect: Foo.init(two)
-print foo2 // expect: Foo instance
-
-// Make sure init() doesn't create a fresh instance.
-print foo.field // expect: init
+var f = Foo()
+f.init() // error: can't call the constructor directly

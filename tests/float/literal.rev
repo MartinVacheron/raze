@@ -1,0 +1,5 @@
+print 12. // expect: 12
+print 12.34 // expect: 12.34
+print -0.0001 // expect: -0.0001
+print 0. // expect: 0
+print .56 // expect: 0.56

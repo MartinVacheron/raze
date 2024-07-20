@@ -3,8 +3,8 @@ fn f() {
     var b = "b"
 
     fn g() {
-        print a // expect: a
-        print b // expect: b
+        print a // expect: "a"
+        print b // expect: "b"
     }
 
   g()

@@ -10,4 +10,4 @@ fn foo(param) {
 
 foo("param")
 
-f() // expect: param
+f() // expect: "param"

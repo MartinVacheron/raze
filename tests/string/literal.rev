@@ -1,0 +1,5 @@
+print "(" + "" + ")"   // expect: "()"
+print "a string" // expect: "a string"
+
+// Non-Ascii.
+print "A~¶Þॐஃ" // expect: "A~¶Þॐஃ"

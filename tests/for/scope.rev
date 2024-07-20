@@ -17,7 +17,7 @@
 
     // Goes out of scope after loop.
     var i = "after"
-    print i // expect: after
+    print i // expect: "after"
 
     // Can reuse an existing variable.
     for i in 0..1 {

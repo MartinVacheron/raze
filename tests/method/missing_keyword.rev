@@ -2,4 +2,4 @@ struct Foo {
     bar() {}
 }
 
-print Foo().bar() // error: missing 'fn' keyword before method definition
+print Foo().bar() // error: methods must be declared with 'fn' keyword

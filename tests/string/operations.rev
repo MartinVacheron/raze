@@ -1,0 +1,2 @@
+print "foo " * 3 // expect: "foo foo foo "
+print "foo " + "bar" // expect: "foo bar"

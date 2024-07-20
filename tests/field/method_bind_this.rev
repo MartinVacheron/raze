@@ -1,12 +1,11 @@
 struct Foo {
     name
+    func
 
     fn sayName(a) {
         print self.name
         print a
     }
-
-    fn func() {}
 }
 
 var foo1 = Foo()
@@ -18,6 +17,6 @@ foo2.name = "foo2"
 // Store the method reference on another object.
 foo2.func = foo1.sayName
 // Still retains original receiver.
-foo2.fn(1)
-// expect: foo1
+foo2.func(1)
+// expect: "foo1"
 // expect: 1

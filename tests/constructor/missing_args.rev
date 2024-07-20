@@ -2,4 +2,4 @@ struct Foo {
     fn init(a, b) {}
 }
 
-var foo = Foo(1) // error: wrong arguments number: expected 2 but got 1
+var foo = Foo(1) // error: wrong arguments number, expected 2 but got 1

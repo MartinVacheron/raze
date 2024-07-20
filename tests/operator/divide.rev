@@ -1,0 +1,9 @@
+print 8/4 // expect: 2
+
+// Int
+print 8 / 10 // expect: 0
+
+print 12.34 /12.34 // expect: 1
+
+print 1./ 2 // expect: 0.5
+print 2/ 4. // expect: 0

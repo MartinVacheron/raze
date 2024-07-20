@@ -1,0 +1,3 @@
+{
+    print notDefined  // error: undeclared variable 'notDefined'
+}

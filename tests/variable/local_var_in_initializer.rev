@@ -1,0 +1,4 @@
+var a = "outer"
+{
+    var a = a // error: local variable initializer is shadoweding global variable
+}

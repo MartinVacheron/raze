@@ -2,4 +2,4 @@ struct Foo {
     fn method(a, b) {}
 }
 
-Foo().method(1) // error: wrong arguments number: expected 2 but got 1
+Foo().method(1) // error: wrong arguments number, expected 2 but got 1

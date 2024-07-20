@@ -1,0 +1,1 @@
+var false = "value" // error: missing variable name after 'var' keyword in declaration

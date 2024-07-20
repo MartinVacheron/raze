@@ -13,24 +13,22 @@ fn print_bar() {
 
 // Return the first non-true argument.
 print false or print_foo()
-// expect: foo
+// expect: "foo"
 // expect: true
 print true or print_foo()
 // expect: true
 print print_bar() or print_foo() or false
-// expect: bar
-// expect: foo
+// expect: "bar"
+// expect: "foo"
 // expect: true
 
 print false or print_bar()
-// expect: bar
+// expect: "bar"
 // expect: false
 
 // Short-circuit at the first false argument.
 var a = "before"
 var b = "before"
-(a = false) or
-    (b = true) or
-    (a = "bad")
+(a = false) or (b = true) or (a = "bad")
 print a // expect: false
 print b // expect: true

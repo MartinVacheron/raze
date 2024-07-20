@@ -3,4 +3,4 @@ fn f(a, b) {
     print b
 }
 
-f(1, 2, 3, 4) // error: wrong arguments number: expected 2 but got 4
+f(1, 2, 3, 4) // error: wrong arguments number, expected 2 but got 4

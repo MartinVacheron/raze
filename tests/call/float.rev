@@ -1,2 +1,1 @@
-1() // error: only functions and structures are callable
 1.4() // error: only functions and structures are callable

@@ -2,7 +2,7 @@ use ecow::EcoString;
 
 use crate::ast::{
     expr::{
-        AssignExpr, BinaryExpr, CallExpr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, SetExpr, StrLiteralExpr, UnaryExpr, VisitExpr
+        AssignExpr, BinaryExpr, CallExpr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, FloatLiteralExpr, SetExpr, StrLiteralExpr, UnaryExpr, VisitExpr
     },
     stmt::{
         BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StructStmt, VarDeclStmt, VisitStmt, WhileStmt
@@ -95,7 +95,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         // Only one field cannot be empty
         if let Some(v) = expr.get_int_values().first() {
             infos.print = vec![format!("{}", v)];
-        } else if let Some(v) = expr.get_real_values().first() {
+        } else if let Some(v) = expr.get_float_values().first() {
             infos.print = vec![format!("{}", v)];
         } else if let Some(v) = expr.get_str_values().first() {
             infos.print = vec![format!("{}", v)];
@@ -219,7 +219,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct ExprInfos {
     pub int: Vec<IntInfo>,
-    pub real: Vec<RealInfo>,
+    pub float: Vec<FloatInfo>,
     pub str: Vec<StrInfo>,
     pub bool: Vec<BoolInfo>,
     pub binop: Vec<BinopInfo>,
@@ -236,8 +236,8 @@ impl ExprInfos {
         self.int.iter().map(|i| &i.value).collect()
     }
 
-    pub fn get_real_values(&self) -> Vec<&f64> {
-        self.real.iter().map(|i| &i.value).collect()
+    pub fn get_float_values(&self) -> Vec<&f64> {
+        self.float.iter().map(|i| &i.value).collect()
     }
 
     pub fn get_str_values(&self) -> Vec<EcoString> {
@@ -269,7 +269,7 @@ impl ExprInfos {
     pub fn get_locations(&self) -> Vec<&Loc> {
         let mut locs: Vec<&Loc> = vec![];
         self.int.iter().for_each(|i| locs.push(&i.loc));
-        self.real.iter().for_each(|r| locs.push(&r.loc));
+        self.float.iter().for_each(|r| locs.push(&r.loc));
         self.binop.iter().for_each(|b| locs.push(&b.loc));
         self.unary.iter().for_each(|u| locs.push(&u.loc));
         self.grouping.iter().for_each(|g| locs.push(&g.loc));
@@ -279,7 +279,7 @@ impl ExprInfos {
 
     fn concat(&mut self, other: &mut ExprInfos) {
         self.int.append(&mut other.int);
-        self.real.append(&mut other.real);
+        self.float.append(&mut other.float);
         self.str.append(&mut other.str);
         self.binop.append(&mut other.binop);
         self.grouping.append(&mut other.grouping);
@@ -305,7 +305,7 @@ pub struct IntInfo {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct RealInfo {
+pub struct FloatInfo {
     pub value: f64,
     pub loc: Loc,
 }
@@ -417,16 +417,16 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         Ok(infos)
     }
 
-    fn visit_real_literal_expr(
+    fn visit_float_literal_expr(
         &mut self,
-        expr: &RealLiteralExpr,
+        expr: &FloatLiteralExpr,
     ) -> Result<ExprInfos, RevResParserTestErr> {
         let mut infos = ExprInfos::default();
-        let real_infos = RealInfo {
+        let float_infos = FloatInfo {
             value: expr.value,
             loc: expr.loc.clone(),
         };
-        infos.real.push(real_infos);
+        infos.float.push(float_infos);
 
         Ok(infos)
     }

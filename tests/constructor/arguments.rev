@@ -3,7 +3,7 @@ struct Foo {
     b
     
     fn init(a, b) {
-        print "init" // expect: init
+        print "init" // expect: "init"
         self.a = a
         self.b = b
     }

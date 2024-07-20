@@ -26,7 +26,7 @@ use crate::{
 #[derive(Debug, Error)]
 pub enum RtValErr {
     // Negation
-    #[error("can't negate a value that isn't either of type: int, real or bool")]
+    #[error("can't negate a value that isn't either of type: int, float or bool")]
     UnNegatable,
 
     // Types operations
@@ -40,8 +40,11 @@ pub enum RtValErr {
     StringManip(String),
 
     // Instance
-    #[error("structure dosen't have field '{0}'")]
+    #[error("structure has no field '{0}'")]
     MissingFieldInStruct(EcoString),
+
+    #[error("assigning to method is not allowed")]
+    AssignToMethod,
 
     // Others
     #[error("can't use a null value in a binary operation")]
@@ -63,7 +66,7 @@ impl RevReport for RtValErr {
 #[derive(Debug, PartialEq, Clone)]
 pub enum RtVal {
     IntVal(Int),
-    RealVal(Real),
+    FloatVal(Float),
     StrVal(Str),
     BoolVal(Bool),
     FuncVal(Function),
@@ -73,7 +76,7 @@ pub enum RtVal {
     Null,
 }
 
-trait Negate {
+pub trait Negate {
     fn negate(&mut self);
 }
 
@@ -86,26 +89,15 @@ impl RtVal {
         RtVal::Null.into()
     }
 
-    pub fn negate(&mut self) -> Result<(), RtValErr> {
-        match self {
-            RtVal::IntVal(i) => i.negate(),
-            RtVal::RealVal(r) => r.negate(),
-            RtVal::BoolVal(b) => b.negate(),
-            _ => return Err(RtValErr::UnNegatable),
-        }
-
-        Ok(())
-    }
-
     // TODO: Error handling for other operation
     pub fn operate(&self, rhs: &RtVal, operator: &str) -> Result<RtVal, RtValErr> {
         match (&self, &rhs) {
             (RtVal::IntVal(i1), RtVal::IntVal(i2)) => i1.operate(&*i2, operator),
-            (RtVal::RealVal(r1), RtVal::RealVal(r2)) => {
+            (RtVal::FloatVal(r1), RtVal::FloatVal(r2)) => {
                 r1.operate(&*r2, operator)
             }
-            (RtVal::IntVal(i1), RtVal::RealVal(r1)) => i1.operate(&*r1, operator),
-            (RtVal::RealVal(r1), RtVal::IntVal(i1)) => r1.operate(&*i1, operator),
+            (RtVal::IntVal(i1), RtVal::FloatVal(r1)) => i1.operate(&*r1, operator),
+            (RtVal::FloatVal(r1), RtVal::IntVal(i1)) => r1.operate(&*i1, operator),
             (RtVal::StrVal(s1), RtVal::StrVal(s2)) => s1.operate(&*s2, operator),
             (RtVal::StrVal(s1), RtVal::IntVal(i1)) => s1.operate(&*i1, operator),
             (RtVal::IntVal(i1), RtVal::StrVal(s1)) => i1.operate(&*s1, operator),
@@ -120,9 +112,7 @@ impl RtVal {
 
 impl From<RtVal> for Rc<RefCell<RtVal>> {
     fn from(value: RtVal) -> Self {
-        match value {
-            v @ _ => Rc::new(RefCell::new(v))
-        }
+        Rc::new(RefCell::new(value))
     }
 }
 
@@ -159,8 +149,8 @@ impl Operate<Int> for Int {
     }
 }
 
-impl Operate<Real> for Int {
-    fn operate(&self, rhs: &Real, operator: &str) -> Result<RtVal, RtValErr> {
+impl Operate<Float> for Int {
+    fn operate(&self, rhs: &Float, operator: &str) -> Result<RtVal, RtValErr> {
         match operator {
             "+" => Ok((self.value as f64 + rhs.value).into()),
             "-" => Ok((self.value as f64 - rhs.value).into()),
@@ -188,20 +178,20 @@ impl Operate<Str> for Int {
 }
 
 // --------
-//   Real
+//   Float
 // --------
 #[derive(Debug, PartialEq, Clone)]
-pub struct Real {
+pub struct Float {
     pub value: f64,
 }
 
-impl Negate for Real {
+impl Negate for Float {
     fn negate(&mut self) {
         self.value *= -1.;
     }
 }
 
-impl Operate<Int> for Real {
+impl Operate<Int> for Float {
     fn operate(&self, rhs: &Int, operator: &str) -> Result<RtVal, RtValErr> {
         match operator {
             "+" => Ok((self.value + rhs.value as f64).into()),
@@ -215,13 +205,13 @@ impl Operate<Int> for Real {
             ">=" => Ok((self.value >= rhs.value as f64).into()),
             "==" => Ok((self.value == rhs.value as f64).into()),
             "!=" => Ok((self.value != rhs.value as f64).into()),
-            op => Err(RtValErr::UnsupportedOpOnType(op.to_string(), "real".into())),
+            op => Err(RtValErr::UnsupportedOpOnType(op.to_string(), "float".into())),
         }
     }
 }
 
-impl Operate<Real> for Real {
-    fn operate(&self, rhs: &Real, operator: &str) -> Result<RtVal, RtValErr> {
+impl Operate<Float> for Float {
+    fn operate(&self, rhs: &Float, operator: &str) -> Result<RtVal, RtValErr> {
         match operator {
             "+" => Ok((self.value + rhs.value).into()),
             "-" => Ok((self.value - rhs.value).into()),
@@ -234,7 +224,7 @@ impl Operate<Real> for Real {
             ">=" => Ok((self.value >= rhs.value).into()),
             "==" => Ok((self.value == rhs.value).into()),
             "!=" => Ok((self.value != rhs.value).into()),
-            op => Err(RtValErr::UnsupportedOpOnType(op.to_string(), "real".into())),
+            op => Err(RtValErr::UnsupportedOpOnType(op.to_string(), "float".into())),
         }
     }
 }
@@ -451,7 +441,10 @@ impl Instance {
         if let Occupied(mut v) = self.fields.entry(name.clone()) {
             v.insert(value);
             Ok(())
-        } else {
+        } else if self.strukt.borrow().methods.contains_key(&name) {
+            Err(RtValErr::AssignToMethod)
+        }
+        else {
             Err(RtValErr::MissingFieldInStruct(name))
         }
     }
@@ -468,7 +461,7 @@ impl From<i64> for RtVal {
 
 impl From<f64> for RtVal {
     fn from(value: f64) -> Self {
-        RtVal::RealVal(Real { value })
+        RtVal::FloatVal(Float { value })
     }
 }
 
@@ -495,7 +488,7 @@ impl RtVal {
         value.into()
     }
 
-    pub fn new_real(value: f64) -> Self {
+    pub fn new_float(value: f64) -> Self {
         value.into()
     }
 
@@ -515,7 +508,7 @@ impl Display for RtVal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             RtVal::IntVal(i) => write!(f, "{}", i.value),
-            RtVal::RealVal(r) => write!(f, "{}", r.value),
+            RtVal::FloatVal(r) => write!(f, "{}", r.value),
             RtVal::BoolVal(b) => write!(f, "{}", b.value),
             RtVal::StrVal(s) => write!(f, "\"{}\"", s.value),
             RtVal::FuncVal(func) => write!(f, "<fn {}>", func.name),

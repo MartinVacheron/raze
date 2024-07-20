@@ -15,16 +15,16 @@ pub enum LexerErr {
     #[error("unexpected token found: '{0}'")]
     UnexpectedToken(char),
 
+    // Numbers
+    #[error("decimal part is not a number")]
+    NonNumberDecimal,
+
+    #[error("numbers can't have two decimal parts")]
+    TwoDecimalParts,
+
     // Strings
     #[error("string literal never closed with '\"'")]
     StringNeverClosed,
-
-    // Numbers
-    #[error("expected nothing after real number declaration, found: '{0}'")]
-    NoSpaceAfterNumber(char),
-
-    #[error("expected numbers or nothing after '.' in number literal, found: '{0}'")]
-    NonNumericDecimal(char),
 }
 
 impl RevReport for LexerErr {
@@ -69,7 +69,7 @@ pub enum TokenKind {
     Identifier,
     String,
     Int,
-    Real,
+    Float,
 
     // Keywords
     Struct,
@@ -170,7 +170,13 @@ impl Lexer {
                 '}' => self.add_token(TokenKind::CloseBrace),
                 ',' => self.add_token(TokenKind::Comma),
                 '.' => {
-                    if self.is_at('.') {
+                    if self.at().is_numeric() {
+                        match self.lex_number(true) {
+                            Ok(_) => {},
+                            Err(e) => errors.push(e)
+                        }
+                    }
+                    else if self.is_at('.') {
                         self.add_token(TokenKind::DotDot);
                     } else {
                         self.add_token(TokenKind::Dot);
@@ -234,7 +240,7 @@ impl Lexer {
 
                 _ => {
                     if c.is_numeric() {
-                        match self.lex_number() {
+                        match self.lex_number(false) {
                             Ok(_) => {},
                             Err(e) => errors.push(e)
                         }
@@ -275,12 +281,7 @@ impl Lexer {
 
     fn lex_string(&mut self) -> Result<(), RevResLex> {
         while !self.eof() && self.at() != '\"' {
-            if self.at() == '\n' {
-                self.eat();
-                self.add_token(TokenKind::NewLine);
-            } else {
-                self.eat();
-            }
+            self.eat();
         }
 
         if self.eof() {
@@ -296,40 +297,79 @@ impl Lexer {
         Ok(())
     }
 
-    fn lex_number(&mut self) -> Result<(), RevResLex> {
+    // point_float is when we are in the case ".456" and we have already parsed
+    // the '.' 
+    fn lex_number(&mut self, point_float: bool) -> Result<(), RevResLex> {
         while self.at().is_numeric() {
             self.eat();
         }
+
+        if point_float {
+            if self.at() == '.' {
+                return Err(self.trigger_error(LexerErr::TwoDecimalParts))
+            }
+
+            if !self.is_skippable()
+                && self.at() != '\n'
+                && !self.is_math_op()
+                && !self.eof()
+            {
+                return Err(self.trigger_error(LexerErr::NonNumberDecimal))
+            }
+
+            self.add_token(TokenKind::Float);
+
+            return Ok(())
+        }
         
         if self.at() == '.' {
+            // Range
             if self.next() == '.' {
-                self.add_token(TokenKind::Int);
-                self.eat();
-                self.eat();
-                self.add_token(TokenKind::DotDot);
-
-                return Ok(())
+                return self.lex_range()
             }
 
             self.eat();
 
-            if self.eof() || self.is_skippable() || self.at() == '\n' {
-               // Nothing 
-            } else if !self.at().is_numeric() {
-                return Err(self.trigger_error(LexerErr::NonNumericDecimal(self.at())))
-            } else {
-                while self.at().is_numeric() {
-                    self.eat();
-                }
-
-                // After all the numbers, we expect a white space
-                if !self.eof() && !self.is_skippable() && self.at() != '\n' {
-                    return Err(self.trigger_error(LexerErr::NoSpaceAfterNumber(self.at())))
-                }
+            if !self.at().is_numeric()
+                && !self.is_skippable()
+                && self.at() != '\n'
+                && !self.is_math_op()
+                && !self.eof()
+            {
+                return Err(self.trigger_error(LexerErr::NonNumberDecimal))
             }
-            self.add_token(TokenKind::Real);
+
+            while self.at().is_numeric() {
+                self.eat();
+            }
+
+            if self.at() == '.' {
+                return Err(self.trigger_error(LexerErr::TwoDecimalParts))
+            }
+            
+            self.add_token(TokenKind::Float);
 
         } else {
+            self.add_token(TokenKind::Int);
+        }
+
+        Ok(())
+    }
+
+    fn lex_range(&mut self) -> Result<(), RevResLex> {
+        self.add_token(TokenKind::Int);
+
+        self.start = self.current;
+        self.eat();
+        self.eat();
+        self.add_token(TokenKind::DotDot);
+
+        self.start = self.current;
+        while self.at().is_numeric() {
+            self.eat();
+        }
+
+        if self.start != self.current {
             self.add_token(TokenKind::Int);
         }
 
@@ -378,6 +418,13 @@ impl Lexer {
 
     fn is_skippable(&self) -> bool {
         matches!(self.at(), ' ' | '\t' | '\r')
+    }
+
+    fn is_math_op(&self) -> bool {
+        match self.at() {
+            '+' | '-' | '*' | '/' => true,
+            _ => false
+        }
     }
 
     fn eat(&mut self) -> char {
@@ -516,7 +563,7 @@ mod tests {
 
         assert_eq!(
             tk_type,
-            vec![TokenKind::Int, TokenKind::Real, TokenKind::Real, TokenKind::Eof]
+            vec![TokenKind::Int, TokenKind::Float, TokenKind::Float, TokenKind::Eof]
         );
 
         assert_eq!(
@@ -537,35 +584,6 @@ mod tests {
             tk_type,
             vec![TokenKind::Int, TokenKind::DotDot, TokenKind::Int, TokenKind::Eof]
         );
-    }
-    #[test]
-    fn number_errors() {
-        let code: String = "12.5.".into();
-        let mut lexer = Lexer::new(); 
-        let tokens = lexer.tokenize(&code);
-
-        assert!(matches!(
-            tokens.err().unwrap()[0].err,
-            LexerErr::NoSpaceAfterNumber(..)
-        ));
-
-        let code: String = "12.534.45".into();
-        let mut lexer = Lexer::new(); 
-        let tokens = lexer.tokenize(&code);
-
-        assert!(matches!(
-            tokens.err().unwrap()[0].err,
-            LexerErr::NoSpaceAfterNumber(..)
-        ));
-
-        let code: String = "12.a".into();
-        let mut lexer = Lexer::new(); 
-        let tokens = lexer.tokenize(&code);
-
-        assert!(matches!(
-            tokens.err().unwrap()[0].err,
-            LexerErr::NonNumericDecimal(..)
-        ));
     }
 
     #[test]

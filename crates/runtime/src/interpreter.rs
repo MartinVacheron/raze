@@ -15,11 +15,11 @@ use tools::{
 use crate::callable::Callable;
 use crate::environment::Env;
 use crate::native_functions::RevNativeFn;
-use crate::values::{Function, RtVal};
+use crate::values::{Function, RtVal, Negate};
 use crate::native_functions::NativeFnErr;
 use frontend::ast::{expr::{
     AssignExpr, BinaryExpr, CallExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr,
-    RealLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr,
+    FloatLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr,
 }, stmt::StructStmt};
 use frontend::ast::stmt::{
     BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt,
@@ -39,11 +39,11 @@ pub enum InterpErr {
     #[error("can't use '!' token on anything other than a bool value")]
     BangOpOnNonBool,
 
-    #[error("can't use '-' token on anything other than an int or a real value")]
+    #[error("can't use '-' token on anything other than an int or a float value")]
     NegateNonNumeric,
 
-    #[error("{0}")]
-    Negation(String),
+    #[error("unknow unary operator '{0}'")]
+    UnknownUnaryOp(String),
 
     // Variables
     #[error("{0}")]
@@ -74,7 +74,7 @@ pub enum InterpErr {
     #[error("only functions and structures are callable")]
     NonFnCall,
 
-    #[error("wrong arguments number: expected {0} but got {1}")]
+    #[error("wrong arguments number, expected {0} but got {1}")]
     WrongArgsNb(usize, usize),
 
     #[error("{0}")]
@@ -86,6 +86,9 @@ pub enum InterpErr {
 
     #[error("structure has no field '{0}'")]
     InexistantField(EcoString),
+
+    #[error("{0}")]
+    InexistantFieldBis(String),
 
     // Results
     #[error("return")]
@@ -122,25 +125,12 @@ impl Interpreter {
                 arity: 0,
                 func: |_, _| {
                     match SystemTime::now().duration_since(UNIX_EPOCH) {
-                        Ok(t) => Ok(RtVal::new_real(t.as_millis() as f64 / 1000.).into()),
+                        Ok(t) => Ok(RtVal::new_float(t.as_millis() as f64 / 1000.).into()),
                         Err(_) => Err(RevResult::new(NativeFnErr::GetTime.into(), None))
                     }
                 },
             }))),
         );
-
-        // let _ = globals.borrow_mut().declare_var(
-        //     EcoString::from("print"),
-        //     Rc::new(RefCell::new(RtVal::NativeFnVal(RevNativeFn {
-        //         name: EcoString::from("print"),
-        //         arity: 0,
-        //         func: |_, args| {
-        //             args.iter().for_each(|a| println!("{}", a.borrow()));
-
-        //             Ok(RtVal::new_null())
-        //         },
-        //     }))),
-        // );
 
         let env = globals.clone();
 
@@ -403,12 +393,18 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> InterpRes {
         let value = expr.value.accept(self)?;
 
-        self.env
-            .borrow_mut()
-            .assign(expr.name.clone(), value.clone())
-            .map_err(|e| {
+        match self.locals.get(&expr.to_uuid()) {
+            Some(i) => self
+                .env
+                .borrow_mut()
+                .assign_at(expr.name.clone(), value.clone(), i)
+                .map_err(|e| {
+                    RevResult::new(InterpErr::AssignEnv(e.to_string()), Some(expr.loc.clone()))
+                })?,
+            None => self.globals.borrow_mut().assign(expr.name.clone(), value.clone()).map_err(|e| {
                 RevResult::new(InterpErr::AssignEnv(e.to_string()), Some(expr.loc.clone()))
-            })?;
+            })?,
+        }
 
         Ok(value)
     }
@@ -421,8 +417,8 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
         Ok(RtVal::new_int(expr.value).into())
     }
 
-    fn visit_real_literal_expr(&mut self, expr: &RealLiteralExpr) -> InterpRes {
-        Ok(RtVal::new_real(expr.value).into())
+    fn visit_float_literal_expr(&mut self, expr: &FloatLiteralExpr) -> InterpRes {
+        Ok(RtVal::new_float(expr.value).into())
     }
 
     fn visit_str_literal_expr(&mut self, expr: &StrLiteralExpr) -> InterpRes {
@@ -452,25 +448,27 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> InterpRes {
         let value = expr.right.accept(self)?;
 
-        match (&*value.borrow(), expr.operator.as_str()) {
-            (RtVal::IntVal(..) | RtVal::RealVal(..), "!") => {
-                return Err(RevResult::new(
+        match expr.operator.as_str() {
+            "!" => match &mut *value.borrow_mut() {
+                RtVal::BoolVal(v) => v.negate(),
+                _ => return Err(RevResult::new(
                     InterpErr::BangOpOnNonBool,
                     Some(expr.loc.clone()),
                 ))
             }
-            (RtVal::BoolVal(..) | RtVal::StrVal(..) | RtVal::Null, "-") => {
-                return Err(RevResult::new(
+            "-" => match &mut *value.borrow_mut() {
+                RtVal::IntVal(v) => v.negate(),
+                RtVal::FloatVal(v) => v.negate(),
+                _ => return Err(RevResult::new(
                     InterpErr::NegateNonNumeric,
                     Some(expr.loc.clone()),
                 ))
-            }
-            _ => {}
+            },
+            op @ _ => return Err(RevResult::new(
+                    InterpErr::UnknownUnaryOp(op.into()),
+                    Some(expr.loc.clone()),
+                ))
         }
-
-        value.borrow_mut().negate().map_err(|e| {
-            RevResult::new(InterpErr::Negation(e.to_string()), Some(expr.loc.clone()))
-        })?;
 
         Ok(value)
     }
@@ -569,7 +567,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
                 let val = expr.value.accept(self)?;
 
                 inst.set(expr.name.clone(), val.clone())
-                    .map_err(|_| RevResult::new(InterpErr::InexistantField(expr.name.clone()), Some(expr.loc.clone())))?;
+                    .map_err(|e| RevResult::new(InterpErr::InexistantFieldBis(e.to_string()), Some(expr.loc.clone())))?;
 
                 Ok(val)
             },

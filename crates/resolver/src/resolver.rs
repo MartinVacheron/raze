@@ -7,7 +7,7 @@ use tools::{results::{Loc, RevReport, RevResult}, ToUuid};
 
 use frontend::ast::{
     expr::{
-        AssignExpr, BinaryExpr, CallExpr, Expr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, RealLiteralExpr, SelfExpr, SetExpr, StrLiteralExpr, UnaryExpr, VisitExpr
+        AssignExpr, BinaryExpr, CallExpr, Expr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, FloatLiteralExpr, SelfExpr, SetExpr, StrLiteralExpr, UnaryExpr, VisitExpr
     },
     stmt::{
         BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StructStmt, VarDeclStmt, VisitStmt, WhileStmt
@@ -20,10 +20,10 @@ pub enum ResolverErr {
     #[error("local variable initializer is shadoweding global variable")]
     LocalVarInOwnInit,
 
-    #[error("A variable with the same name as already been declared in this local scope")]
+    #[error("a variable with the same name as already been declared in this local scope")]
     AlreadyDeclInLocal,
 
-    #[error("Can't return from top level code")]
+    #[error("can't return from top level code")]
     TopLevelReturn,
 
     #[error("use of self outside of a structure")]
@@ -34,6 +34,9 @@ pub enum ResolverErr {
 
     #[error("can't return a value from the constructor")]
     ReturnFromInit,
+
+    #[error("can't call the constructor directly")]
+    DirectConstructorCall,
 }
 
 impl RevReport for ResolverErr {
@@ -57,7 +60,6 @@ enum FnType {
 
 
 // TEST:
-//   can't call constructor
 //   can't have same name for field and method because other wise 
 //     we don't know which we get when: foo.name if there is a method "name" too
 //     or transforme it into a getter
@@ -151,8 +153,7 @@ impl Resolver {
     }
 
     fn resolve_fn(&mut self, stmt: &FnDeclStmt, typ: FnType) -> ResolverRes {
-        let prev_fn_type = self.fn_type;
-        self.fn_type = typ;
+        let prev_fn_type = std::mem::replace(&mut self.fn_type, typ);
 
         self.begin_scope();
 
@@ -308,7 +309,7 @@ impl VisitExpr<(), ResolverErr> for Resolver {
         Ok(())
     }
 
-    fn visit_real_literal_expr(&mut self, _: &RealLiteralExpr) -> ResolverRes {
+    fn visit_float_literal_expr(&mut self, _: &FloatLiteralExpr) -> ResolverRes {
         Ok(())
     }
 
@@ -355,6 +356,14 @@ impl VisitExpr<(), ResolverErr> for Resolver {
     }
     
     fn visit_get_expr(&mut self, expr: &GetExpr) -> ResolverRes {
+        // Can't call constructor like: Foo().init()
+        if expr.name.as_str() == "init" {
+            return Err(RevResult::new(
+                ResolverErr::DirectConstructorCall,
+                Some(expr.loc.clone()),
+            ))
+        }
+
         self.resolve_expr(&expr.object)?;
 
         Ok(())
@@ -412,7 +421,7 @@ var a
 
         assert_eq!(
             depths,
-            vec![0usize, 0usize, 0usize, 0usize, 0usize, 0usize, 1usize, 1usize, 2usize]
+            vec![0, 0, 0, 0, 0, 0, 1, 1, 2]
         );
     }
 
