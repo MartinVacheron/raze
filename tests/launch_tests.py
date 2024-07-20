@@ -1,6 +1,19 @@
 import os
 import subprocess
+import argparse
 
+
+# CLI
+parser = argparse.ArgumentParser()
+
+parser.add_argument(
+    "--print-err",
+    action='store_true', # Acts like a flag
+    help="only display errors from tests",
+    default=False
+)
+
+args = parser.parse_args()
 
 # ANSI escape codes
 RED = "\033[31m"
@@ -36,53 +49,66 @@ for dir in os.listdir():
 
     for file in files:
         path = f"{dir}\\{file}"
-        result = subprocess.run(["..\\target\\debug\\rev.exe", "-f", path], capture_output=True)
 
-        content = open(path, "r", encoding="utf-8")
+        # Error print mode
+        if args.print_err:
+            result = subprocess.run(["..\\target\\debug\\rev.exe", "-f", path], capture_output=True)
+            rev_output = result.stdout.decode().strip()
 
-        errors = []
-        expects = []
-        for line in content.readlines():
-            if "error" in line:
-                err = line.split("error: ")[1].strip()
-                errors.append(err)
-            elif "expect" in line:
-                exp = line.split("expect: ")[1].strip()
-                expects.append(exp)
+            for line in rev_output.split("\n"):
+                if "error" in line or "-->" in line or " | " in line or "^" in line or line == "":
+                    print(line)
+                else:
+                    continue
 
-        rev_output = result.stdout.decode().strip()
-
-        rev_res = []
-        rev_err = []
-        for line in rev_output.split("\n"):
-            if "-->" in line or " | " in line or "^" in line or line == "":
-                continue
-            elif "error" in line:
-                rev_err.append(line.split(": ")[1])
-            else:
-                rev_res.append(line.strip())
-
-        ok = rev_res == expects and rev_err == errors
-
-        if ok:
-            res = clr_str("Ok", GREEN)
-            total_ok += 1
         else:
-            res = clr_str("Ko", RED)
-            total_ko += 1
+            result = subprocess.run(["..\\target\\debug\\rev.exe", "-f", path], capture_output=True)
 
-        print(f"testing {dir}::{file}...  {res}")
+            content = open(path, "r", encoding="utf-8")
 
-        if not ok:
-            if len(rev_res) > 0:
-                print(f"Expected:\n{rev_res}")
-                print(f"Got:\n{expects}")
+            errors = []
+            expects = []
+            for line in content.readlines():
+                if "error" in line:
+                    err = line.split("error: ")[1].strip()
+                    errors.append(err)
+                elif "expect" in line:
+                    exp = line.split("expect: ")[1].strip()
+                    expects.append(exp)
 
-            if len(rev_err) > 0:
-                print(f"Expected erros:\n{rev_err}")
-                print(f"Got erros:\n{errors}")
+            rev_output = result.stdout.decode().strip()
 
-            print()
+            rev_res = []
+            rev_err = []
+            for line in rev_output.split("\n"):
+                if "-->" in line or " | " in line or "^" in line or line == "":
+                    continue
+                elif "error" in line:
+                    rev_err.append(line.split(": ")[1])
+                else:
+                    rev_res.append(line.strip())
+
+            ok = rev_res == expects and rev_err == errors
+
+            if ok:
+                res = clr_str("Ok", GREEN)
+                total_ok += 1
+            else:
+                res = clr_str("Ko", RED)
+                total_ko += 1
+
+            print(f"testing {dir}::{file}...  {res}")
+
+            if not ok:
+                if len(rev_res) > 0:
+                    print(f"Expected:\n{rev_res}")
+                    print(f"Got:\n{expects}")
+
+                if len(rev_err) > 0:
+                    print(f"Expected erros:\n{rev_err}")
+                    print(f"Got erros:\n{errors}")
+
+                print()
 
 print(clr_str("\n\n\t\tStatistics\n", YELLOW))
 print(f"Total tests: {total_tests}")

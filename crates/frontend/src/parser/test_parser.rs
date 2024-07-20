@@ -272,7 +272,6 @@ impl ExprInfos {
         self.float.iter().for_each(|r| locs.push(&r.loc));
         self.binop.iter().for_each(|b| locs.push(&b.loc));
         self.unary.iter().for_each(|u| locs.push(&u.loc));
-        self.grouping.iter().for_each(|g| locs.push(&g.loc));
 
         locs
     }
@@ -325,7 +324,6 @@ pub struct BoolInfo {
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct GroupingInfo {
     pub expr: ExprInfos,
-    pub loc: Loc,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -409,8 +407,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
     fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> Result<ExprInfos, RevResParserTestErr> {
         let mut infos = ExprInfos::default();
         let grouping_info = GroupingInfo {
-            expr: expr.expr.accept(self).unwrap(),
-            loc: expr.loc.clone(),
+            expr: expr.expr.accept(self).unwrap()
         };
         infos.grouping.push(grouping_info);
 

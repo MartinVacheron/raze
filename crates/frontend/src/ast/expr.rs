@@ -47,7 +47,7 @@ impl Expr {
     pub fn get_loc(&self) -> Loc {
         match self {
             Self::Binary(b) => b.loc.clone(),
-            Self::Grouping(g) => g.loc.clone(),
+            Self::Grouping(g) => g.expr.get_loc(),
             Self::IntLiteral(i) => i.loc.clone(),
             Self::FloatLiteral(r) => r.loc.clone(),
             Self::StrLiteral(s) => s.loc.clone(),
@@ -74,7 +74,6 @@ pub struct BinaryExpr {
 #[derive(Debug, PartialEq, Clone)]
 pub struct GroupingExpr {
     pub expr: Box<Expr>,
-    pub loc: Loc,
 }
 
 #[derive(Debug, PartialEq, Clone)]

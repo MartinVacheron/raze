@@ -271,9 +271,12 @@ impl<'a> Parser<'a> {
 
     fn parse_var_declaration(&mut self) -> ParserStmtRes {
         self.expect(TokenKind::Var)?;
+        println!("Equal loc: {:?}", self.at().loc);
+
         let name = self
             .expect(TokenKind::Identifier)
-            .map_err(|_| self.trigger_error(ParserErr::VarDeclNoName))?
+            // .map_err(|_| self.trigger_error(ParserErr::VarDeclNoName))?
+            .map_err(|_| self.trigger_error_before_prev(ParserErr::VarDeclNoName))?
             .value
             .clone();
 
@@ -674,21 +677,23 @@ impl<'a> Parser<'a> {
         match self.at().kind {
             TokenKind::Equal => {
                 self.eat()?;
-                let value = Box::new(self.parse_assign()?);
 
                 match assigne {
                     Expr::Identifier(e) => Ok(Expr::Assign(AssignExpr {
                         name: e.name.clone(),
-                        value,
+                        value: Box::new(self.parse_assign()?),
                         loc: self.get_loc(),
                     })),
                     Expr::Get(e) => Ok(Expr::Set(SetExpr {
                         object: e.object,
                         name: e.name,
-                        value,
+                        value: Box::new(self.parse_assign()?),
                         loc: self.get_loc(),
                     })),
-                    _ => Err(self.trigger_error(ParserErr::InvalidAssignTarget)),
+                    _ => Err(self.trigger_error_with_loc(
+                        ParserErr::InvalidAssignTarget,
+                        assigne.get_loc()
+                    )),
                 }
             }
             _ => Ok(assigne),
@@ -993,9 +998,10 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::CloseParen)
             .map_err(|_| RevResult::new(ParserErr::ParenNeverClosed, Some(self.get_loc())))?;
 
+        println!("In groupind, expr loc: {:?}", expr.get_loc());
+
         Ok(Expr::Grouping(GroupingExpr {
             expr: Box::new(expr),
-            loc: self.get_loc(),
         }))
     }
 
@@ -1092,9 +1098,25 @@ impl<'a> Parser<'a> {
     fn trigger_error(&mut self, err: ParserErr) -> RevResParser {
         let err_loc = self.get_loc();
 
+        self.trigger_error_with_loc(err, err_loc)
+    }
+
+    fn trigger_error_with_loc(&mut self, err: ParserErr, loc: Loc) -> RevResParser {
         self.synchronize();
 
-        RevResult::new(err, Some(err_loc))
+        println!("Loc: {:?}", loc);
+
+        RevResult::new(err, Some(loc))
+    }
+
+    // Triggers before the beginning of prev token, ex: 
+    // var = 8
+    //    ^
+    fn trigger_error_before_prev(&mut self, err: ParserErr) -> RevResParser {
+        let prev_start = self.prev().loc.start;
+        let prev_loc = Loc::new(prev_start - 1, prev_start);
+
+        self.trigger_error_with_loc(err, prev_loc)
     }
 
     // We are here in panic mode
