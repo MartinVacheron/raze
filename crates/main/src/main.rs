@@ -76,11 +76,11 @@ impl Repl {
         let mut stdout = io::stdout();
         let mut input = String::new();
 
-        println!("\n  {}", "Rev language interpreter v0.0".yellow());
+        println!("\n  {}", "Rev language interpreter v0.0\n".yellow());
 
         loop {
             input.clear();
-            print!("\n> ");
+            print!("> ");
             stdout.flush().unwrap();
 
             stdin.read_line(&mut input)?;

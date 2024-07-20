@@ -103,7 +103,10 @@ impl RtVal {
             (RtVal::IntVal(i1), RtVal::StrVal(s1)) => i1.operate(&*s1, operator),
             (RtVal::BoolVal(b1), RtVal::BoolVal(b2)) => {
                 b1.operate(&*b2, operator)
-            }
+            },
+            (RtVal::StructVal(s1), RtVal::StructVal(s2)) => {
+                s1.borrow().operate(&*s2.borrow(), operator)
+            },
             (RtVal::Null, _) | (_, RtVal::Null) => Err(RtValErr::OperationOnNull),
             _ => Err(RtValErr::UnknownOperation),
         }
@@ -423,6 +426,15 @@ impl Callable for Rc<RefCell<Struct>> {
         }
 
         Ok(instance)
+    }
+}
+
+impl Operate<Struct> for Struct {
+    fn operate(&self, rhs: &Struct, operator: &str) -> Result<RtVal, RtValErr> {
+        match operator {
+            "==" => Ok((self.name == rhs.name).into()),
+            _ => Err(RtValErr::UnsupportedOpOnType(operator.into(), "struct".into()))
+        }
     }
 }
 
