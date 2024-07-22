@@ -12,8 +12,13 @@ impl Loc {
     pub fn new(start: usize, end: usize) -> Self {
         Self { start, end }
     }
-     pub fn get_len(&self) -> usize {
-        self.end - self.start
+
+    pub fn new_len_one_from_start(loc: Loc) -> Self {
+        Self { start: loc.start, end: loc.start }
+    }
+    
+    pub fn get_len(&self) -> usize {
+        self.end - self.start + 1
     }
 }
 
@@ -50,9 +55,11 @@ impl<'a, T: RevReport> RevResult<T> {
             println!("  {} {} [line {}]", "-->".cyan(), file_name, cx.line);
 
             for (i, line) in cx.snippets {
-                // If this line + 1 is % 10, the next one will be one digit
-                // longer, so we add a space before the smallest
-                let add_space = if (i + 1) % 10 == 0 { " " } else { "" };
+                let add_space = if (i+1).to_string().len() - i.to_string().len() == 1 {
+                    " "
+                } else {
+                    ""
+                };
 
                 println!(" {} {}", format!("{}{} |", add_space, i).cyan(), line);
             }

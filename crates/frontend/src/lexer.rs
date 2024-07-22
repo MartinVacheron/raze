@@ -476,7 +476,6 @@ impl Lexer {
     }
 
     fn get_loc(&self) -> Loc {
-        println!("Loc creation: start: {}, end: {}", self.start, self.current - 1);
         Loc::new(self.start, self.current - 1)
     }
 }

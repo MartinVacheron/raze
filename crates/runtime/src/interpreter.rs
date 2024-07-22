@@ -385,7 +385,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
             Ok(res) => Ok(res.into()),
             Err(e) => Err(RevResult::new(
                 InterpErr::OperationEvaluation(e.to_string()),
-                Some(expr.loc.clone()),
+                Some(expr.right.get_loc()),
             )),
         }
     }
@@ -399,10 +399,10 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
                 .borrow_mut()
                 .assign_at(expr.name.clone(), value.clone(), i)
                 .map_err(|e| {
-                    RevResult::new(InterpErr::AssignEnv(e.to_string()), Some(expr.loc.clone()))
+                    RevResult::new(InterpErr::AssignEnv(e.to_string()), Some(expr.value.get_loc()))
                 })?,
             None => self.globals.borrow_mut().assign(expr.name.clone(), value.clone()).map_err(|e| {
-                RevResult::new(InterpErr::AssignEnv(e.to_string()), Some(expr.loc.clone()))
+                RevResult::new(InterpErr::AssignEnv(e.to_string()), Some(expr.value.get_loc()))
             })?,
         }
 
@@ -453,7 +453,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
                 RtVal::BoolVal(v) => v.negate(),
                 _ => return Err(RevResult::new(
                     InterpErr::BangOpOnNonBool,
-                    Some(expr.loc.clone()),
+                    Some(expr.right.get_loc()),
                 ))
             }
             "-" => match &mut *value.borrow_mut() {
@@ -461,12 +461,12 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
                 RtVal::FloatVal(v) => v.negate(),
                 _ => return Err(RevResult::new(
                     InterpErr::NegateNonNumeric,
-                    Some(expr.loc.clone()),
+                    Some(expr.right.get_loc()),
                 ))
             },
             op @ _ => return Err(RevResult::new(
                     InterpErr::UnknownUnaryOp(op.into()),
-                    Some(expr.loc.clone()),
+                    Some(expr.right.get_loc()),
                 ))
         }
 
@@ -524,7 +524,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
             RtVal::FuncVal(f) => Box::new(f),
             RtVal::NativeFnVal(f) => Box::new(f),
             RtVal::StructVal(s) => Box::new(s),
-            _ => return Err(RevResult::new(InterpErr::NonFnCall, Some(expr.loc.clone())))
+            _ => return Err(RevResult::new(InterpErr::NonFnCall, Some(expr.callee.get_loc())))
         };
 
         if callable.arity() != args.len() {

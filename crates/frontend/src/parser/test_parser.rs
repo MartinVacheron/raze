@@ -397,7 +397,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
             left: expr.left.accept(self).unwrap(),
             op: expr.operator.clone(),
             right: expr.right.accept(self).unwrap(),
-            loc: expr.loc.clone(),
+            loc: expr.right.get_loc(),
         };
         infos.binop.push(binop_infos);
 
@@ -460,7 +460,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         let unary_info = UnaryInfo {
             expr: expr.right.accept(self).unwrap(),
             op: expr.operator.clone(),
-            loc: expr.loc.clone(),
+            loc: expr.right.get_loc()
         };
         infos.unary.push(unary_info);
 
@@ -472,7 +472,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         let assign_infos = AssignInfo {
             name: expr.name.clone(),
             expr: expr.value.accept(self)?,
-            loc: expr.loc.clone(),
+            loc: expr.value.get_loc(),
         };
         infos.assign.push(assign_infos);
         Ok(infos)

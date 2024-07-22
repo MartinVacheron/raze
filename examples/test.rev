@@ -1,1 +1,19 @@
-(a) = "value" 
+
+
+
+
+
+
+
+
+
+
+struct Foo {
+    fn foo() {}
+}
+
+var bar = 4
+
+var f = Foo()
+
+f.foo = bar // error: assigning to method is not allowed

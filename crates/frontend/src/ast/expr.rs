@@ -46,19 +46,37 @@ impl Display for Expr {
 impl Expr {
     pub fn get_loc(&self) -> Loc {
         match self {
-            Self::Binary(b) => b.loc.clone(),
+            Self::Binary(b) => b.right.get_loc(),
             Self::Grouping(g) => g.expr.get_loc(),
             Self::IntLiteral(i) => i.loc.clone(),
             Self::FloatLiteral(r) => r.loc.clone(),
             Self::StrLiteral(s) => s.loc.clone(),
             Self::Identifier(i) => i.loc.clone(),
-            Self::Unary(u) => u.loc.clone(),
-            Self::Assign(a) => a.loc.clone(),
+            Self::Unary(u) => u.right.get_loc(),
+            Self::Assign(a) => a.value.get_loc(),
             Self::Logical(l) => l.loc.clone(),
             Self::Call(c) => c.loc.clone(),
-            Self::Get(g) => g.loc.clone(),
+            Self::Get(g) => g.object.get_loc(),
             Self::Set(s) => s.loc.clone(),
             Self::Selff(s) => s.loc.clone(),
+        }
+    }
+
+    pub fn get_mut_loc(&mut self) -> &mut Loc {
+        match self {
+            Self::Binary(b) => b.right.get_mut_loc(),
+            Self::Grouping(g) => g.expr.get_mut_loc(),
+            Self::IntLiteral(i) => &mut i.loc,
+            Self::FloatLiteral(r) => &mut r.loc,
+            Self::StrLiteral(s) => &mut s.loc,
+            Self::Identifier(i) => &mut i.loc,
+            Self::Unary(u) => u.right.get_mut_loc(),
+            Self::Assign(a) => a.value.get_mut_loc(),
+            Self::Logical(l) => &mut l.loc,
+            Self::Call(c) => &mut c.loc,
+            Self::Get(g) => &mut g.loc,
+            Self::Set(s) => &mut s.loc,
+            Self::Selff(s) => &mut s.loc,
         }
     }
 }
@@ -68,7 +86,6 @@ pub struct BinaryExpr {
     pub left: Box<Expr>,
     pub operator: EcoString,
     pub right: Box<Expr>,
-    pub loc: Loc,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -119,8 +136,7 @@ impl ToUuid for IdentifierExpr {
 #[derive(Debug, PartialEq, Clone)]
 pub struct UnaryExpr {
     pub operator: EcoString,
-    pub right: Box<Expr>,
-    pub loc: Loc,
+    pub right: Box<Expr>
 }
 
 
@@ -128,7 +144,6 @@ pub struct UnaryExpr {
 pub struct AssignExpr {
     pub name: EcoString,
     pub value: Box<Expr>,
-    pub loc: Loc,
 }
 
 impl ToUuid for AssignExpr {
@@ -136,8 +151,8 @@ impl ToUuid for AssignExpr {
         let mut hasher = Sha256::new();
 
         hasher.update(self.name.as_bytes());
-        hasher.update(self.loc.start.to_be_bytes());
-        hasher.update(self.loc.end.to_be_bytes());
+        hasher.update(self.value.get_loc().start.to_be_bytes());
+        hasher.update(self.value.get_loc().end.to_be_bytes());
 
         let res = hasher.finalize();
 

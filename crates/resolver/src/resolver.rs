@@ -29,9 +29,6 @@ pub enum ResolverErr {
     #[error("use of self outside of a structure")]
     SelfOutsideStruct,
 
-    #[error("can't call init function")]
-    InitCall,
-
     #[error("can't return a value from the constructor")]
     ReturnFromInit,
 

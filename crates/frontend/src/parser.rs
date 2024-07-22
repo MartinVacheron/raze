@@ -40,7 +40,7 @@ pub enum ParserErr {
     #[error("error parsing float")]
     ParsingFloat,
 
-    #[error("parenthesis group is never closed")]
+    #[error("parenthesis is never closed")]
     ParenNeverClosed,
 
     // Variables
@@ -271,7 +271,6 @@ impl<'a> Parser<'a> {
 
     fn parse_var_declaration(&mut self) -> ParserStmtRes {
         self.expect(TokenKind::Var)?;
-        println!("Equal loc: {:?}", self.at().loc);
 
         let name = self
             .expect(TokenKind::Identifier)
@@ -593,7 +592,7 @@ impl<'a> Parser<'a> {
 
         Ok(Stmt::Return(ReturnStmt {
             value,
-            loc: self.get_loc(),
+            loc: self.get_loc_from_prev(),
         }))
     }
 
@@ -682,13 +681,12 @@ impl<'a> Parser<'a> {
                     Expr::Identifier(e) => Ok(Expr::Assign(AssignExpr {
                         name: e.name.clone(),
                         value: Box::new(self.parse_assign()?),
-                        loc: self.get_loc(),
                     })),
                     Expr::Get(e) => Ok(Expr::Set(SetExpr {
                         object: e.object,
                         name: e.name,
                         value: Box::new(self.parse_assign()?),
-                        loc: self.get_loc(),
+                        loc: self.get_loc_from_prev(),
                     })),
                     _ => Err(self.trigger_error_with_loc(
                         ParserErr::InvalidAssignTarget,
@@ -762,7 +760,6 @@ impl<'a> Parser<'a> {
                 left: Box::new(expr),
                 operator,
                 right: Box::new(right),
-                loc: self.get_loc(),
             });
         }
 
@@ -783,7 +780,6 @@ impl<'a> Parser<'a> {
                 left: Box::new(expr),
                 operator,
                 right: Box::new(right),
-                loc: self.get_loc(),
             });
         }
 
@@ -796,11 +792,11 @@ impl<'a> Parser<'a> {
         while self.is_at(TokenKind::Minus) || self.is_at(TokenKind::Plus) {
             let operator = self.eat()?.value.clone();
             let right = self.parse_factor()?;
+
             expr = Expr::Binary(BinaryExpr {
                 left: Box::new(expr),
                 operator,
                 right: Box::new(right),
-                loc: self.get_loc(),
             });
         }
 
@@ -820,7 +816,6 @@ impl<'a> Parser<'a> {
                 left: Box::new(expr),
                 operator,
                 right: Box::new(right),
-                loc: self.get_loc(),
             });
         }
 
@@ -834,9 +829,8 @@ impl<'a> Parser<'a> {
 
             return Ok(Expr::Unary(UnaryExpr {
                 operator,
-                right: Box::new(right),
-                loc: self.get_loc(),
-            }));
+                right: Box::new(right)
+            }))
         }
 
         self.parse_call()
@@ -864,7 +858,7 @@ impl<'a> Parser<'a> {
                     expr = Expr::Get(GetExpr {
                         object: Box::new(expr),
                         name: prop_name,
-                        loc: self.get_loc(),
+                        loc: self.prev().loc.clone(),
                     })
                 }
                 _ => break,
@@ -905,6 +899,9 @@ impl<'a> Parser<'a> {
             }
         }
 
+        // Before eating close paren
+        let loc = self.get_loc_from_prev();
+
         self.expect(TokenKind::CloseParen)
             .map_err(|_| self.trigger_error(ParserErr::MissingCallCloseParen))?;
         
@@ -913,16 +910,16 @@ impl<'a> Parser<'a> {
         Ok(Expr::Call(CallExpr {
             callee: Box::new(callee),
             args,
-            loc: self.get_loc(),
+            loc,
         }))
     }
 
     fn parse_primary(&mut self) -> ParserExprRes {
-        match &self.eat()?.kind {
+        match &self.at().kind {
             TokenKind::Identifier | TokenKind::True | TokenKind::False | TokenKind::Null => {
                 Ok(Expr::Identifier(IdentifierExpr {
-                    name: self.prev().value.clone(),
-                    loc: self.get_loc(),
+                    name: self.eat()?.value.clone(),
+                    loc: self.get_loc_from_prev(),
                 }))
             }
             TokenKind::Int => self.parse_int_literal(),
@@ -930,8 +927,8 @@ impl<'a> Parser<'a> {
             TokenKind::String => self.parse_str_literal(),
             TokenKind::OpenParen => self.parse_grouping(),
             TokenKind::SelfKw => Ok(Expr::Selff(SelfExpr {
-                name: "self".into(),
-                loc: self.get_loc(),
+                name: self.eat()?.value.clone(),
+                loc: self.get_loc_from_prev(),
             })),
             TokenKind::NewLine => Err(self.trigger_error(ParserErr::UnexpectedEol)),
             tk => {
@@ -940,14 +937,14 @@ impl<'a> Parser<'a> {
                         Err(self.trigger_error(ParserErr::MissingLhsInBinop))
                     }
                     _ => Err(self
-                        .trigger_error(ParserErr::UnexpectedToken(self.prev().to_string()))),
+                            .trigger_error(ParserErr::UnexpectedToken(self.prev().to_string()))),
                 }
             }
         }
     }
 
     fn parse_int_literal(&mut self) -> ParserExprRes {
-        let tk = self.prev();
+        let tk = self.eat()?;
         let value = tk
             .value
             .parse::<i64>()
@@ -955,12 +952,12 @@ impl<'a> Parser<'a> {
 
         Ok(Expr::IntLiteral(IntLiteralExpr {
             value,
-            loc: self.get_loc(),
+            loc: self.get_loc_from_prev(),
         }))
     }
 
     fn parse_float_literal(&mut self) -> ParserExprRes {
-        let tk = self.prev();
+        let tk = self.eat()?;
         let value = tk
             .value
             .parse::<f64>()
@@ -968,21 +965,22 @@ impl<'a> Parser<'a> {
 
         Ok(Expr::FloatLiteral(FloatLiteralExpr {
             value,
-            loc: self.get_loc(),
+            loc: self.get_loc_from_prev(),
         }))
     }
 
-    fn parse_str_literal(&self) -> ParserExprRes {
-        let tk = self.prev();
+    fn parse_str_literal(&mut self) -> ParserExprRes {
+        let tk = self.eat()?;
 
         Ok(Expr::StrLiteral(StrLiteralExpr {
             value: tk.value.clone(),
-            loc: self.get_loc(),
+            loc: self.get_loc_from_prev(),
         }))
     }
 
     fn parse_grouping(&mut self) -> ParserExprRes {
-        let expr = match self.parse_expr() {
+        self.eat()?;
+        let mut expr = match self.parse_expr() {
             Ok(expr) => expr,
             Err(e) => match e.err {
                 ParserErr::UnexpectedEof | ParserErr::UnexpectedEol => {
@@ -996,9 +994,13 @@ impl<'a> Parser<'a> {
         };
 
         self.expect(TokenKind::CloseParen)
-            .map_err(|_| RevResult::new(ParserErr::ParenNeverClosed, Some(self.get_loc())))?;
+            .map_err(|_| RevResult::new(
+                ParserErr::ParenNeverClosed,
+                Some(Loc::new_len_one_from_start(expr.get_loc()))
+            ))?;
 
-        println!("In groupind, expr loc: {:?}", expr.get_loc());
+        // We add the parenthesis
+        expr.get_mut_loc().end += 1;
 
         Ok(Expr::Grouping(GroupingExpr {
             expr: Box::new(expr),
@@ -1104,8 +1106,6 @@ impl<'a> Parser<'a> {
     fn trigger_error_with_loc(&mut self, err: ParserErr, loc: Loc) -> RevResParser {
         self.synchronize();
 
-        println!("Loc: {:?}", loc);
-
         RevResult::new(err, Some(loc))
     }
 
@@ -1203,6 +1203,10 @@ impl<'a> Parser<'a> {
 
     fn get_loc(&self) -> Loc {
         Loc::new(self.start_loc, self.at().loc.start)
+    }
+
+    fn get_loc_from_prev(&self) -> Loc {
+        Loc::new(self.start_loc, self.prev().loc.end)
     }
 }
 
