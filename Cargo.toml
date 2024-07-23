@@ -5,6 +5,10 @@ members = [
     "crates/*",
 ]
 
+# For profiling
+[profile.release]
+debug = true
+
 [workspace.dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
 colored = "2.0"

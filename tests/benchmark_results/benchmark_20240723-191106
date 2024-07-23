@@ -1,0 +1,32 @@
+running benchmark: benchmark::equality.rev...
+	"loop"
+	5.164000034332275
+	"elapsed"
+	9.549000024795532
+	"equals"
+	4.384999990463257
+
+running benchmark: benchmark::fib.rev...
+	75025
+	0.744999885559082
+
+running benchmark: benchmark::instanciation.rev...
+	19.266000032424927
+
+running benchmark: benchmark::invocation.rev...
+	19.64800000190735
+
+running benchmark: benchmark::properties.rev...
+	88.98399996757507
+
+running benchmark: benchmark::string_equality.rev...
+	"loop"
+	76.05099987983704
+	"elapsed"
+	95.03399991989136
+	"equals"
+	18.98300004005432
+
+running benchmark: benchmark::zoo.rev...
+	
+

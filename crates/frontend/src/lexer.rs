@@ -421,10 +421,7 @@ impl Lexer {
     }
 
     fn is_math_op(&self) -> bool {
-        match self.at() {
-            '+' | '-' | '*' | '/' => true,
-            _ => false
-        }
+        matches!(self.at(), '+' | '-' | '*' | '/')
     }
 
     fn eat(&mut self) -> char {

@@ -7,10 +7,8 @@ use colored::Colorize;
 use ecow::EcoString;
 use frontend::ast::expr::{GetExpr, SelfExpr, SetExpr};
 use thiserror::Error;
-use tools::{
-    results::{RevReport, RevResult},
-    ToUuid,
-};
+use tools::results::Loc;
+use tools::results::{RevReport, RevResult};
 
 use crate::callable::Callable;
 use crate::environment::Env;
@@ -110,7 +108,7 @@ pub(crate) type InterpRes = Result<Rc<RefCell<RtVal>>, RevResInterp>;
 pub struct Interpreter {
     pub globals: Rc<RefCell<Env>>,
     pub env: Rc<RefCell<Env>>,
-    pub locals: HashMap<String, usize>,
+    pub locals: HashMap<Loc, usize>,
 }
 
 impl Interpreter {
@@ -143,14 +141,14 @@ impl Interpreter {
 }
 
 impl Interpreter {
-    pub fn interpret(&mut self, nodes: &Vec<Stmt>, locals: HashMap<String, usize>) -> InterpRes {
+    pub fn interpret(&mut self, nodes: &Vec<Stmt>, locals: HashMap<Loc, usize>) -> InterpRes {
         self.locals = locals;
 
         let mut res = RtVal::new_null();
 
         for node in nodes {
             match node.accept(self) {
-                Ok(r) => res = r.into(),
+                Ok(r) => res = r,
                 Err(e) => return Err(e),
             }
         }
@@ -381,7 +379,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
 
         let tmp = rhs.borrow();
         let tmp2 = lhs.borrow();
-        match tmp2.operate(&*tmp, &expr.operator) {
+        match tmp2.operate(&tmp, &expr.operator) {
             Ok(res) => Ok(res.into()),
             Err(e) => Err(RevResult::new(
                 InterpErr::OperationEvaluation(e.to_string()),
@@ -393,7 +391,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> InterpRes {
         let value = expr.value.accept(self)?;
 
-        match self.locals.get(&expr.to_uuid()) {
+        match self.locals.get(&expr.get_loc()) {
             Some(i) => self
                 .env
                 .borrow_mut()
@@ -430,7 +428,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
             "true" => Ok(RtVal::new_bool(true).into()),
             "false" => Ok(RtVal::new_bool(false).into()),
             "null" => Ok(RtVal::new_null()),
-            _ => match self.locals.get(&expr.to_uuid()) {
+            _ => match self.locals.get(&expr.loc) {
                 Some(i) => self
                     .env
                     .borrow()
@@ -464,7 +462,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
                     Some(expr.right.get_loc()),
                 ))
             },
-            op @ _ => return Err(RevResult::new(
+            op => return Err(RevResult::new(
                     InterpErr::UnknownUnaryOp(op.into()),
                     Some(expr.right.get_loc()),
                 ))
@@ -546,7 +544,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
         if let RtVal::InstanceVal(inst) = tmp {
             // Field
             if let Some(v) = inst.fields.get(&expr.name) {
-                Ok(v.clone().into())
+                Ok(v.clone())
             // Methods
             } else if let Some(m) = inst.strukt.borrow().methods.get(&expr.name) {
                 Ok(m.wrap_bind(obj.clone()))

@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use colored::*;
 
 
-#[derive(Debug, PartialEq, Default, Clone)]
+#[derive(Debug, PartialEq, Default, Clone, Eq, Hash)]
 pub struct Loc {
     pub start: usize,
     pub end: usize
@@ -27,8 +27,9 @@ pub trait RevReport {
 }
 
 struct ReportContext<'a> {
-    line: usize,
-    snippets: VecDeque<(usize, &'a str)>,
+    line_nb: usize,
+    ctx_line: Option<&'a str>,
+    line: &'a str,
     offset: usize,
 }
 
@@ -52,35 +53,40 @@ impl<'a, T: RevReport> RevResult<T> {
             let cx = self.get_context(code, loc);
             let deco = self.get_decorators(&cx, loc);
 
-            println!("  {} {} [line {}]", "-->".cyan(), file_name, cx.line);
+            println!("  {} {} [line {}]", "-->".cyan(), file_name, cx.line_nb);
 
-            for (i, line) in cx.snippets {
-                let add_space = if (i+1).to_string().len() - i.to_string().len() == 1 {
-                    " "
-                } else {
-                    ""
-                };
+            if let Some(line) = cx.ctx_line {
+                let mut add_space = "";
 
-                println!(" {} {}", format!("{}{} |", add_space, i).cyan(), line);
+                if (cx.line_nb).to_string().len() - (cx.line_nb-1).to_string().len() == 1 {
+                    add_space = " ";
+                }
+
+                println!(" {} {}", format!("{}{} |", add_space, cx.line_nb-1).cyan(), line);
             }
 
+            println!(" {} {}", format!("{} |", cx.line_nb).cyan(), cx.line);
+
             // Here, 4 is for space at the beginning and between line nb and '|' and space again
-            let margin = cx.line.to_string().len() + 4;
+            let margin = cx.line_nb.to_string().len() + 4;
             println!("{}{}", " ".repeat(margin), deco.red());
         }
     }
 
     fn get_context(&'a self, code: &'a str, loc: &Loc) -> ReportContext {
         let mut offset: usize = 0;
-        let mut lines: VecDeque<(usize, &'a str)> = VecDeque::new();
+        let mut lines: VecDeque<&'a str> = VecDeque::new();
 
         for (i, line) in code.split('\n').enumerate() {
-            lines.push_back((i + 1, line));
+            lines.push_back(line);
 
             if loc.start >= offset && loc.start < offset + line.len() {
+                let ctx_line = if lines.len() == 2 { Some(lines.pop_front().unwrap()) } else { None };
+
                 return ReportContext {
-                    line: i + 1,
-                    snippets: lines,
+                    line_nb: i + 1,
+                    ctx_line,
+                    line: lines.pop_back().unwrap(),
                     offset,
                 };
             } else {

@@ -92,18 +92,14 @@ impl RtVal {
     // TODO: Error handling for other operation
     pub fn operate(&self, rhs: &RtVal, operator: &str) -> Result<RtVal, RtValErr> {
         match (&self, &rhs) {
-            (RtVal::IntVal(i1), RtVal::IntVal(i2)) => i1.operate(&*i2, operator),
-            (RtVal::FloatVal(r1), RtVal::FloatVal(r2)) => {
-                r1.operate(&*r2, operator)
-            }
-            (RtVal::IntVal(i1), RtVal::FloatVal(r1)) => i1.operate(&*r1, operator),
-            (RtVal::FloatVal(r1), RtVal::IntVal(i1)) => r1.operate(&*i1, operator),
-            (RtVal::StrVal(s1), RtVal::StrVal(s2)) => s1.operate(&*s2, operator),
-            (RtVal::StrVal(s1), RtVal::IntVal(i1)) => s1.operate(&*i1, operator),
-            (RtVal::IntVal(i1), RtVal::StrVal(s1)) => i1.operate(&*s1, operator),
-            (RtVal::BoolVal(b1), RtVal::BoolVal(b2)) => {
-                b1.operate(&*b2, operator)
-            },
+            (RtVal::IntVal(i1), RtVal::IntVal(i2)) => i1.operate(i2, operator),
+            (RtVal::FloatVal(r1), RtVal::FloatVal(r2)) => r1.operate(r2, operator),
+            (RtVal::IntVal(i1), RtVal::FloatVal(r1)) => i1.operate(r1, operator),
+            (RtVal::FloatVal(r1), RtVal::IntVal(i1)) => r1.operate(i1, operator),
+            (RtVal::StrVal(s1), RtVal::StrVal(s2)) => s1.operate(s2, operator),
+            (RtVal::StrVal(s1), RtVal::IntVal(i1)) => s1.operate(i1, operator),
+            (RtVal::IntVal(i1), RtVal::StrVal(s1)) => i1.operate(s1, operator),
+            (RtVal::BoolVal(b1), RtVal::BoolVal(b2)) => b1.operate(b2, operator),
             (RtVal::StructVal(s1), RtVal::StructVal(s2)) => {
                 s1.borrow().operate(&*s2.borrow(), operator)
             },
@@ -400,7 +396,7 @@ impl RtVal {
 impl Callable for Rc<RefCell<Struct>> {
     fn arity(&self) -> usize {
         let tmp = self.borrow();
-        let initializer = tmp.methods.get("init".into());
+        let initializer = tmp.methods.get("init");
 
         match initializer {
             Some(f) => f.arity(),
@@ -419,7 +415,7 @@ impl Callable for Rc<RefCell<Struct>> {
         })));
 
         let tmp = self.borrow();
-        let initializer = tmp.methods.get("init".into());
+        let initializer = tmp.methods.get("init");
 
         if let Some(f) = initializer {
             f.bind(instance.clone()).call(interpreter, args)?;

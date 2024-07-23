@@ -34,9 +34,7 @@ total_ok = 0
 total_ko = 0
 
 for dir in os.listdir():
-    if dir == "benchmark":
-        continue
-    if os.path.isfile(dir):
+    if dir in ["benchmark", "benchmark_results"] or os.path.isfile(dir):
         continue
 
     print(f"\n\tTesting folder: {clr_str(dir, YELLOW)}\n")

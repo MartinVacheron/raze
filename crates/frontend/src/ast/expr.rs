@@ -1,9 +1,7 @@
 use std::fmt::Display;
-
-use sha2::{Digest, Sha256};
 use ecow::EcoString;
 
-use tools::{ToUuid, results::{Loc, RevReport, RevResult}};
+use tools::{results::{Loc, RevReport, RevResult}};
 
 
 #[derive(Debug, PartialEq, Clone)]
@@ -53,7 +51,7 @@ impl Expr {
             Self::StrLiteral(s) => s.loc.clone(),
             Self::Identifier(i) => i.loc.clone(),
             Self::Unary(u) => u.right.get_loc(),
-            Self::Assign(a) => a.value.get_loc(),
+            Self::Assign(a) => a.get_loc(),
             Self::Logical(l) => l.loc.clone(),
             Self::Call(c) => c.loc.clone(),
             Self::Get(g) => g.object.get_loc(),
@@ -118,20 +116,6 @@ pub struct IdentifierExpr {
     pub loc: Loc,
 }
 
-impl ToUuid for IdentifierExpr {
-    fn to_uuid(&self) -> String {
-        let mut hasher = Sha256::new();
-
-        hasher.update(self.name.as_bytes());
-        hasher.update(self.loc.start.to_be_bytes());
-        hasher.update(self.loc.end.to_be_bytes());
-
-        let res = hasher.finalize();
-
-        format!("{:x}", res)
-    }
-}
-
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct UnaryExpr {
@@ -146,17 +130,9 @@ pub struct AssignExpr {
     pub value: Box<Expr>,
 }
 
-impl ToUuid for AssignExpr {
-    fn to_uuid(&self) -> String {
-        let mut hasher = Sha256::new();
-
-        hasher.update(self.name.as_bytes());
-        hasher.update(self.value.get_loc().start.to_be_bytes());
-        hasher.update(self.value.get_loc().end.to_be_bytes());
-
-        let res = hasher.finalize();
-
-        format!("{:x}", res)
+impl AssignExpr {
+    pub fn get_loc(&self) -> Loc {
+        self.value.get_loc()
     }
 }
 
@@ -197,19 +173,6 @@ pub struct SelfExpr {
     pub loc: Loc,
 }
 
-impl ToUuid for SelfExpr {
-    fn to_uuid(&self) -> String {
-        let mut hasher = Sha256::new();
-
-        hasher.update(self.name.as_bytes());
-        hasher.update(self.loc.start.to_be_bytes());
-        hasher.update(self.loc.end.to_be_bytes());
-
-        let res = hasher.finalize();
-
-        format!("{:x}", res)
-    }
-}
 
 impl Expr {
     pub fn accept<T, U: RevReport>(

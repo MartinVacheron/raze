@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use colored::Colorize;
 use ecow::EcoString;
 use thiserror::Error;
-use tools::{results::{Loc, RevReport, RevResult}, ToUuid};
+use tools::results::{Loc, RevReport, RevResult};
 
 use frontend::ast::{
     expr::{
@@ -71,14 +71,14 @@ enum FnType {
 #[derive(Default)]
 pub struct Resolver {
     scopes: Vec<HashMap<EcoString, bool>>,
-    locals: HashMap<String, usize>,
+    locals: HashMap<Loc, usize>,
     fn_type: FnType,
     in_struct: bool,
 }
 
 // If we can’t find it in the stack of local scopes, we assume it must be global
 impl Resolver {
-    pub fn resolve(&mut self, stmts: &[Stmt]) -> Result<HashMap<String, usize>, Vec<RevResResolv>> {
+    pub fn resolve(&mut self, stmts: &[Stmt]) -> Result<HashMap<Loc, usize>, Vec<RevResResolv>> {
         let mut errors: Vec<RevResResolv> = vec![];
 
         for s in stmts {
@@ -103,12 +103,12 @@ impl Resolver {
         expr.accept(self)
     }
 
-    fn resolve_local<T: ToUuid>(&mut self, expr: &T, name: &EcoString) {
+    fn resolve_local(&mut self, loc: &Loc, name: &EcoString) {
         for (idx, scope) in self.scopes.iter().rev().enumerate() {
             match scope.get(name) {
                 Some(v) => match v {
                     true => {
-                        let _ = self.locals.insert(expr.to_uuid(), idx);
+                        let _ = self.locals.insert(loc.clone(), idx);
                         break
                     },
                     false => continue,
@@ -273,7 +273,7 @@ impl VisitStmt<(), ResolverErr> for Resolver {
         self.scopes.last_mut().unwrap().insert("self".into(), true);
 
         stmt.methods.iter().try_for_each(|m| {
-            let typ = if m.name == EcoString::from("init") {
+            let typ = if m.name == "init" {
                 FnType::Init
             } else {
                 FnType::Method
@@ -324,7 +324,7 @@ impl VisitExpr<(), ResolverErr> for Resolver {
             ))
         }
 
-        self.resolve_local(expr, &expr.name);
+        self.resolve_local(&expr.loc, &expr.name);
 
         Ok(())
     }
@@ -335,7 +335,7 @@ impl VisitExpr<(), ResolverErr> for Resolver {
 
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> ResolverRes {
         self.resolve_expr(&expr.value)?;
-        self.resolve_local(expr, &expr.name);
+        self.resolve_local(&expr.get_loc(), &expr.name);
 
         Ok(())
     }
@@ -378,7 +378,7 @@ impl VisitExpr<(), ResolverErr> for Resolver {
             return Err(RevResult::new(ResolverErr::SelfOutsideStruct, Some(expr.loc.clone())))
         }
 
-        self.resolve_local(expr, &expr.name);
+        self.resolve_local(&expr.loc, &expr.name);
 
         Ok(())
     }

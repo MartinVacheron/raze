@@ -1,0 +1,35 @@
+Benchmark message: 
+Removed UUID in resolver and clippy corrections
+
+running benchmark: benchmark::equality.rev...
+	"loop"
+	3.8400001525878906
+	"elapsed"
+	8.254999876022339
+	"equals"
+	4.414999723434448
+
+running benchmark: benchmark::fib.rev...
+	75025
+	0.3320000171661377
+
+running benchmark: benchmark::instanciation.rev...
+	10.361000061035156
+
+running benchmark: benchmark::invocation.rev...
+	9.843000173568726
+
+running benchmark: benchmark::properties.rev...
+	61.82499980926514
+
+running benchmark: benchmark::string_equality.rev...
+	"loop"
+	5.4700000286102295
+	"elapsed"
+	23.378000020980835
+	"equals"
+	17.907999992370605
+
+running benchmark: benchmark::zoo.rev...
+	
+
