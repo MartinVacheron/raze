@@ -11,4 +11,3 @@ tools = { path = "../tools" }
 colored = { workspace = true }
 ecow = { workspace = true }
 thiserror = { workspace = true }
-sha2 = { workspace = true }
