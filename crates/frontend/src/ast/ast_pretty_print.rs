@@ -84,7 +84,7 @@ impl VisitStmt<String, AstPrinterErr> for AstPrinter {
 
 impl VisitExpr<String, AstPrinterErr> for AstPrinter {
     fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> Result<String, RevResAstPrint> {
-        self.parenthesize(expr.operator.as_str(), &[&expr.left, &expr.right])
+        self.parenthesize(&expr.operator.value, &[&expr.left, &expr.right])
     }
 
     fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> Result<String, RevResAstPrint> {
@@ -108,7 +108,7 @@ impl VisitExpr<String, AstPrinterErr> for AstPrinter {
     }
 
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Result<String, RevResAstPrint> {
-        self.parenthesize(expr.operator.as_str(), &[&expr.right])
+        self.parenthesize(&expr.operator.value, &[&expr.right])
     }
 
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Result<String, RevResult<AstPrinterErr>> {
@@ -117,7 +117,7 @@ impl VisitExpr<String, AstPrinterErr> for AstPrinter {
     }
 
     fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> Result<String, RevResult<AstPrinterErr>> {
-        self.parenthesize(expr.operator.as_str(), &[&expr.left, &expr.right])
+        self.parenthesize(&expr.operator.value, &[&expr.left, &expr.right])
     }
 
     fn visit_call_expr(&mut self, _: &CallExpr) -> Result<String, RevResult<AstPrinterErr>> {
@@ -133,6 +133,10 @@ impl VisitExpr<String, AstPrinterErr> for AstPrinter {
     }
     
     fn visit_self_expr(&mut self, _: &super::expr::SelfExpr) -> Result<String, RevResult<AstPrinterErr>> {
+        todo!()
+    }
+    
+    fn visit_is_expr(&mut self, _: &super::expr::IsExpr) -> Result<String, RevResult<AstPrinterErr>> {
         todo!()
     }
 }

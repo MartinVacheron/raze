@@ -1,19 +1,8 @@
-
-
-
-
-
-
-
-
-
-
-struct Foo {
-    fn foo() {}
+var a = 1
+{
+    print a is int
+    var a = 1.5
+    print a is float
 }
 
-var bar = 4
-
-var f = Foo()
-
-f.foo = bar // error: assigning to method is not allowed
+1 + "foo"

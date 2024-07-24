@@ -1,7 +1,9 @@
 use std::fmt::Display;
 use ecow::EcoString;
 
-use tools::{results::{Loc, RevReport, RevResult}};
+use tools::results::{Loc, RevReport, RevResult};
+
+use crate::lexer::Token;
 
 
 #[derive(Debug, PartialEq, Clone)]
@@ -19,6 +21,7 @@ pub enum Expr {
     Get(GetExpr),
     Set(SetExpr),
     Selff(SelfExpr),
+    Is(IsExpr),
 }
 
 impl Display for Expr {
@@ -37,6 +40,7 @@ impl Display for Expr {
             Expr::Get(e) => write!(f, "{}: {}", e.object, e.name),
             Expr::Set(e) => write!(f, "{}: {} {}", e.object, e.name, e.value),
             Expr::Selff(_) => write!(f, "self"),
+            Expr::Is(e) => write!(f, "{} is {}", e.left, e.typ.value),
         }
     }
 }
@@ -45,36 +49,24 @@ impl Expr {
     pub fn get_loc(&self) -> Loc {
         match self {
             Self::Binary(b) => b.right.get_loc(),
-            Self::Grouping(g) => g.expr.get_loc(),
+            Self::Grouping(g) => {
+                let mut loc = g.expr.get_loc();
+                loc.start -= 1;
+                loc.end += 1;
+                loc
+            },
             Self::IntLiteral(i) => i.loc.clone(),
             Self::FloatLiteral(r) => r.loc.clone(),
             Self::StrLiteral(s) => s.loc.clone(),
             Self::Identifier(i) => i.loc.clone(),
             Self::Unary(u) => u.right.get_loc(),
-            Self::Assign(a) => a.get_loc(),
+            Self::Assign(a) => a.loc.clone(),
             Self::Logical(l) => l.loc.clone(),
             Self::Call(c) => c.loc.clone(),
             Self::Get(g) => g.object.get_loc(),
             Self::Set(s) => s.loc.clone(),
             Self::Selff(s) => s.loc.clone(),
-        }
-    }
-
-    pub fn get_mut_loc(&mut self) -> &mut Loc {
-        match self {
-            Self::Binary(b) => b.right.get_mut_loc(),
-            Self::Grouping(g) => g.expr.get_mut_loc(),
-            Self::IntLiteral(i) => &mut i.loc,
-            Self::FloatLiteral(r) => &mut r.loc,
-            Self::StrLiteral(s) => &mut s.loc,
-            Self::Identifier(i) => &mut i.loc,
-            Self::Unary(u) => u.right.get_mut_loc(),
-            Self::Assign(a) => a.value.get_mut_loc(),
-            Self::Logical(l) => &mut l.loc,
-            Self::Call(c) => &mut c.loc,
-            Self::Get(g) => &mut g.loc,
-            Self::Set(s) => &mut s.loc,
-            Self::Selff(s) => &mut s.loc,
+            Self::Is(i) => i.loc.clone(),
         }
     }
 }
@@ -82,7 +74,7 @@ impl Expr {
 #[derive(Debug, PartialEq, Clone)]
 pub struct BinaryExpr {
     pub left: Box<Expr>,
-    pub operator: EcoString,
+    pub operator: Token,
     pub right: Box<Expr>,
 }
 
@@ -119,7 +111,7 @@ pub struct IdentifierExpr {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct UnaryExpr {
-    pub operator: EcoString,
+    pub operator: Token,
     pub right: Box<Expr>
 }
 
@@ -128,19 +120,14 @@ pub struct UnaryExpr {
 pub struct AssignExpr {
     pub name: EcoString,
     pub value: Box<Expr>,
-}
-
-impl AssignExpr {
-    pub fn get_loc(&self) -> Loc {
-        self.value.get_loc()
-    }
+    pub loc: Loc,
 }
 
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct LogicalExpr {
     pub left: Box<Expr>,
-    pub operator: EcoString,
+    pub operator: Token,
     pub right: Box<Expr>,
     pub loc: Loc,
 }
@@ -173,6 +160,13 @@ pub struct SelfExpr {
     pub loc: Loc,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct IsExpr {
+    pub left: Box<Expr>,
+    pub typ: Token,
+    pub loc: Loc,
+}
+
 
 impl Expr {
     pub fn accept<T, U: RevReport>(
@@ -193,6 +187,7 @@ impl Expr {
             Expr::Get(e) => visitor.visit_get_expr(e),
             Expr::Set(e) => visitor.visit_set_expr(e),
             Expr::Selff(e) => visitor.visit_self_expr(e),
+            Expr::Is(e) => visitor.visit_is_expr(e),
         }
     }
 }
@@ -211,6 +206,7 @@ pub trait VisitExpr<T, U: RevReport> {
     fn visit_get_expr(&mut self, expr: &GetExpr) -> Result<T, RevResult<U>>;
     fn visit_set_expr(&mut self, expr: &SetExpr) -> Result<T, RevResult<U>>;
     fn visit_self_expr(&mut self, expr: &SelfExpr) -> Result<T, RevResult<U>>;
+    fn visit_is_expr(&mut self, expr: &IsExpr) -> Result<T, RevResult<U>>;
 }
 
 // Into

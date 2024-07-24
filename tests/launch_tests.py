@@ -99,12 +99,12 @@ for dir in os.listdir():
 
             if not ok:
                 if len(rev_res) > 0:
-                    print(f"Expected:\n{rev_res}")
-                    print(f"Got:\n{expects}")
+                    print(f"Expected:\n{expects}")
+                    print(f"Got:\n{rev_res}")
 
                 if len(rev_err) > 0:
-                    print(f"Expected erros:\n{rev_err}")
-                    print(f"Got erros:\n{errors}")
+                    print(f"Expected erros:\n{errors}")
+                    print(f"Got erros:\n{rev_err}")
 
                 print()
 

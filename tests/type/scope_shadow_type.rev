@@ -1,0 +1,7 @@
+var a = 1
+{
+    print a is int // expect: true
+
+    var a = 1.5
+    print a is float // expect: true
+}

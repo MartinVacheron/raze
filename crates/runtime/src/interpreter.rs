@@ -17,12 +17,14 @@ use crate::values::{Function, RtVal, Negate};
 use crate::native_functions::NativeFnErr;
 use frontend::ast::{expr::{
     AssignExpr, BinaryExpr, CallExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr,
-    FloatLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr,
+    FloatLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr, IsExpr,
 }, stmt::StructStmt};
 use frontend::ast::stmt::{
     BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt,
     VisitStmt, WhileStmt,
 };
+use frontend::lexer::TokenKind;
+
 
 // ----------------
 // Error managment
@@ -176,7 +178,7 @@ impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
 
         self.env
             .borrow_mut()
-            .declare_var(stmt.name.clone(), value)
+            .declare_var(stmt.name.value.clone(), value)
             .map_err(|e| {
                 RevResult::new(InterpErr::VarDeclEnv(e.to_string()), Some(stmt.loc.clone()))
             })?;
@@ -257,7 +259,7 @@ impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
         for i in range {
             self.env
                 .borrow_mut()
-                .assign(stmt.placeholder.name.clone(), RtVal::new_int(i).into())
+                .assign(stmt.placeholder.name.value.clone(), RtVal::new_int(i).into())
                 .map_err(|e| {
                     RevResult::new(InterpErr::ForLoop(e.to_string()), Some(stmt.loc.clone()))
                 })?;
@@ -275,7 +277,7 @@ impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
 
         self.env
             .borrow_mut()
-            .declare_var(stmt.name.clone(), func.into())
+            .declare_var(stmt.name.value.clone(), func.into())
             .map_err(|_| {
                 RevResult::new(
                     InterpErr::VarDeclEnv(stmt.name.to_string()),
@@ -299,14 +301,14 @@ impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
     fn visit_struct_stmt(&mut self, stmt: &StructStmt) -> InterpRes {
         let mut methods: HashMap<EcoString, Function> = HashMap::new();
         stmt.methods.iter().for_each(|m| {
-            methods.insert(m.name.clone(), Function::new(m, self.env.clone()));
+            methods.insert(m.name.value.clone(), Function::new(m, self.env.clone()));
         });
 
         // Two steps: declaring and assigning. Allow the struct to reference itself
         // in its methods
         self.env
             .borrow_mut()
-            .declare_var(stmt.name.clone(), RtVal::new_null())
+            .declare_var(stmt.name.value.clone(), RtVal::new_null())
             .map_err(|_| {
                 RevResult::new(
                     InterpErr::VarDeclEnv(stmt.name.to_string()),
@@ -321,14 +323,14 @@ impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
                 None => RtVal::new_null(),
             };
 
-            fields.insert(f.name.clone(), value);
+            fields.insert(f.name.value.clone(), value);
         }
 
         let struct_val = RtVal::new_struct(stmt, fields, methods);
 
         self.env
             .borrow_mut()
-            .assign(stmt.name.clone(), Rc::new(RefCell::new(struct_val.clone())))
+            .assign(stmt.name.value.clone(), Rc::new(RefCell::new(struct_val.clone())))
             .map_err(|_| {
                 RevResult::new(
                     InterpErr::VarDeclEnv(stmt.name.to_string()),
@@ -379,7 +381,8 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
 
         let tmp = rhs.borrow();
         let tmp2 = lhs.borrow();
-        match tmp2.operate(&tmp, &expr.operator) {
+
+        match tmp2.operate(&tmp, &expr.operator.value) {
             Ok(res) => Ok(res.into()),
             Err(e) => Err(RevResult::new(
                 InterpErr::OperationEvaluation(e.to_string()),
@@ -391,16 +394,16 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> InterpRes {
         let value = expr.value.accept(self)?;
 
-        match self.locals.get(&expr.get_loc()) {
+        match self.locals.get(&expr.loc) {
             Some(i) => self
                 .env
                 .borrow_mut()
                 .assign_at(expr.name.clone(), value.clone(), i)
                 .map_err(|e| {
-                    RevResult::new(InterpErr::AssignEnv(e.to_string()), Some(expr.value.get_loc()))
+                    RevResult::new(InterpErr::AssignEnv(e.to_string()), Some(expr.loc.clone()))
                 })?,
             None => self.globals.borrow_mut().assign(expr.name.clone(), value.clone()).map_err(|e| {
-                RevResult::new(InterpErr::AssignEnv(e.to_string()), Some(expr.value.get_loc()))
+                RevResult::new(InterpErr::AssignEnv(e.to_string()), Some(expr.loc.clone()))
             })?,
         }
 
@@ -446,15 +449,15 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> InterpRes {
         let value = expr.right.accept(self)?;
 
-        match expr.operator.as_str() {
-            "!" => match &mut *value.borrow_mut() {
+        match expr.operator.kind {
+            TokenKind::Bang => match &mut *value.borrow_mut() {
                 RtVal::BoolVal(v) => v.negate(),
                 _ => return Err(RevResult::new(
                     InterpErr::BangOpOnNonBool,
                     Some(expr.right.get_loc()),
                 ))
             }
-            "-" => match &mut *value.borrow_mut() {
+            TokenKind::Minus => match &mut *value.borrow_mut() {
                 RtVal::IntVal(v) => v.negate(),
                 RtVal::FloatVal(v) => v.negate(),
                 _ => return Err(RevResult::new(
@@ -462,8 +465,8 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
                     Some(expr.right.get_loc()),
                 ))
             },
-            op => return Err(RevResult::new(
-                    InterpErr::UnknownUnaryOp(op.into()),
+            _ => return Err(RevResult::new(
+                    InterpErr::UnknownUnaryOp(expr.operator.value.clone().into()),
                     Some(expr.right.get_loc()),
                 ))
         }
@@ -473,13 +476,12 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
 
     fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> InterpRes {
         let left = expr.left.accept(self)?;
-        let op = expr.operator.as_str();
 
-        if op == "or" {
+        if expr.operator.kind == TokenKind::Or {
             match &*left.clone().borrow() {
                 RtVal::BoolVal(b) => {
                     if b.value {
-                        return Ok(left);
+                        return Ok(left)
                     }
                 }
                 _ => {
@@ -489,11 +491,11 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
                     ))
                 }
             }
-        } else if op == "and" {
+        } else if expr.operator.kind == TokenKind::And {
             match &*left.clone().borrow() {
                 RtVal::BoolVal(b) => {
                     if !b.value {
-                        return Ok(left);
+                        return Ok(left)
                     }
                 }
                 _ => {
@@ -573,12 +575,19 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
         }
     }
     
-    fn visit_self_expr(&mut self, expr: &SelfExpr) -> Result<Rc<RefCell<RtVal>>, RevResult<InterpErr>> {
+    fn visit_self_expr(&mut self, expr: &SelfExpr) -> InterpRes {
         self.env.borrow()
             .get_var(expr.name.clone())
             .map_err(|e| {
                     RevResult::new(InterpErr::GetVarEnv(e.to_string()), Some(expr.loc.clone()))
             })
+    }
+    
+    fn visit_is_expr(&mut self, expr: &IsExpr) -> InterpRes {
+        let value = expr.left.accept(self)?;
+        let tmp = value.borrow();
+
+        Ok(tmp.is_of_type(&expr.typ.value).into())
     }
 }
 

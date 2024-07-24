@@ -1,0 +1,6 @@
+struct Foo {
+    a: int
+    b: str = "bar"
+}
+
+print "ok" // expect: "ok"

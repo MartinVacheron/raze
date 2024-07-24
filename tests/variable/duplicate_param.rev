@@ -1,3 +1,3 @@
-fn foo(arg, arg) { // error: a variable with the same name as already been declared in this local scope
+fn foo(arg, arg) { // error: a variable with the same name as already been declared in this scope
     "body"
 }

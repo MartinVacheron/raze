@@ -1,4 +1,4 @@
 {
     var a
-    var a // error: a variable with the same name as already been declared in this local scope
+    var a // error: a variable with the same name as already been declared in this scope
 }

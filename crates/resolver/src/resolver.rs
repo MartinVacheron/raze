@@ -1,27 +1,29 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 use colored::Colorize;
 use ecow::EcoString;
 use thiserror::Error;
 use tools::results::{Loc, RevReport, RevResult};
 
-use frontend::ast::{
-    expr::{
-        AssignExpr, BinaryExpr, CallExpr, Expr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, LogicalExpr, FloatLiteralExpr, SelfExpr, SetExpr, StrLiteralExpr, UnaryExpr, VisitExpr
+use frontend::{
+    ast::{
+        expr::{
+            AssignExpr, BinaryExpr, CallExpr, Expr, FloatLiteralExpr, GetExpr, GroupingExpr,
+            IdentifierExpr, IntLiteralExpr, IsExpr, LogicalExpr, SelfExpr, SetExpr, StrLiteralExpr,
+            UnaryExpr, VisitExpr,
+        },
+        stmt::{
+            BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt,
+            StructStmt, VarDeclStmt, VisitStmt, WhileStmt,
+        },
     },
-    stmt::{
-        BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StructStmt, VarDeclStmt, VisitStmt, WhileStmt
-    },
+    lexer::{Token, TokenKind},
 };
-
 
 #[derive(Error, Debug, PartialEq)]
 pub enum ResolverErr {
     #[error("local variable initializer is shadoweding global variable")]
     LocalVarInOwnInit,
-
-    #[error("a variable with the same name as already been declared in this local scope")]
-    AlreadyDeclInLocal,
 
     #[error("can't return from top level code")]
     TopLevelReturn,
@@ -34,6 +36,31 @@ pub enum ResolverErr {
 
     #[error("can't call the constructor directly")]
     DirectConstructorCall,
+
+    #[error("undeclared variable '{0}'")]
+    UndeclaredVar(String),
+
+    // Types
+    #[error("unknown type '{0}'")]
+    UnknownType(String),
+
+    #[error("a {0} with the same name as already been declared in this scope")]
+    AlreadyDecl(String),
+
+    #[error("operation '{0}' is not allowed between types '{1}' and '{2}'")]
+    InvalidOp(String, String, String),
+
+    #[error("unknown operator")]
+    UnknownOp,
+
+    #[error("variable has no type")]
+    VarNonType,
+
+    #[error("trying to assign value of type '{0}' to variable of type '{1}'")]
+    WrongTypeAssign(String, String),
+
+    #[error("logical operators must have same type on each side, found '{0}' and '{1}'")]
+    WrongTypeLogical(String, String),
 }
 
 impl RevReport for ResolverErr {
@@ -44,7 +71,7 @@ impl RevReport for ResolverErr {
 
 pub type RevResResolv = RevResult<ResolverErr>;
 pub type ResolverRes = Result<(), RevResResolv>;
-
+pub type ResolverExprRes = Result<VarType, RevResResolv>;
 
 #[derive(Default, Clone, Copy, PartialEq)]
 enum FnType {
@@ -55,97 +82,195 @@ enum FnType {
     Method,
 }
 
-
-// TEST:
-//   can't have same name for field and method because other wise 
-//     we don't know which we get when: foo.name if there is a method "name" too
-//     or transforme it into a getter
-
-
 // Bool is for tracking if the variable is initialized, avoiding weird cases
 // where we initialize the variable with its shadowing global one
 // We track if it is initialized or not.
 // You can't initialize a variable with a shadowed one, avoiding user errors
 // var a = "outer"
 // { var a = a }
+
+#[derive(Clone, PartialEq)]
+pub enum VarType {
+    Any,
+    Int,
+    Float,
+    Str,
+    Bool,
+    Null,
+    Struct(EcoString),
+}
+
+#[derive(Default, PartialEq)]
+struct StructType {
+    name: EcoString,
+    fields: HashMap<EcoString, VarType>,
+}
+
+impl Display for VarType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VarType::Any => write!(f, "any"),
+            VarType::Int => write!(f, "int"),
+            VarType::Float => write!(f, "float"),
+            VarType::Str => write!(f, "str"),
+            VarType::Bool => write!(f, "bool"),
+            VarType::Null => write!(f, "null"),
+            VarType::Struct(t) => write!(f, "{}", t),
+        }
+    }
+}
+
+impl From<&Token> for VarType {
+    fn from(value: &Token) -> Self {
+        match value.value.as_str() {
+            "any" => VarType::Any,
+            "int" => VarType::Int,
+            "float" => VarType::Float,
+            "str" => VarType::Str,
+            "bool" => VarType::Bool,
+            "null" => VarType::Null,
+            other => VarType::Struct(other.into()),
+        }
+    }
+}
+
+#[derive(Default)]
+struct Scope {
+    variables: HashMap<EcoString, bool>,
+    var_types: HashMap<EcoString, VarType>,
+    types_def: HashMap<EcoString, StructType>,
+}
+
 #[derive(Default)]
 pub struct Resolver {
-    scopes: Vec<HashMap<EcoString, bool>>,
+    globals: Scope,
+    scopes: Vec<Scope>,
     locals: HashMap<Loc, usize>,
     fn_type: FnType,
-    in_struct: bool,
+    current_struct: Option<EcoString>,
 }
 
 // If we can’t find it in the stack of local scopes, we assume it must be global
 impl Resolver {
     pub fn resolve(&mut self, stmts: &[Stmt]) -> Result<HashMap<Loc, usize>, Vec<RevResResolv>> {
+        self.set_globals();
+
         let mut errors: Vec<RevResResolv> = vec![];
 
         for s in stmts {
             match self.resolve_stmt(s) {
                 Ok(_) => continue,
-                Err(e) => errors.push(e)
+                Err(e) => errors.push(e),
             }
         }
-        
+
         if !errors.is_empty() {
-            return Err(errors)
+            return Err(errors);
         }
 
         Ok(self.locals.clone())
+    }
+
+    fn set_globals(&mut self) {
+        self.globals.variables.insert("true".into(), true);
+        self.globals.variables.insert("false".into(), true);
+        self.globals.variables.insert("null".into(), true);
+        self.globals.variables.insert("clock".into(), true);
+
+        self.globals
+            .types_def
+            .insert(EcoString::from("any"), StructType::default());
+        self.globals
+            .types_def
+            .insert(EcoString::from("int"), StructType::default());
+        self.globals
+            .types_def
+            .insert(EcoString::from("float"), StructType::default());
+        self.globals
+            .types_def
+            .insert(EcoString::from("str"), StructType::default());
+        self.globals
+            .types_def
+            .insert(EcoString::from("bool"), StructType::default());
+        self.globals
+            .types_def
+            .insert(EcoString::from("null"), StructType::default());
     }
 
     fn resolve_stmt(&mut self, stmt: &Stmt) -> ResolverRes {
         stmt.accept(self)
     }
 
-    fn resolve_expr(&mut self, expr: &Expr) -> ResolverRes {
+    fn resolve_expr(&mut self, expr: &Expr) -> ResolverExprRes {
         expr.accept(self)
     }
 
-    fn resolve_local(&mut self, loc: &Loc, name: &EcoString) {
+    fn resolve_local(&mut self, loc: &Loc, name: &EcoString) -> ResolverRes {
         for (idx, scope) in self.scopes.iter().rev().enumerate() {
-            match scope.get(name) {
+            match scope.variables.get(name) {
                 Some(v) => match v {
                     true => {
                         let _ = self.locals.insert(loc.clone(), idx);
-                        break
-                    },
+
+                        return Ok(());
+                    }
                     false => continue,
                 },
                 None => continue,
             }
         }
-    }
 
-    fn declare(&mut self, name: EcoString, loc: &Loc) -> ResolverRes {
-        if self.scopes.is_empty() {
-            return Ok(())
+        if !self.globals.variables.contains_key(name) {
+            return Err(RevResult::new(
+                ResolverErr::UndeclaredVar(name.into()),
+                Some(loc.clone()),
+            ));
         }
 
-        if self.scopes.last().unwrap().contains_key(&name) {
+        Ok(())
+    }
+
+    fn declare_name(&mut self, name: &EcoString, loc: &Loc, decl_type: &str) -> ResolverRes {
+        if self.scopes.is_empty() {
+            if self.globals.variables.contains_key(name) {
+                return Err(RevResult::new(
+                    ResolverErr::AlreadyDecl(decl_type.into()),
+                    Some(loc.clone())
+                ));
+            }
+
+            self.globals.variables.insert(name.clone(), false);
+
+            return Ok(());
+        }
+
+        if self.scopes.last().unwrap().variables.contains_key(name) {
             return Err(RevResult::new(
-                ResolverErr::AlreadyDeclInLocal,
-                Some(loc.clone()),
-            ))
+                ResolverErr::AlreadyDecl(decl_type.into()),
+                Some(loc.clone())
+            ));
         }
 
         self.scopes
             .last_mut()
             .unwrap()
+            .variables
             .insert(name.clone(), false);
 
         Ok(())
     }
 
-    fn define(&mut self, name: EcoString) {
+    fn define_name(&mut self, name: &EcoString) {
         if self.scopes.is_empty() {
-            return
+            self.globals.variables.insert(name.clone(), true);
+
+            return;
         }
 
         self.scopes
             .last_mut()
             .unwrap()
+            .variables
             .insert(name.clone(), true);
     }
 
@@ -155,8 +280,8 @@ impl Resolver {
         self.begin_scope();
 
         for p in stmt.params.iter() {
-            self.declare(p.clone(), &stmt.loc)?;
-            self.define(p.clone());
+            self.declare_name(p, &stmt.name.loc, "function")?;
+            self.define_name(p);
         }
 
         stmt.body.iter().try_for_each(|s| self.resolve_stmt(s))?;
@@ -168,8 +293,124 @@ impl Resolver {
         Ok(())
     }
 
+    fn declare_type(&mut self, var_type: StructType, loc: &Loc) -> ResolverRes {
+        if self.scopes.is_empty() {
+            if self.globals.types_def.contains_key(&var_type.name) {
+                return Err(RevResult::new(
+                    ResolverErr::AlreadyDecl("type".into()),
+                    Some(loc.clone()),
+                ));
+            }
+
+            self.globals
+                .types_def
+                .insert(var_type.name.clone(), var_type);
+
+            return Ok(());
+        }
+
+        if self
+            .scopes
+            .last()
+            .unwrap()
+            .types_def
+            .contains_key(&var_type.name)
+        {
+            return Err(RevResult::new(
+                ResolverErr::AlreadyDecl("type".into()),
+                Some(loc.clone()),
+            ));
+        }
+
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .types_def
+            .insert(var_type.name.clone(), var_type);
+
+        Ok(())
+    }
+
+    fn bind_var_type(&mut self, var_name: &EcoString, var_type: VarType) -> ResolverRes {
+        if self.scopes.is_empty() {
+            self.globals.var_types.insert(var_name.clone(), var_type);
+
+            return Ok(())
+        }
+
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .var_types
+            .insert(var_name.clone(), var_type);
+
+        Ok(())
+    }
+
+    fn check_type_exists(&self, type_name: &EcoString, loc: &Loc) -> ResolverRes {
+        if self.globals.types_def.contains_key(type_name) {
+            return Ok(());
+        }
+
+        if self.scopes.is_empty() {
+            return Err(RevResult::new(
+                ResolverErr::UnknownType(type_name.to_string()),
+                Some(loc.clone()),
+            ));
+        }
+
+        for scope in self.scopes.iter().rev() {
+            if scope.types_def.contains_key(type_name) {
+                return Ok(());
+            }
+        }
+
+        Err(RevResult::new(
+            ResolverErr::UnknownType(type_name.to_string()),
+            Some(loc.clone()),
+        ))
+    }
+
+    fn get_type(&self, var_name: &EcoString, loc: &Loc) -> ResolverExprRes {
+        for scope in self.scopes.iter().rev() {
+            if let Some(t) = scope.var_types.get(var_name) {
+                return Ok(t.clone())
+            }
+        }
+
+        if let Some(t) = self.globals.var_types.get(var_name) {
+            return Ok(t.clone())
+        }
+
+        Err(RevResult::new(ResolverErr::VarNonType, Some(loc.clone())))
+    }
+
+    fn struct_fields_types(
+        fields: &Vec<VarDeclStmt>,
+    ) -> Result<HashMap<EcoString, VarType>, RevResResolv> {
+        let mut res: HashMap<EcoString, VarType> = HashMap::new();
+
+        for field in fields {
+            if res.contains_key(&field.name.value) {
+                return Err(RevResult::new(
+                    ResolverErr::AlreadyDecl("field".into()),
+                    Some(field.name.loc.clone()),
+                ));
+            }
+
+            let mut field_type = VarType::Any;
+            if let Some(t) = &field.typ {
+                field_type = t.into();
+            }
+
+            res.insert(field.name.value.clone(), field_type);
+        }
+
+        Ok(res)
+    }
+
     fn begin_scope(&mut self) {
-        self.scopes.push(HashMap::new());
+        self.scopes.push(Scope::default());
     }
 
     fn end_scope(&mut self) {
@@ -185,17 +426,38 @@ impl VisitStmt<(), ResolverErr> for Resolver {
     }
 
     fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> ResolverRes {
-        self.resolve_expr(&stmt.expr)
+        match self.resolve_expr(&stmt.expr) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e)
+        }
     }
 
     fn visit_var_decl_stmt(&mut self, stmt: &VarDeclStmt) -> ResolverRes {
-        self.declare(stmt.name.clone(), &stmt.loc)?;
+        self.declare_name(&stmt.name.value, &stmt.name.loc, "variable")?;
+
+        let mut final_type = VarType::Any;
 
         if let Some(v) = &stmt.value {
-            self.resolve_expr(v)?;
+            final_type = self.resolve_expr(v)?;
         }
+        
+        if let Some(t) = &stmt.typ {
+            self.check_type_exists(&t.value, &t.loc)?;
 
-        self.define(stmt.name.clone());
+            let var_type: VarType = t.into();
+
+            if final_type != VarType::Any && var_type != final_type {
+                return Err(RevResult::new(
+                    ResolverErr::WrongTypeAssign(final_type.to_string(), var_type.to_string()),
+                    Some(stmt.loc.clone())
+                ))
+            }
+
+            final_type = var_type;
+        }
+        
+        self.define_name(&stmt.name.value);
+        self.bind_var_type(&stmt.name.value, final_type)?;
 
         Ok(())
     }
@@ -238,21 +500,26 @@ impl VisitStmt<(), ResolverErr> for Resolver {
     }
 
     fn visit_fn_decl_stmt(&mut self, stmt: &FnDeclStmt) -> ResolverRes {
-        self.declare(stmt.name.clone(), &stmt.loc)?;
-        self.define(stmt.name.clone());
+        self.declare_name(&stmt.name.value, &stmt.name.loc, "function")?;
+        self.define_name(&stmt.name.value);
 
         self.resolve_fn(stmt, FnType::Function)
     }
 
     fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> ResolverRes {
         match self.fn_type {
-            FnType::None => return Err(RevResult::new(
-                ResolverErr::TopLevelReturn,
-                Some(stmt.loc.clone()),
-            )),
-            FnType::Init => return Err(RevResult::new(
-                ResolverErr::ReturnFromInit, Some(stmt.loc.clone())
-            )),
+            FnType::None => {
+                return Err(RevResult::new(
+                    ResolverErr::TopLevelReturn,
+                    Some(stmt.loc.clone()),
+                ))
+            }
+            FnType::Init => {
+                return Err(RevResult::new(
+                    ResolverErr::ReturnFromInit,
+                    Some(stmt.loc.clone()),
+                ))
+            }
             _ => {
                 if let Some(v) = &stmt.value {
                     self.resolve_expr(v)?;
@@ -264,16 +531,22 @@ impl VisitStmt<(), ResolverErr> for Resolver {
     }
 
     fn visit_struct_stmt(&mut self, stmt: &StructStmt) -> ResolverRes {
-        self.in_struct = true;
+        self.current_struct = Some(stmt.name.value.clone());
 
-        self.declare(stmt.name.clone(), &stmt.loc)?;
-        self.define(stmt.name.clone());
+        self.declare_name(&stmt.name.value, &stmt.name.loc, "structure")?;
+        self.define_name(&stmt.name.value);
 
         self.begin_scope();
-        self.scopes.last_mut().unwrap().insert("self".into(), true);
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .variables
+            .insert("self".into(), true);
+
+        let fields = Resolver::struct_fields_types(&stmt.fields)?;
 
         stmt.methods.iter().try_for_each(|m| {
-            let typ = if m.name == "init" {
+            let typ = if m.name.value == "init" {
                 FnType::Init
             } else {
                 FnType::Method
@@ -284,103 +557,199 @@ impl VisitStmt<(), ResolverErr> for Resolver {
 
         self.end_scope();
 
-        self.in_struct = false;
+        let struct_type = StructType {
+            name: stmt.name.value.clone(),
+            fields,
+        };
+
+        self.declare_type(struct_type, &stmt.name.loc)?;
+
+        self.current_struct = None;
 
         Ok(())
     }
 }
 
-impl VisitExpr<(), ResolverErr> for Resolver {
-    fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> ResolverRes {
-        self.resolve_expr(&expr.left)?;
-        self.resolve_expr(&expr.right)
+impl VisitExpr<VarType, ResolverErr> for Resolver {
+    fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> ResolverExprRes {
+        let lhs_type = self.resolve_expr(&expr.left)?;
+        let rhs_type = self.resolve_expr(&expr.right)?;
+
+        let invalid_op_error = |op: &str| {
+            RevResult::new(
+                ResolverErr::InvalidOp(op.into(), lhs_type.to_string(), rhs_type.to_string()),
+                Some(expr.right.get_loc()),
+            )
+        };
+
+        match &expr.operator.kind {
+            TokenKind::Plus => {
+                match (&lhs_type, &rhs_type) {
+                    (VarType::Int, VarType::Int) => Ok(VarType::Int),
+                    (VarType::Int, VarType::Float)
+                    | (VarType::Float, VarType::Int | VarType::Float) => Ok(VarType::Float),
+                    (VarType::Str, VarType::Str) => Ok(VarType::Str),
+                    _ => return Err(invalid_op_error("+"))
+                }
+            }
+            TokenKind::Minus => {
+                match (&lhs_type, &rhs_type) {
+                    (VarType::Int, VarType::Int) => Ok(VarType::Int),
+                    (VarType::Int, VarType::Float)
+                     |(VarType::Float, VarType::Int | VarType::Float) => Ok(VarType::Float),
+                    _ => return Err(invalid_op_error("-"))
+                }
+            }
+            TokenKind::Star => {
+                match (&lhs_type, &rhs_type) {
+                    (VarType::Int, VarType::Int) => Ok(VarType::Int),
+                    (VarType::Int, VarType::Float)
+                     |(VarType::Float, VarType::Int | VarType::Float) => Ok(VarType::Float),
+                    (VarType::Int, VarType::Str) | (VarType::Str, VarType::Int) => Ok(VarType::Str),
+                    _ => return Err(invalid_op_error("*"))
+                }
+            }
+            TokenKind::Slash => {
+                match (&lhs_type, &rhs_type) {
+                    (VarType::Int, VarType::Int) => Ok(VarType::Int),
+                    (VarType::Int, VarType::Float)
+                    | (VarType::Float, VarType::Int | VarType::Float) => Ok(VarType::Float),
+                    _ => return Err(invalid_op_error("/"))
+                }
+            }
+            TokenKind::Modulo => {
+                match (&lhs_type, &rhs_type) {
+                    (VarType::Int, VarType::Int) => Ok(VarType::Int),
+                    (VarType::Int, VarType::Float)
+                    | (VarType::Float, VarType::Int | VarType::Float) => Ok(VarType::Float),
+                    _ => return Err(invalid_op_error("%"))
+                }
+            }
+            _ => return Err(RevResult::new(
+                ResolverErr::UnknownOp, Some(expr.operator.loc.clone())
+            ))
+        }
     }
 
-    fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> ResolverRes {
-        self.resolve_expr(&expr.expr)?;
-
-        Ok(())
+    fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> ResolverExprRes {
+        self.resolve_expr(&expr.expr)
     }
 
-    fn visit_int_literal_expr(&mut self, _: &IntLiteralExpr) -> ResolverRes {
-        Ok(())
+    fn visit_int_literal_expr(&mut self, _: &IntLiteralExpr) -> ResolverExprRes {
+        Ok(VarType::Int)
     }
 
-    fn visit_float_literal_expr(&mut self, _: &FloatLiteralExpr) -> ResolverRes {
-        Ok(())
+    fn visit_float_literal_expr(&mut self, _: &FloatLiteralExpr) -> ResolverExprRes {
+        Ok(VarType::Float)
     }
 
-    fn visit_str_literal_expr(&mut self, _: &StrLiteralExpr) -> ResolverRes {
-        Ok(())
+    fn visit_str_literal_expr(&mut self, _: &StrLiteralExpr) -> ResolverExprRes {
+        Ok(VarType::Str)
     }
 
-    fn visit_identifier_expr(&mut self, expr: &IdentifierExpr) -> ResolverRes {
+    fn visit_identifier_expr(&mut self, expr: &IdentifierExpr) -> ResolverExprRes {
         if !self.scopes.is_empty()
-            && self.scopes.last().unwrap().get(&expr.name) == Some(&false)
+            && self.scopes.last().unwrap().variables.get(&expr.name) == Some(&false)
         {
             return Err(RevResult::new(
                 ResolverErr::LocalVarInOwnInit,
                 Some(expr.loc.clone()),
-            ))
+            ));
         }
 
-        self.resolve_local(&expr.loc, &expr.name);
-
-        Ok(())
+        self.resolve_local(&expr.loc, &expr.name)?;
+        self.get_type(&expr.name, &expr.loc)
     }
 
-    fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> ResolverRes {
+    fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> ResolverExprRes {
         self.resolve_expr(&expr.right)
     }
 
-    fn visit_assign_expr(&mut self, expr: &AssignExpr) -> ResolverRes {
+    fn visit_assign_expr(&mut self, expr: &AssignExpr) -> ResolverExprRes {
         self.resolve_expr(&expr.value)?;
-        self.resolve_local(&expr.get_loc(), &expr.name);
+        let lhs_type = self.get_type(&expr.name, &expr.loc)?;
+        let value_type = expr.value.accept(self)?;
 
-        Ok(())
+        if lhs_type != value_type {
+            return Err(RevResult::new(
+                ResolverErr::WrongTypeAssign(value_type.to_string(), lhs_type.to_string()),
+                Some(expr.loc.clone())
+            ))
+        }
+
+        self.resolve_local(&expr.loc, &expr.name)?;
+
+        Ok(lhs_type)
     }
 
-    fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> ResolverRes {
-        self.resolve_expr(&expr.right)?;
-        self.resolve_expr(&expr.left)
+    fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> ResolverExprRes {
+        let rhs_type = self.resolve_expr(&expr.right)?;
+        let lhs_type = self.resolve_expr(&expr.left)?;
+
+        if lhs_type != lhs_type {
+            return Err(RevResult::new(
+                ResolverErr::WrongTypeLogical(lhs_type.to_string(), lhs_type.to_string()),
+                Some(expr.loc.clone())
+            ))
+        }
+
+        Ok(rhs_type)
     }
 
-    fn visit_call_expr(&mut self, expr: &CallExpr) -> ResolverRes {
+    fn visit_call_expr(&mut self, expr: &CallExpr) -> ResolverExprRes {
         self.resolve_expr(&expr.callee)?;
-        expr.args.iter().try_for_each(|arg| self.resolve_expr(arg))?;
 
-        Ok(())
+        for arg in &expr.args {
+            self.resolve_expr(arg)?;
+        }
+
+        Ok(VarType::Any)
     }
-    
-    fn visit_get_expr(&mut self, expr: &GetExpr) -> ResolverRes {
+
+    fn visit_get_expr(&mut self, expr: &GetExpr) -> ResolverExprRes {
         // Can't call constructor like: Foo().init()
         if expr.name.as_str() == "init" {
             return Err(RevResult::new(
                 ResolverErr::DirectConstructorCall,
                 Some(expr.loc.clone()),
+            ));
+        }
+
+        self.resolve_expr(&expr.object)
+    }
+
+    fn visit_set_expr(&mut self, expr: &SetExpr) -> ResolverExprRes {
+        let obj_type = self.resolve_expr(&expr.object)?;
+        let value_type = self.resolve_expr(&expr.value)?;
+
+        if obj_type != value_type {
+            return Err(RevResult::new(
+                ResolverErr::WrongTypeAssign(obj_type.to_string(), value_type.to_string()),
+                Some(expr.loc.clone())
             ))
         }
 
-        self.resolve_expr(&expr.object)?;
-
-        Ok(())
+        Ok(obj_type)
     }
-    
-    fn visit_set_expr(&mut self, expr: &SetExpr) -> ResolverRes {
-        self.resolve_expr(&expr.object)?;
-        self.resolve_expr(&expr.value)?;
 
-        Ok(())
-    }
-    
-    fn visit_self_expr(&mut self, expr: &SelfExpr) -> ResolverRes {
-        if !self.in_struct {
-            return Err(RevResult::new(ResolverErr::SelfOutsideStruct, Some(expr.loc.clone())))
+    fn visit_self_expr(&mut self, expr: &SelfExpr) -> ResolverExprRes {
+        if self.current_struct.is_none() {
+            return Err(RevResult::new(
+                ResolverErr::SelfOutsideStruct,
+                Some(expr.loc.clone()),
+            ));
         }
 
-        self.resolve_local(&expr.loc, &expr.name);
+        self.resolve_local(&expr.loc, &expr.name)?;
 
-        Ok(())
+        Ok(VarType::Struct(self.current_struct.as_ref().unwrap().clone()))
+    }
+
+    fn visit_is_expr(&mut self, expr: &IsExpr) -> ResolverExprRes {
+        self.resolve_expr(&expr.left)?;
+        self.check_type_exists(&expr.typ.value, &expr.loc)?;
+
+        Ok(VarType::Bool)
     }
 }
 
@@ -416,10 +785,7 @@ var a
         let mut depths = locals.into_values().collect::<Vec<usize>>();
         depths.sort();
 
-        assert_eq!(
-            depths,
-            vec![0, 0, 0, 0, 0, 0, 1, 1, 2]
-        );
+        assert_eq!(depths, vec![0, 0, 0, 0, 0, 0, 1, 1, 2]);
     }
 
     #[test]
@@ -445,10 +811,7 @@ var a
         let mut depths = locals.into_values().collect::<Vec<usize>>();
         depths.sort();
 
-        assert_eq!(
-            depths,
-            vec![0usize, 2usize]
-        );
+        assert_eq!(depths, vec![0usize, 2usize]);
     }
 
     #[test]
@@ -474,7 +837,7 @@ var a
 ";
         let resolver = lex_parse_resolve(code);
         let errs = resolver.err().unwrap();
-        assert_eq!(errs[0].err, ResolverErr::AlreadyDeclInLocal);
+        assert_eq!(errs[0].err, ResolverErr::AlreadyDecl("variable".into()),);
     }
 
     #[test]

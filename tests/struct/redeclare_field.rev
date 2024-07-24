@@ -1,0 +1,4 @@
+struct Foo {
+    a
+    a // error: a field with the same name as already been declared in this scope
+}

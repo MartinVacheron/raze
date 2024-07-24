@@ -2,6 +2,8 @@ use std::rc::Rc;
 
 use ecow::EcoString;
 
+use crate::lexer::Token;
+
 use super::expr::Expr;
 use tools::results::{Loc, RevReport, RevResult};
 
@@ -39,8 +41,9 @@ pub struct BlockStmt {
 
 #[derive(Debug, PartialEq)]
 pub struct VarDeclStmt {
-    pub name: EcoString,
+    pub name: Token,
     pub value: Option<Expr>,
+    pub typ: Option<Token>,
     pub loc: Loc,
 }
 
@@ -75,7 +78,7 @@ pub struct ForRange {
 
 #[derive(Debug, PartialEq)]
 pub struct FnDeclStmt {
-    pub name: EcoString,
+    pub name: Token,
     pub params: Rc<Vec<EcoString>>,
     pub body: Rc<Vec<Stmt>>,
     pub loc: Loc,
@@ -89,23 +92,10 @@ pub struct ReturnStmt {
 
 #[derive(Debug, PartialEq)]
 pub struct StructStmt {
-    pub name: EcoString,
-    pub fields: Vec<StructMember>,
+    pub name: Token,
+    pub fields: Vec<VarDeclStmt>,
     pub methods: Vec<FnDeclStmt>,
     pub loc: Loc,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct StructMember {
-    pub name: EcoString,
-    pub is_const: bool,
-    pub value: Option<Expr>,
-}
-
-impl StructMember {
-    pub fn new(name: EcoString, is_const: bool, value: Option<Expr>) -> Self {
-        Self { name, is_const, value }
-    }
 }
 
 
@@ -148,6 +138,7 @@ impl From<&VarDeclStmt> for Stmt {
         Self::VarDecl(VarDeclStmt {
             name: value.name.clone(),
             value: value.value.clone(),
+            typ: value.typ.clone(),
             loc: value.loc.clone(),
         })
     }

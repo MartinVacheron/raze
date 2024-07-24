@@ -1,0 +1,8 @@
+struct Foo {
+    a = 1
+    b = "bar"
+}
+
+var f = Foo()
+print f.a // expect: 1
+print f.b // expect: "bar"

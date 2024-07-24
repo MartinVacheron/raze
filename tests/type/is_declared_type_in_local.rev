@@ -1,0 +1,18 @@
+{
+    var a: int = 1
+    print a is int // expect: true
+
+    var b: float = 1.5
+    print b is float // expect: true
+
+    var c: str = "foo"
+    print c is str // expect: true
+
+    var d: bool = true
+    print d is bool // expect: true
+
+
+    struct Foo {}
+    var f: Foo = Foo()
+    print f is Foo // expect: true
+}

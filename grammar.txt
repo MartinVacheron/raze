@@ -6,7 +6,7 @@ declaration    → structDecl
                | statement ;
 
 structDecl     → "struct" IDENTIFIER "{" funcDecl* "}" ;
-varDecl        → "var" IDENTIFIER ( "=" expression )? ;
+varDecl        → "var" IDENTIFIER ( ":" TYPE )? ( "=" expression )? ;
 funcDecl       → "fn" function ;
 function       → IDENTIFIER "(" paramters? ")" block ;
 parameters     → IDENTIFIER ( "," IDENTIFIER )* ;

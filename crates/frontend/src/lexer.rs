@@ -48,6 +48,7 @@ pub enum TokenKind {
     CloseBrace,
     Comma,
     Dot,
+    Colon,
     Minus,
     Plus,
     Slash,
@@ -67,9 +68,15 @@ pub enum TokenKind {
 
     // Literals
     Identifier,
-    String,
-    Int,
-    Float,
+    StringLit,
+    IntLit,
+    FloatLit,
+
+    // Types
+    IntType,
+    FloatType,
+    StringType,
+    BoolType,
 
     // Keywords
     Struct,
@@ -89,6 +96,10 @@ pub enum TokenKind {
     In,
     True,
     False,
+    Is,
+
+    // Temporary
+    Range(Box<(Token, Token, Option<Token>)>),
 
     NewLine,
     Eof,
@@ -111,7 +122,6 @@ impl Display for Token {
 #[derive(Default)]
 pub struct Lexer {
     code: Vec<char>,
-    tokens: Vec<Token>,
     keywords: HashMap<String, TokenKind>,
     start: usize,
     current: usize,
@@ -134,6 +144,10 @@ impl Lexer {
         map.insert("false".into(), TokenKind::False);
         map.insert("struct".into(), TokenKind::Struct);
         map.insert("self".into(), TokenKind::SelfKw);
+        map.insert("int".into(), TokenKind::IntType);
+        map.insert("float".into(), TokenKind::FloatType);
+        map.insert("str".into(), TokenKind::StringType);
+        map.insert("bool".into(), TokenKind::BoolType);
         map.insert("fn".into(), TokenKind::Fn);
         map.insert("return".into(), TokenKind::Return);
         map.insert("if".into(), TokenKind::If);
@@ -145,23 +159,33 @@ impl Lexer {
         map.insert("in".into(), TokenKind::In);
         map.insert("null".into(), TokenKind::Null);
         map.insert("print".into(), TokenKind::Print);
+        map.insert("is".into(), TokenKind::Is);
 
         self.keywords = map;
     }
 
-    pub fn tokenize(&mut self, code: &str) -> Result<&Vec<Token>, Vec<RevResLex>> {
+    pub fn tokenize(&mut self, code: &str) -> Result<Vec<Token>, Vec<RevResLex>> {
         self.code = code.chars().collect();
 
         let mut errors: Vec<RevResLex> = vec![];
+        let mut tokens: Vec<Token> = vec![];
         
         while !self.eof() {
             self.start = self.current;
 
             let c = self.eat();
 
-            match c {
-                // Skipable char
-                '\r' | '\t' | ' ' => {},
+            // Skipable char
+            if matches!(c, '\r' | '\t' | ' ') {
+                continue
+            }
+
+            if c == '/' && self.at() == '/' {
+                self.lex_comment();
+                continue
+            }
+
+            let res = match c {
                 '\n' => self.add_token(TokenKind::NewLine),
                 // Single char tokens
                 '(' => self.add_token(TokenKind::OpenParen),
@@ -171,17 +195,15 @@ impl Lexer {
                 ',' => self.add_token(TokenKind::Comma),
                 '.' => {
                     if self.at().is_numeric() {
-                        match self.lex_number(true) {
-                            Ok(_) => {},
-                            Err(e) => errors.push(e)
-                        }
+                        self.lex_number(true)
                     }
-                    else if self.is_at('.') {
-                        self.add_token(TokenKind::DotDot);
+                    else if self.is_at_and_advance('.') {
+                        self.add_token(TokenKind::DotDot)
                     } else {
-                        self.add_token(TokenKind::Dot);
+                        self.add_token(TokenKind::Dot)
                     }
                 },
+                ':' => self.add_token(TokenKind::Colon),
                 '-' => self.add_token(TokenKind::Minus),
                 '+' => self.add_token(TokenKind::Plus),
                 '*' => self.add_token(TokenKind::Star),
@@ -189,77 +211,77 @@ impl Lexer {
 
                 // One or two char tokens
                 '!' => {
-                    let tk = if self.is_at('=') {
+                    let tk = if self.is_at_and_advance('=') {
                         TokenKind::BangEqual
                     } else {
                         TokenKind::Bang
                     };
 
-                    self.add_token(tk);
+                    self.add_token(tk)
                 },
                 '=' => {
-                    let tk = if self.is_at('=') {
+                    let tk = if self.is_at_and_advance('=') {
                         TokenKind::EqualEqual
                     } else {
                         TokenKind::Equal
                     };
 
-                    self.add_token(tk);
+                    self.add_token(tk)
                 },
                 '<' => {
-                    let tk = if self.is_at('=') {
+                    let tk = if self.is_at_and_advance('=') {
                         TokenKind::LessEqual
                     } else {
                         TokenKind::Less
                     };
 
-                    self.add_token(tk);
+                    self.add_token(tk)
                 },
                 '>' => {
-                    let tk = if self.is_at('=') {
+                    let tk = if self.is_at_and_advance('=') {
                         TokenKind::GreaterEqual
                     } else {
                         TokenKind::Greater
                     };
 
-                    self.add_token(tk);
+                    self.add_token(tk)
                 },
-
                 // Longer tokens
-                '/' => {
-                    if self.is_at('/') {
-                        self.lex_comment()
-                    } else {
-                        self.add_token(TokenKind::Slash)
-                    }
-                },
-                '\"' => match self.lex_string() {
-                    Ok(_) => {},
-                    Err(e) => errors.push(e)
-                },
+                '/' => self.add_token(TokenKind::Slash),
+                '\"' => self.lex_string(),
 
                 _ => {
                     if c.is_numeric() {
-                        match self.lex_number(false) {
-                            Ok(_) => {},
-                            Err(e) => errors.push(e)
-                        }
+                        self.lex_number(false)
                     } else if c.is_alphabetic() {
-                        match self.lex_identifier() {
-                            Ok(_) => {},
-                            Err(e) => errors.push(e)
-                        }
+                        self.lex_identifier()
                     } else {
-                        errors.push(self.trigger_error(LexerErr::UnexpectedToken(c)))
+                        Err(self.trigger_error(LexerErr::UnexpectedToken(c)))
                     }
                 }
+            };
+
+            match res {
+                Ok(tk) => {
+                    if let TokenKind::Range(range) = tk.kind {
+                        tokens.push(range.0);
+                        tokens.push(range.1);
+
+                        if let Some(t) = range.2 {
+                            tokens.push(t);
+                        }
+                    } else {
+                        tokens.push(tk);
+                    }
+                },
+                Err(e) => errors.push(e)
             }
         }
         
         // We do it like this because if last token was an error, we synchronized
         // att eof already so we are at out of bounds. We manually add a slot
         // past end of file to represent the token location
-        self.tokens.push(
+        tokens.push(
             Token {
                 kind: TokenKind::Eof,
                 value: "eof".into(),
@@ -268,7 +290,7 @@ impl Lexer {
         );
 
         match errors.is_empty() {
-            true => Ok(&self.tokens),
+            true => Ok(tokens),
             false => Err(errors)
         }
     }
@@ -279,7 +301,7 @@ impl Lexer {
         }
     }
 
-    fn lex_string(&mut self) -> Result<(), RevResLex> {
+    fn lex_string(&mut self) -> Result<Token, RevResLex> {
         while !self.eof() && self.at() != '\"' {
             self.eat();
         }
@@ -293,13 +315,12 @@ impl Lexer {
         // We eat the "
         self.eat();
 
-        self.add_value_token(TokenKind::String, value.into());
-        Ok(())
+        self.add_value_token(TokenKind::StringLit, value.into())
     }
 
     // point_float is when we are in the case ".456" and we have already parsed
     // the '.' 
-    fn lex_number(&mut self, point_float: bool) -> Result<(), RevResLex> {
+    fn lex_number(&mut self, point_float: bool) -> Result<Token, RevResLex> {
         while self.at().is_numeric() {
             self.eat();
         }
@@ -317,9 +338,7 @@ impl Lexer {
                 return Err(self.trigger_error(LexerErr::NonNumberDecimal))
             }
 
-            self.add_token(TokenKind::Float);
-
-            return Ok(())
+            return self.add_token(TokenKind::FloatLit)
         }
         
         if self.at() == '.' {
@@ -347,36 +366,39 @@ impl Lexer {
                 return Err(self.trigger_error(LexerErr::TwoDecimalParts))
             }
             
-            self.add_token(TokenKind::Float);
+            self.add_token(TokenKind::FloatLit)
 
         } else {
-            self.add_token(TokenKind::Int);
+            self.add_token(TokenKind::IntLit)
         }
-
-        Ok(())
     }
 
-    fn lex_range(&mut self) -> Result<(), RevResLex> {
-        self.add_token(TokenKind::Int);
+    fn lex_range(&mut self) -> Result<Token, RevResLex> {
+        let start = self.add_token(TokenKind::IntLit)?;
 
         self.start = self.current;
         self.eat();
         self.eat();
-        self.add_token(TokenKind::DotDot);
+        let dotdot = self.add_token(TokenKind::DotDot)?;
 
         self.start = self.current;
         while self.at().is_numeric() {
             self.eat();
         }
 
+        let mut end: Option<Token> = None;
         if self.start != self.current {
-            self.add_token(TokenKind::Int);
+            end = Some(self.add_token(TokenKind::IntLit)?);
         }
 
-        Ok(())
+        Ok(Token {
+            kind: TokenKind::Range(Box::new((start, dotdot, end))),
+            value: "".into(),
+            loc: Loc { start: 0, end: 0 }
+        })
     }
 
-    fn lex_identifier(&mut self) -> Result<(), RevResLex> {
+    fn lex_identifier(&mut self) -> Result<Token, RevResLex> {
         while self.at().is_alphanumeric() || self.at() == '_' {
             self.eat();
         }
@@ -387,8 +409,6 @@ impl Lexer {
             Some(tk) => self.add_token(tk.clone()),
             None => self.add_value_token(TokenKind::Identifier, ident.into())
         }
-
-        Ok(())
     }
 
     fn eof(&self) -> bool {
@@ -429,7 +449,7 @@ impl Lexer {
         self.prev()
     }
 
-    fn is_at(&mut self, expected: char) -> bool {
+    fn is_at_and_advance(&mut self, expected: char) -> bool {
         if self.eof() { return false }
         if self.at() != expected { return false }
 
@@ -453,23 +473,23 @@ impl Lexer {
         }
     }
 
-    fn add_token(&mut self, kind: TokenKind) {
+    fn add_token(&mut self, kind: TokenKind) -> Result<Token, RevResLex> {
         let code: String = self.code[self.start..self.current].iter().collect();
 
-        self.tokens.push(Token {
+        Ok(Token {
             kind,
             value: code.into(),
             loc: self.get_loc()
-        });
+        })
     }
 
     // Add a token with a specific value
-    fn add_value_token(&mut self, kind: TokenKind, value: EcoString) {
-        self.tokens.push(Token {
+    fn add_value_token(&mut self, kind: TokenKind, value: EcoString) -> Result<Token, RevResLex> {
+        Ok(Token {
             kind,
             value,
             loc: self.get_loc()
-        });
+        })
     }
 
     fn get_loc(&self) -> Loc {
@@ -546,7 +566,7 @@ mod tests {
 
         let tk_kind: Vec<TokenKind> = tokens.iter().map(|tk| tk.kind.clone()).collect();
 
-        assert_eq!(tk_kind, vec![TokenKind::String, TokenKind::Eof]);
+        assert_eq!(tk_kind, vec![TokenKind::StringLit, TokenKind::Eof]);
     }
 
     #[test]
@@ -560,7 +580,7 @@ mod tests {
 
         assert_eq!(
             tk_type,
-            vec![TokenKind::Int, TokenKind::Float, TokenKind::Float, TokenKind::Eof]
+            vec![TokenKind::IntLit, TokenKind::FloatLit, TokenKind::FloatLit, TokenKind::Eof]
         );
 
         assert_eq!(
@@ -579,7 +599,7 @@ mod tests {
 
         assert_eq!(
             tk_type,
-            vec![TokenKind::Int, TokenKind::DotDot, TokenKind::Int, TokenKind::Eof]
+            vec![TokenKind::IntLit, TokenKind::DotDot, TokenKind::IntLit, TokenKind::Eof]
         );
     }
 
@@ -611,19 +631,19 @@ break 45+7".into();
         assert_eq!(
             tk_loc,
             vec![
-                &Loc::new(0, 1),
-                &Loc::new(1, 9),
-                &Loc::new(9, 10),
-                &Loc::new(10, 19),
-                &Loc::new(19, 20),
-                &Loc::new(20, 23),
-                &Loc::new(24, 29),
-                &Loc::new(29, 30),
-                &Loc::new(30, 31),
-                &Loc::new(31, 36),
-                &Loc::new(37, 39),
-                &Loc::new(39, 40),
-                &Loc::new(40, 41),
+                &Loc::new(0, 0),
+                &Loc::new(1, 8),
+                &Loc::new(9, 9),
+                &Loc::new(10, 18),
+                &Loc::new(19, 19),
+                &Loc::new(20, 22),
+                &Loc::new(24, 28),
+                &Loc::new(29, 29),
+                &Loc::new(30, 30),
+                &Loc::new(31, 35),
+                &Loc::new(37, 38),
+                &Loc::new(39, 39),
+                &Loc::new(40, 40),
                 &Loc::new(41, 42),
             ]
         );

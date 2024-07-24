@@ -1,5 +1,3 @@
 if false {
-    print notDefined
+    print notDefined // error: undeclared variable 'notDefined'
 }
-
-print "ok" // expect: "ok"

@@ -1,0 +1,2 @@
+fn add() {}
+fn add() {} // error: a function with the same name as already been declared in this scope

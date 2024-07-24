@@ -1,0 +1,2 @@
+struct Foo {}
+struct Foo {} // error: a structure with the same name as already been declared in this scope

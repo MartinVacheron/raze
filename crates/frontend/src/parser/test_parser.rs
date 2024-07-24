@@ -118,7 +118,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
             None
         };
 
-        infos.var_decl = vec![(stmt.name.clone(), val)];
+        infos.var_decl = vec![(stmt.name.value.clone(), val)];
         Ok(infos)
     }
 
@@ -170,7 +170,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
     }
 
     fn visit_for_stmt(&mut self, stmt: &ForStmt) -> Result<StmtInfos, RevResult<ParserTestErr>> {
-        let placeholder = stmt.placeholder.name.clone();
+        let placeholder = stmt.placeholder.name.value.clone();
         let range = (stmt.range.start, stmt.range.end);
         let body = stmt.body.accept(self)?;
 
@@ -185,7 +185,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
     }
 
     fn visit_fn_decl_stmt(&mut self, stmt: &FnDeclStmt) -> Result<StmtInfos, RevResult<ParserTestErr>> {
-        let name = stmt.name.clone();
+        let name = stmt.name.value.clone();
 
         let mut body: Vec<StmtInfos> = vec![];
         for s in &*stmt.body {
@@ -395,7 +395,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         let mut infos = ExprInfos::default();
         let binop_infos = BinopInfo {
             left: expr.left.accept(self).unwrap(),
-            op: expr.operator.clone(),
+            op: expr.operator.value.clone(),
             right: expr.right.accept(self).unwrap(),
             loc: expr.right.get_loc(),
         };
@@ -459,7 +459,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         let mut infos = ExprInfos::default();
         let unary_info = UnaryInfo {
             expr: expr.right.accept(self).unwrap(),
-            op: expr.operator.clone(),
+            op: expr.operator.value.clone(),
             loc: expr.right.get_loc()
         };
         infos.unary.push(unary_info);
@@ -485,7 +485,7 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
         let mut infos = ExprInfos::default();
         let logical_infos = LogicalInfo {
             left: expr.left.accept(self).unwrap(),
-            op: expr.operator.clone(),
+            op: expr.operator.value.clone(),
             right: expr.right.accept(self).unwrap(),
             loc: expr.loc.clone(),
         };
@@ -521,6 +521,10 @@ impl VisitExpr<ExprInfos, ParserTestErr> for TestParser {
     }
     
     fn visit_self_expr(&mut self, _: &crate::ast::expr::SelfExpr) -> Result<ExprInfos, RevResult<ParserTestErr>> {
+        todo!()
+    }
+    
+    fn visit_is_expr(&mut self, _: &crate::ast::expr::IsExpr) -> Result<ExprInfos, RevResult<ParserTestErr>> {
         todo!()
     }
 }

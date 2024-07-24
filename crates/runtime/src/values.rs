@@ -107,6 +107,31 @@ impl RtVal {
             _ => Err(RtValErr::UnknownOperation),
         }
     }
+
+    pub fn is_of_type(&self, typ: &EcoString) -> RtVal {
+        match (self, typ.as_str()) {
+            (RtVal::IntVal(_), "int") => RtVal::new_bool(true),
+            (RtVal::FloatVal(_), "float") => RtVal::new_bool(true),
+            (RtVal::StrVal(_), "str") => RtVal::new_bool(true),
+            (RtVal::BoolVal(_), "bool") => RtVal::new_bool(true),
+            (RtVal::StructVal(s), t @ _) => {
+                if s.borrow().name == t {
+                    RtVal::new_bool(true)
+                } else {
+                    RtVal::new_bool(false)
+                }
+            },
+            (RtVal::InstanceVal(i), t @ _) => {
+                if i.strukt.borrow().name == t {
+                    RtVal::new_bool(true)
+                } else {
+                    RtVal::new_bool(false)
+                }
+            },
+            (RtVal::Null, "null") => RtVal::new_bool(true),
+            _ => RtVal::new_bool(false)
+        }
+    }
 }
 
 impl From<RtVal> for Rc<RefCell<RtVal>> {
@@ -296,7 +321,7 @@ pub struct Function {
 impl Function {
     pub fn new(stmt: &FnDeclStmt, closure: Rc<RefCell<Env>>) -> Self {
         Self {
-            name: stmt.name.clone(),
+            name: stmt.name.value.clone(),
             params: stmt.params.clone(),
             body: stmt.body.clone(),
             closure: Rc::new(RefCell::new(Env::new(Some(closure)))),
@@ -385,7 +410,7 @@ impl RtVal {
     ) -> Self{
         RtVal::StructVal(Rc::new(RefCell::new(
             Struct {
-                name: stmt.name.clone(),
+                name: stmt.name.value.clone(),
                 fields,
                 methods,
             }
