@@ -1,6 +1,6 @@
 struct Foo {
-    a = 1
-    b = "bar"
+    a: int = 1
+    b: str = "bar"
 }
 
 var f = Foo()

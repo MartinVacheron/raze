@@ -1,4 +1,4 @@
 struct Foo {
-    a
-    a // error: a field with this name already exists in this structure
+    a: int
+    a: int // error: a field with this name already exists in this structure
 }

@@ -1,0 +1,1 @@
+fn fib(a, b // error: parenthesis is never closed

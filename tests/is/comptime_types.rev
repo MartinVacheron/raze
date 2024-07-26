@@ -1,0 +1,3 @@
+var a: int = 1
+
+print a is float // error: variable is not of type 'int'

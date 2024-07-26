@@ -21,9 +21,9 @@ use runtime::{interpreter::Interpreter, values::RtVal};
 #[command(version)]
 #[command(about = "Interpreter for Rev language")]
 struct Cli {
-    #[arg(short, long)]
+    #[arg(short, long, default_value_t = String::from("placeholder.rev"))]
     /// Path to the file to parse
-    file: Option<String>,
+    file: String,
 
     /// Interactive mode after interpreting a file
     #[arg(short, long)]
@@ -36,6 +36,10 @@ struct Cli {
     // Prints the AST tree
     #[arg(short, long)]
     print_ast: bool,
+
+    // Static analysis
+    #[arg(short, long)]
+    static_analyse: bool,
 }
 
 struct Repl {
@@ -58,9 +62,9 @@ fn main() {
 
 impl Repl {
     pub fn run(&mut self) {
-        let _ = match &self.cli.file {
-            Some(f) => self.run_file(f.clone()),
-            None => self.run_repl(),
+        let _ = match self.cli.file.as_str() {
+            "placeholder.rev" => self.run_repl(),
+            f => self.run_file(f.into()),
         };
     }
 
@@ -107,7 +111,7 @@ impl Repl {
             Ok(tk) => tk,
             Err(e) => {
                 e.iter()
-                    .for_each(|e| e.report(&"placeholder.rev".into(), &code));
+                    .for_each(|e| e.report(&self.cli.file, &code));
 
                 return
             }
@@ -121,7 +125,7 @@ impl Repl {
             Ok(n) => n,
             Err(e) => {
                 e.iter()
-                    .for_each(|e| e.report(&"placeholder.rev".into(), &code));
+                    .for_each(|e| e.report(&self.cli.file, &code));
                 
                 return
             }
@@ -137,19 +141,21 @@ impl Repl {
             Ok(l) => l,
             Err(e) => {
                 e.iter()
-                    .for_each(|e| e.report(&"placeholder.rev".into(), &code));
+                    .for_each(|e| e.report(&self.cli.file, &code));
 
                 return
             }
         };
 
-        match self.interpreter.interpret(&nodes, locals) {
-            Ok(res) => {
-                if *res.borrow() != RtVal::Null {
-                    println!("{}", *res.borrow());
+        if !self.cli.static_analyse {
+            match self.interpreter.interpret(&nodes, locals) {
+                Ok(res) => {
+                    if *res.borrow() != RtVal::Null {
+                        println!("{}", *res.borrow());
+                    }
                 }
+                Err(e) => e.report(&self.cli.file, &code),
             }
-            Err(e) => e.report(&"placeholder.rev".into(), &code),
         }
     }
 }

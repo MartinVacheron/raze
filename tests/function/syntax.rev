@@ -6,10 +6,22 @@ fn c(
     b,
 ) {}
 
+fn c(
+    a,
+    b
+) {}
+
 fn d(
     a,
     b,)
 {
 }
+
+fn add(
+    a
+    ,
+    b
+    ,
+) {}
 
 print "ok" // expect: "ok"

@@ -1,0 +1,5 @@
+var a: int = 1
+var b: int = 2
+
+var c: float = a + b
+var d: int = c + a // error: trying to assign value of type 'float' to variable of type 'int'

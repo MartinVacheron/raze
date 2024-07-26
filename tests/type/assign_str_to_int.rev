@@ -1,0 +1,1 @@
+var a: int = "foo" // error: trying to assign value of type 'str' to variable of type 'int'

@@ -1,6 +1,5 @@
 struct Foo {
-    a: int
-    b: str = "bar"
+    a: float
 }
 
 print "ok" // expect: "ok"

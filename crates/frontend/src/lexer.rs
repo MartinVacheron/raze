@@ -1,10 +1,9 @@
-use std::{collections::HashMap, fmt::Display};
-use ecow::EcoString;
-use thiserror::Error;
 use colored::*;
+use ecow::EcoString;
+use std::{collections::HashMap, fmt::Display};
+use thiserror::Error;
 
-use tools::results::{RevReport, RevResult, Loc};
-
+use tools::results::{Loc, RevReport, RevResult};
 
 // ----------------
 // Error managment
@@ -34,7 +33,6 @@ impl RevReport for LexerErr {
 }
 
 type RevResLex = RevResult<LexerErr>;
-
 
 // --------
 //  Lexing
@@ -105,12 +103,11 @@ pub enum TokenKind {
     Eof,
 }
 
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct Token {
     pub kind: TokenKind,
     pub value: EcoString,
-    pub loc: Loc
+    pub loc: Loc,
 }
 
 impl Display for Token {
@@ -169,7 +166,7 @@ impl Lexer {
 
         let mut errors: Vec<RevResLex> = vec![];
         let mut tokens: Vec<Token> = vec![];
-        
+
         while !self.eof() {
             self.start = self.current;
 
@@ -177,12 +174,12 @@ impl Lexer {
 
             // Skipable char
             if matches!(c, '\r' | '\t' | ' ') {
-                continue
+                continue;
             }
 
             if c == '/' && self.at() == '/' {
                 self.lex_comment();
-                continue
+                continue;
             }
 
             let res = match c {
@@ -196,13 +193,12 @@ impl Lexer {
                 '.' => {
                     if self.at().is_numeric() {
                         self.lex_number(true)
-                    }
-                    else if self.is_at_and_advance('.') {
+                    } else if self.is_at_and_advance('.') {
                         self.add_token(TokenKind::DotDot)
                     } else {
                         self.add_token(TokenKind::Dot)
                     }
-                },
+                }
                 ':' => self.add_token(TokenKind::Colon),
                 '-' => self.add_token(TokenKind::Minus),
                 '+' => self.add_token(TokenKind::Plus),
@@ -218,7 +214,7 @@ impl Lexer {
                     };
 
                     self.add_token(tk)
-                },
+                }
                 '=' => {
                     let tk = if self.is_at_and_advance('=') {
                         TokenKind::EqualEqual
@@ -227,7 +223,7 @@ impl Lexer {
                     };
 
                     self.add_token(tk)
-                },
+                }
                 '<' => {
                     let tk = if self.is_at_and_advance('=') {
                         TokenKind::LessEqual
@@ -236,7 +232,7 @@ impl Lexer {
                     };
 
                     self.add_token(tk)
-                },
+                }
                 '>' => {
                     let tk = if self.is_at_and_advance('=') {
                         TokenKind::GreaterEqual
@@ -245,7 +241,7 @@ impl Lexer {
                     };
 
                     self.add_token(tk)
-                },
+                }
                 // Longer tokens
                 '/' => self.add_token(TokenKind::Slash),
                 '\"' => self.lex_string(),
@@ -273,25 +269,26 @@ impl Lexer {
                     } else {
                         tokens.push(tk);
                     }
-                },
-                Err(e) => errors.push(e)
+                }
+                Err(e) => errors.push(e),
             }
         }
-        
+
         // We do it like this because if last token was an error, we synchronized
         // att eof already so we are at out of bounds. We manually add a slot
         // past end of file to represent the token location
-        tokens.push(
-            Token {
-                kind: TokenKind::Eof,
-                value: "eof".into(),
-                loc: Loc { start: self.code.len(), end: self.code.len() + 1 }
-            }
-        );
+        tokens.push(Token {
+            kind: TokenKind::Eof,
+            value: "eof".into(),
+            loc: Loc {
+                start: self.code.len(),
+                end: self.code.len() + 1,
+            },
+        });
 
         match errors.is_empty() {
             true => Ok(tokens),
-            false => Err(errors)
+            false => Err(errors),
         }
     }
 
@@ -302,16 +299,26 @@ impl Lexer {
     }
 
     fn lex_string(&mut self) -> Result<Token, RevResLex> {
+        let open_quote = self.current - 1;
+
         while !self.eof() && self.at() != '\"' {
             self.eat();
         }
 
         if self.eof() {
-            return Err(self.trigger_error(LexerErr::StringNeverClosed))
+            return Err(self.trigger_error_with_loc(
+                LexerErr::StringNeverClosed,
+                Loc::new(open_quote, open_quote),
+            ));
         }
 
         // We create the token without the surronding quotes
-        let value: String = self.code.get(self.start + 1..self.current).unwrap().iter().collect();
+        let value: String = self
+            .code
+            .get(self.start + 1..self.current)
+            .unwrap()
+            .iter()
+            .collect();
         // We eat the "
         self.eat();
 
@@ -319,7 +326,7 @@ impl Lexer {
     }
 
     // point_float is when we are in the case ".456" and we have already parsed
-    // the '.' 
+    // the '.'
     fn lex_number(&mut self, point_float: bool) -> Result<Token, RevResLex> {
         while self.at().is_numeric() {
             self.eat();
@@ -327,24 +334,20 @@ impl Lexer {
 
         if point_float {
             if self.at() == '.' {
-                return Err(self.trigger_error(LexerErr::TwoDecimalParts))
+                return Err(self.trigger_error(LexerErr::TwoDecimalParts));
             }
 
-            if !self.is_skippable()
-                && self.at() != '\n'
-                && !self.is_math_op()
-                && !self.eof()
-            {
-                return Err(self.trigger_error(LexerErr::NonNumberDecimal))
+            if !self.is_skippable() && self.at() != '\n' && !self.is_math_op() && !self.eof() {
+                return Err(self.trigger_error(LexerErr::NonNumberDecimal));
             }
 
-            return self.add_token(TokenKind::FloatLit)
+            return self.add_token(TokenKind::FloatLit);
         }
-        
+
         if self.at() == '.' {
             // Range
             if self.next() == '.' {
-                return self.lex_range()
+                return self.lex_range();
             }
 
             self.eat();
@@ -355,7 +358,7 @@ impl Lexer {
                 && !self.is_math_op()
                 && !self.eof()
             {
-                return Err(self.trigger_error(LexerErr::NonNumberDecimal))
+                return Err(self.trigger_error(LexerErr::NonNumberDecimal));
             }
 
             while self.at().is_numeric() {
@@ -363,11 +366,10 @@ impl Lexer {
             }
 
             if self.at() == '.' {
-                return Err(self.trigger_error(LexerErr::TwoDecimalParts))
+                return Err(self.trigger_error(LexerErr::TwoDecimalParts));
             }
-            
-            self.add_token(TokenKind::FloatLit)
 
+            self.add_token(TokenKind::FloatLit)
         } else {
             self.add_token(TokenKind::IntLit)
         }
@@ -394,7 +396,7 @@ impl Lexer {
         Ok(Token {
             kind: TokenKind::Range(Box::new((start, dotdot, end))),
             value: "".into(),
-            loc: Loc { start: 0, end: 0 }
+            loc: Loc { start: 0, end: 0 },
         })
     }
 
@@ -403,11 +405,16 @@ impl Lexer {
             self.eat();
         }
 
-        let ident: String = self.code.get(self.start..self.current).unwrap().iter().collect();
-        
+        let ident: String = self
+            .code
+            .get(self.start..self.current)
+            .unwrap()
+            .iter()
+            .collect();
+
         match self.keywords.get(&ident) {
             Some(tk) => self.add_token(tk.clone()),
-            None => self.add_value_token(TokenKind::Identifier, ident.into())
+            None => self.add_value_token(TokenKind::Identifier, ident.into()),
         }
     }
 
@@ -450,16 +457,26 @@ impl Lexer {
     }
 
     fn is_at_and_advance(&mut self, expected: char) -> bool {
-        if self.eof() { return false }
-        if self.at() != expected { return false }
+        if self.eof() {
+            return false;
+        }
+        if self.at() != expected {
+            return false;
+        }
 
         self.current += 1;
         true
     }
 
     fn trigger_error(&mut self, err: LexerErr) -> RevResLex {
+        let loc = self.get_loc();
+        self.trigger_error_with_loc(err, loc)
+    }
+
+    fn trigger_error_with_loc(&mut self, err: LexerErr, loc: Loc) -> RevResLex {
         self.synchronize();
-        RevResult::new(err, Some(self.get_loc()))
+
+        RevResult::new(err, Some(loc))
     }
 
     // Function used when an error is encountered. We skip until next
@@ -479,7 +496,7 @@ impl Lexer {
         Ok(Token {
             kind,
             value: code.into(),
-            loc: self.get_loc()
+            loc: self.get_loc(),
         })
     }
 
@@ -488,7 +505,7 @@ impl Lexer {
         Ok(Token {
             kind,
             value,
-            loc: self.get_loc()
+            loc: self.get_loc(),
         })
     }
 
@@ -501,14 +518,14 @@ impl Lexer {
 mod tests {
     use ecow::EcoString;
 
-    use crate::lexer::{ LexerErr, Loc, TokenKind };
+    use crate::lexer::{LexerErr, Loc, TokenKind};
 
     use super::Lexer;
 
     #[test]
     fn tokenize_single_char() {
         let code: String = "(){},.-+%/*=!<>\n".into();
-        let mut lexer = Lexer::new(); 
+        let mut lexer = Lexer::new();
         let tokens = lexer.tokenize(&code).unwrap();
 
         let tk_kind: Vec<TokenKind> = tokens.iter().map(|tk| tk.kind.clone()).collect();
@@ -540,7 +557,7 @@ mod tests {
     #[test]
     fn tokenize_double_char() {
         let code: String = "!= <= >= == ..".into();
-        let mut lexer = Lexer::new(); 
+        let mut lexer = Lexer::new();
         let tokens = lexer.tokenize(&code).unwrap();
 
         let tk_kind: Vec<TokenKind> = tokens.iter().map(|tk| tk.kind.clone()).collect();
@@ -561,7 +578,7 @@ mod tests {
     #[test]
     fn tokenize_string() {
         let code: String = "\"hello world!\"".into();
-        let mut lexer = Lexer::new(); 
+        let mut lexer = Lexer::new();
         let tokens = lexer.tokenize(&code).unwrap();
 
         let tk_kind: Vec<TokenKind> = tokens.iter().map(|tk| tk.kind.clone()).collect();
@@ -572,7 +589,7 @@ mod tests {
     #[test]
     fn tokenize_number() {
         let code: String = "12 25. 26.345".into();
-        let mut lexer = Lexer::new(); 
+        let mut lexer = Lexer::new();
         let tokens = lexer.tokenize(&code).unwrap();
 
         let tk_type: Vec<TokenKind> = tokens.iter().map(|tk| tk.kind.clone()).collect();
@@ -580,33 +597,48 @@ mod tests {
 
         assert_eq!(
             tk_type,
-            vec![TokenKind::IntLit, TokenKind::FloatLit, TokenKind::FloatLit, TokenKind::Eof]
+            vec![
+                TokenKind::IntLit,
+                TokenKind::FloatLit,
+                TokenKind::FloatLit,
+                TokenKind::Eof
+            ]
         );
 
         assert_eq!(
             tk_value,
-            vec!["12".to_string(), "25.".to_string(), "26.345".to_string(), "eof".to_string()]
+            vec![
+                "12".to_string(),
+                "25.".to_string(),
+                "26.345".to_string(),
+                "eof".to_string()
+            ]
         );
     }
 
     #[test]
     fn tokenize_range() {
         let code: String = "2..5".into();
-        let mut lexer = Lexer::new(); 
+        let mut lexer = Lexer::new();
         let tokens = lexer.tokenize(&code).unwrap();
 
         let tk_type: Vec<TokenKind> = tokens.iter().map(|tk| tk.kind.clone()).collect();
 
         assert_eq!(
             tk_type,
-            vec![TokenKind::IntLit, TokenKind::DotDot, TokenKind::IntLit, TokenKind::Eof]
+            vec![
+                TokenKind::IntLit,
+                TokenKind::DotDot,
+                TokenKind::IntLit,
+                TokenKind::Eof
+            ]
         );
     }
 
     #[test]
     fn string_errors() {
         let code: String = "\"foo".into();
-        let mut lexer = Lexer::new(); 
+        let mut lexer = Lexer::new();
         let tokens = lexer.tokenize(&code);
 
         assert!(matches!(
@@ -622,8 +654,9 @@ mod tests {
 \"foo bar\"
 for while
 
-break 45+7".into();
-        let mut lexer = Lexer::new(); 
+break 45+7"
+            .into();
+        let mut lexer = Lexer::new();
         let tokens = lexer.tokenize(&code).unwrap();
 
         let tk_loc: Vec<&Loc> = tokens.iter().map(|tk| &tk.loc).collect();

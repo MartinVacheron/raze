@@ -5,7 +5,9 @@ use ecow::EcoString;
 use thiserror::Error;
 
 use crate::ast::expr::{
-    AssignExpr, BinaryExpr, CallExpr, Expr, FloatLiteralExpr, GetExpr, GroupingExpr, IdentifierExpr, IntLiteralExpr, IsExpr, LogicalExpr, SelfExpr, SetExpr, StrLiteralExpr, UnaryExpr
+    AssignExpr, BinaryExpr, CallExpr, Expr, FloatLiteralExpr, GetExpr, GroupingExpr,
+    IdentifierExpr, IntLiteralExpr, IsExpr, LogicalExpr, SelfExpr, SetExpr, StrLiteralExpr,
+    UnaryExpr,
 };
 use crate::ast::stmt::{
     BlockStmt, ExprStmt, FnDeclStmt, ForRange, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt,
@@ -167,6 +169,9 @@ pub enum ParserErr {
 
     #[error("methods must be declared with 'fn' keyword")]
     MissingFnKwForMethod,
+
+    #[error("missing structure field's type")]
+    StructFieldNoType,
 
     // Property
     #[error("missing property name after '.'")]
@@ -371,9 +376,9 @@ impl Parser {
     fn parse_block_stmt(&mut self) -> ParserStmtRes {
         self.enter_code_block(CodeBlock::Block);
 
-        self.expect_and_skip(TokenKind::OpenBrace)?;
+        let open_brace = self.expect_and_skip(TokenKind::OpenBrace)?;
 
-        let stmts = self.parse_block()?;
+        let stmts = self.parse_block(open_brace)?;
 
         self.exit_code_block();
 
@@ -383,7 +388,7 @@ impl Parser {
         }))
     }
 
-    fn parse_block(&mut self) -> Result<Vec<Stmt>, RevResParser> {
+    fn parse_block(&mut self, open_brace: Token) -> Result<Vec<Stmt>, RevResParser> {
         let mut stmts: Vec<Stmt> = vec![];
 
         while !self.is_at(TokenKind::CloseBrace) && !self.eof() {
@@ -392,7 +397,7 @@ impl Parser {
         }
 
         self.expect_and_skip(TokenKind::CloseBrace)
-            .map_err(|_| self.trigger_error(ParserErr::UnclosedBlock))?;
+            .map_err(|_| self.trigger_error_with_loc(ParserErr::UnclosedBlock, open_brace.loc))?;
 
         Ok(stmts)
     }
@@ -547,22 +552,21 @@ impl Parser {
 
         let name = self
             .expect(TokenKind::Identifier)
-            .map_err(|_| self.trigger_error(ParserErr::MissingFnName))?;
+            .map_err(|_| self.trigger_error_with_prev_loc(ParserErr::MissingFnName))?;
 
-        self.expect(TokenKind::OpenParen)
-            .map_err(|_| self.trigger_error(ParserErr::NoOpenParenAfterFnName))?;
+        let open_paren = self
+            .expect_and_skip(TokenKind::OpenParen)
+            .map_err(|_| self.trigger_error_with_prev_loc(ParserErr::NoOpenParenAfterFnName))?;
 
         let mut params: Vec<EcoString> = vec![];
-        if !self.is_at(TokenKind::CloseParen) {
+        if !self.is_at(TokenKind::CloseParen) && !self.eof() {
             loop {
                 if params.len() >= 255 {
                     return Err(self.trigger_error(ParserErr::MaxFnArgs));
                 }
 
-                self.skip_new_lines();
-
                 params.push(
-                    self.expect(TokenKind::Identifier)
+                    self.expect_and_skip(TokenKind::Identifier)
                         .map_err(|_| self.trigger_error(ParserErr::WrongFnArgType))?
                         .value,
                 );
@@ -575,27 +579,31 @@ impl Parser {
                         break;
                     }
                 } else if !self.is_at(TokenKind::CloseParen) {
-                    return Err(self.trigger_error(ParserErr::MissingArgsComma));
+                    if self.is_at(TokenKind::Identifier) {
+                        return Err(self.trigger_error(ParserErr::MissingArgsComma));
+                    }
+
+                    return Err(
+                        self.trigger_error_with_loc(ParserErr::ParenNeverClosed, open_paren.loc)
+                    );
                 } else {
                     break;
                 }
             }
         }
 
-        self.eat()?;
-        self.skip_new_lines();
+        let close_paren = self.expect_and_skip(TokenKind::CloseParen).map_err(|_| {
+            self.trigger_error_with_loc(ParserErr::ParenNeverClosed, open_paren.loc)
+        })?;
 
-        if !self.is_at(TokenKind::OpenBrace) {
-            return Err(self.trigger_error(ParserErr::MissingFnOpenBrace));
-        }
-
-        self.eat()?;
-        self.skip_new_lines();
+        let open_brace = self.expect_and_skip(TokenKind::OpenBrace).map_err(|_| {
+            self.trigger_error_with_loc(ParserErr::MissingFnOpenBrace, close_paren.loc)
+        })?;
 
         self.exit_code_block();
         self.enter_code_block(CodeBlock::FnDecl);
 
-        let body = Rc::new(self.parse_block()?);
+        let body = Rc::new(self.parse_block(open_brace)?);
 
         self.exit_code_block();
 
@@ -640,10 +648,19 @@ impl Parser {
         while !self.is_at(TokenKind::CloseBrace) && !self.eof() && self.is_at(TokenKind::Identifier)
         {
             if self.next_is(TokenKind::OpenParen) {
-                return Err(self.trigger_error(ParserErr::MissingFnKwForMethod))
+                return Err(self.trigger_error(ParserErr::MissingFnKwForMethod));
             }
 
-            fields.push(self.parse_var_declaration()?);
+            let field = self.parse_var_declaration()?;
+
+            if field.typ.is_none() {
+                return Err(self
+                    .trigger_error_with_loc(ParserErr::StructFieldNoType, field.name.loc.clone()));
+            }
+
+            fields.push(field);
+
+            self.skip_new_lines();
         }
 
         let mut methods: Vec<FnDeclStmt> = vec![];
@@ -808,7 +825,7 @@ impl Parser {
             self.eat()?;
 
             if !self.is_at_type() {
-                return Err(self.trigger_error(ParserErr::NonIdentTypeInIs))
+                return Err(self.trigger_error(ParserErr::NonIdentTypeInIs));
             }
 
             let typ = self.eat()?.clone();
@@ -816,7 +833,7 @@ impl Parser {
             expr = Expr::Is(IsExpr {
                 left: Box::new(expr),
                 typ,
-                loc: self.get_loc()
+                loc: self.get_loc(),
             });
         }
 
@@ -984,29 +1001,23 @@ impl Parser {
     }
 
     fn parse_int_literal(&mut self) -> ParserExprRes {
-        let tk = self.eat()?;
+        let tk = self.eat()?.clone();
         let value = tk
             .value
             .parse::<i64>()
             .map_err(|_| self.trigger_error(ParserErr::ParsingInt))?;
 
-        Ok(Expr::IntLiteral(IntLiteralExpr {
-            value,
-            loc: self.get_loc_from_prev(),
-        }))
+        Ok(Expr::IntLiteral(IntLiteralExpr { value, loc: tk.loc }))
     }
 
     fn parse_float_literal(&mut self) -> ParserExprRes {
-        let tk = self.eat()?;
+        let tk = self.eat()?.clone();
         let value = tk
             .value
             .parse::<f64>()
             .map_err(|_| self.trigger_error(ParserErr::ParsingFloat))?;
 
-        Ok(Expr::FloatLiteral(FloatLiteralExpr {
-            value,
-            loc: self.get_loc_from_prev(),
-        }))
+        Ok(Expr::FloatLiteral(FloatLiteralExpr { value, loc: tk.loc }))
     }
 
     fn parse_str_literal(&mut self) -> ParserExprRes {
@@ -1014,7 +1025,7 @@ impl Parser {
 
         Ok(Expr::StrLiteral(StrLiteralExpr {
             value: tk.value.clone(),
-            loc: self.get_loc_from_prev(),
+            loc: tk.loc.clone(),
         }))
     }
 
@@ -1071,11 +1082,11 @@ impl Parser {
         }
     }
 
-    fn expect_and_skip(&mut self, kind: TokenKind) -> Result<(), RevResParser> {
-        self.expect(kind)?;
+    fn expect_and_skip(&mut self, kind: TokenKind) -> Result<Token, RevResParser> {
+        let res = self.expect(kind)?;
         self.skip_new_lines();
 
-        Ok(())
+        Ok(res)
     }
 
     fn skip_expect_and_skip(&mut self, kind: TokenKind) -> Result<(), RevResParser> {
@@ -1110,14 +1121,8 @@ impl Parser {
         let next = self.tokens.get(self.current + 1);
 
         match next {
-            Some(tk) => {
-                if &tk.kind == &kind {
-                    true
-                } else {
-                    false
-                }
-            },
-            None => false
+            Some(tk) => tk.kind == kind,
+            None => false,
         }
     }
 
@@ -1170,6 +1175,12 @@ impl Parser {
         self.synchronize();
 
         RevResult::new(err, Some(loc))
+    }
+
+    fn trigger_error_with_prev_loc(&mut self, err: ParserErr) -> RevResParser {
+        self.synchronize();
+
+        RevResult::new(err, Some(self.prev().loc.clone()))
     }
 
     // Triggers before the beginning of prev token, ex:

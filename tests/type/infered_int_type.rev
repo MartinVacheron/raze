@@ -1,0 +1,2 @@
+var a = 1
+a = "foo" // error: trying to assign value of type 'float' to variable of type 'int'

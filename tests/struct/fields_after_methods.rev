@@ -1,8 +1,8 @@
 struct Foo {
-    a
-    b
+    a: int
+    b: any
 
     fn add() {}
 
-    c // error: fields must be declared before methods
+    c: str // error: fields must be declared before methods
 }

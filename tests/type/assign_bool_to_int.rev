@@ -1,0 +1,1 @@
+var a: int = true // error: trying to assign value of type 'bool' to variable of type 'int'

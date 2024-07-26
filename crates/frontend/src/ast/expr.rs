@@ -48,7 +48,7 @@ impl Display for Expr {
 impl Expr {
     pub fn get_loc(&self) -> Loc {
         match self {
-            Self::Binary(b) => b.right.get_loc(),
+            Self::Binary(b) => b.get_loc(),
             Self::Grouping(g) => {
                 let mut loc = g.expr.get_loc();
                 loc.start -= 1;
@@ -76,6 +76,15 @@ pub struct BinaryExpr {
     pub left: Box<Expr>,
     pub operator: Token,
     pub right: Box<Expr>,
+}
+
+impl BinaryExpr {
+    pub fn get_loc(&self) -> Loc {
+        let l = self.left.get_loc();
+        let r = self.right.get_loc();
+
+        Loc::new(l.start, r.end)
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]

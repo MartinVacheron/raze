@@ -171,10 +171,26 @@ impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
         Ok(RtVal::new_null())
     }
     fn visit_var_decl_stmt(&mut self, stmt: &VarDeclStmt) -> InterpRes {
-        let value = match &stmt.value {
+        let mut value = match &stmt.value {
             Some(v) => v.accept(self)?,
             None => RtVal::new_null(),
         };
+
+        // We check for the case where we init a float with a real to be sure
+        // to keep the 'float' information: var a: float = 1 + 2
+        if let Some(t) = &stmt.typ {
+            if t.kind == TokenKind::FloatType {
+                let mut val = None;
+
+                if let RtVal::IntVal(v) = &*value.borrow() {
+                    val = Some(v.value);
+                }
+
+                if let Some(i) = val {
+                    value = RtVal::new_float(i as f64).into();
+                }
+            }
+        }
 
         self.env
             .borrow_mut()

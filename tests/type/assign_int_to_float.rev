@@ -1,0 +1,15 @@
+var foo: float = 1
+
+print foo // expect: 1
+
+
+var a = 1
+var b = 4
+
+var c: float = a + b // this must not coerce to an int
+var d: int = a+b
+
+print c is float // expect: true
+
+var e = a + 1.5
+print e is float

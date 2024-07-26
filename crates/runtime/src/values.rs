@@ -114,14 +114,14 @@ impl RtVal {
             (RtVal::FloatVal(_), "float") => RtVal::new_bool(true),
             (RtVal::StrVal(_), "str") => RtVal::new_bool(true),
             (RtVal::BoolVal(_), "bool") => RtVal::new_bool(true),
-            (RtVal::StructVal(s), t @ _) => {
+            (RtVal::StructVal(s), t) => {
                 if s.borrow().name == t {
                     RtVal::new_bool(true)
                 } else {
                     RtVal::new_bool(false)
                 }
             },
-            (RtVal::InstanceVal(i), t @ _) => {
+            (RtVal::InstanceVal(i), t) => {
                 if i.strukt.borrow().name == t {
                     RtVal::new_bool(true)
                 } else {

@@ -40,6 +40,13 @@ pub enum ResolverErr {
     #[error("undeclared variable '{0}'")]
     UndeclaredVar(String),
 
+    // Structures
+    #[error("structure '{0}' has no field '{1}'")]
+    UndeclaredStructField(String, String),
+
+    #[error("only structures have fields")]
+    NonStructFieldAccess,
+
     // Types
     #[error("unknown type '{0}'")]
     UnknownType(String),
@@ -61,6 +68,9 @@ pub enum ResolverErr {
 
     #[error("logical operators must have same type on each side, found '{0}' and '{1}'")]
     WrongTypeLogical(String, String),
+
+    #[error("variable is not of type '{0}'")]
+    WrongVarType(String),
 }
 
 impl RevReport for ResolverErr {
@@ -134,6 +144,12 @@ impl From<&Token> for VarType {
     }
 }
 
+impl From<&EcoString> for VarType {
+    fn from(value: &EcoString) -> Self {
+        VarType::Struct(value.clone())
+    }
+}
+
 #[derive(Default)]
 struct Scope {
     variables: HashMap<EcoString, bool>,
@@ -177,24 +193,28 @@ impl Resolver {
         self.globals.variables.insert("null".into(), true);
         self.globals.variables.insert("clock".into(), true);
 
+        self.globals.var_types.insert("true".into(), VarType::Bool);
+        self.globals.var_types.insert("false".into(), VarType::Bool);
+        self.globals.var_types.insert("null".into(), VarType::Null);
+
         self.globals
             .types_def
-            .insert(EcoString::from("any"), StructType::default());
+            .insert("any".into(), StructType::default());
         self.globals
             .types_def
-            .insert(EcoString::from("int"), StructType::default());
+            .insert("int".into(), StructType::default());
         self.globals
             .types_def
-            .insert(EcoString::from("float"), StructType::default());
+            .insert("float".into(), StructType::default());
         self.globals
             .types_def
-            .insert(EcoString::from("str"), StructType::default());
+            .insert("str".into(), StructType::default());
         self.globals
             .types_def
-            .insert(EcoString::from("bool"), StructType::default());
+            .insert("bool".into(), StructType::default());
         self.globals
             .types_def
-            .insert(EcoString::from("null"), StructType::default());
+            .insert("null".into(), StructType::default());
     }
 
     fn resolve_stmt(&mut self, stmt: &Stmt) -> ResolverRes {
@@ -371,10 +391,15 @@ impl Resolver {
         ))
     }
 
-    fn get_type(&self, var_name: &EcoString, loc: &Loc) -> ResolverExprRes {
+    fn get_var_type(&self, var_name: &EcoString, loc: &Loc) -> ResolverExprRes {
         for scope in self.scopes.iter().rev() {
             if let Some(t) = scope.var_types.get(var_name) {
                 return Ok(t.clone())
+            }
+
+            // Case where we call the type directly like: var f = Foo()
+            if let Some(t) = scope.types_def.get(var_name) {
+                return Ok((&t.name).into())
             }
         }
 
@@ -382,7 +407,25 @@ impl Resolver {
             return Ok(t.clone())
         }
 
+        if let Some(t) = self.globals.types_def.get(var_name) {
+            return Ok((&t.name).into())
+        }
+
         Err(RevResult::new(ResolverErr::VarNonType, Some(loc.clone())))
+    }
+
+    fn get_type_def(&self, type_name: &EcoString, loc: &Loc) -> Result<&StructType, RevResResolv> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(t) = scope.types_def.get(type_name) {
+                return Ok(t)
+            }
+        }
+
+        if let Some(t) = self.globals.types_def.get(type_name) {
+            return Ok(t)
+        }
+
+        Err(RevResult::new(ResolverErr::UnknownType(type_name.into()), Some(loc.clone())))
     }
 
     fn struct_fields_types(
@@ -436,26 +479,29 @@ impl VisitStmt<(), ResolverErr> for Resolver {
         self.declare_name(&stmt.name.value, &stmt.name.loc, "variable")?;
 
         let mut final_type = VarType::Any;
-
-        if let Some(v) = &stmt.value {
-            final_type = self.resolve_expr(v)?;
-        }
         
         if let Some(t) = &stmt.typ {
             self.check_type_exists(&t.value, &t.loc)?;
 
-            let var_type: VarType = t.into();
-
-            if final_type != VarType::Any && var_type != final_type {
-                return Err(RevResult::new(
-                    ResolverErr::WrongTypeAssign(final_type.to_string(), var_type.to_string()),
-                    Some(stmt.loc.clone())
-                ))
-            }
-
-            final_type = var_type;
+            final_type = t.into();
         }
-        
+
+        if let Some(v) = &stmt.value {
+            let value_type = self.resolve_expr(v)?;
+
+            if final_type != VarType::Any && final_type != value_type {
+                // We allow passing int values to float types
+                if !(final_type == VarType::Float && value_type == VarType::Int) {
+                    return Err(RevResult::new(
+                        ResolverErr::WrongTypeAssign(value_type.to_string(), final_type.to_string()),
+                        Some(v.get_loc())
+                    ))
+                }
+            } else {
+                final_type = value_type;
+            }
+        }
+
         self.define_name(&stmt.name.value);
         self.bind_var_type(&stmt.name.value, final_type)?;
 
@@ -578,7 +624,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
         let invalid_op_error = |op: &str| {
             RevResult::new(
                 ResolverErr::InvalidOp(op.into(), lhs_type.to_string(), rhs_type.to_string()),
-                Some(expr.right.get_loc()),
+                Some(expr.get_loc()),
             )
         };
 
@@ -589,7 +635,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
                     (VarType::Int, VarType::Float)
                     | (VarType::Float, VarType::Int | VarType::Float) => Ok(VarType::Float),
                     (VarType::Str, VarType::Str) => Ok(VarType::Str),
-                    _ => return Err(invalid_op_error("+"))
+                    _ => Err(invalid_op_error("+"))
                 }
             }
             TokenKind::Minus => {
@@ -597,7 +643,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
                     (VarType::Int, VarType::Int) => Ok(VarType::Int),
                     (VarType::Int, VarType::Float)
                      |(VarType::Float, VarType::Int | VarType::Float) => Ok(VarType::Float),
-                    _ => return Err(invalid_op_error("-"))
+                    _ => Err(invalid_op_error("-"))
                 }
             }
             TokenKind::Star => {
@@ -606,7 +652,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
                     (VarType::Int, VarType::Float)
                      |(VarType::Float, VarType::Int | VarType::Float) => Ok(VarType::Float),
                     (VarType::Int, VarType::Str) | (VarType::Str, VarType::Int) => Ok(VarType::Str),
-                    _ => return Err(invalid_op_error("*"))
+                    _ => Err(invalid_op_error("*"))
                 }
             }
             TokenKind::Slash => {
@@ -614,7 +660,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
                     (VarType::Int, VarType::Int) => Ok(VarType::Int),
                     (VarType::Int, VarType::Float)
                     | (VarType::Float, VarType::Int | VarType::Float) => Ok(VarType::Float),
-                    _ => return Err(invalid_op_error("/"))
+                    _ => Err(invalid_op_error("/"))
                 }
             }
             TokenKind::Modulo => {
@@ -622,10 +668,10 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
                     (VarType::Int, VarType::Int) => Ok(VarType::Int),
                     (VarType::Int, VarType::Float)
                     | (VarType::Float, VarType::Int | VarType::Float) => Ok(VarType::Float),
-                    _ => return Err(invalid_op_error("%"))
+                    _ => Err(invalid_op_error("%"))
                 }
             }
-            _ => return Err(RevResult::new(
+            _ => Err(RevResult::new(
                 ResolverErr::UnknownOp, Some(expr.operator.loc.clone())
             ))
         }
@@ -658,7 +704,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
         }
 
         self.resolve_local(&expr.loc, &expr.name)?;
-        self.get_type(&expr.name, &expr.loc)
+        self.get_var_type(&expr.name, &expr.loc)
     }
 
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> ResolverExprRes {
@@ -667,13 +713,13 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
 
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> ResolverExprRes {
         self.resolve_expr(&expr.value)?;
-        let lhs_type = self.get_type(&expr.name, &expr.loc)?;
+        let lhs_type = self.get_var_type(&expr.name, &expr.loc)?;
         let value_type = expr.value.accept(self)?;
 
         if lhs_type != value_type {
             return Err(RevResult::new(
                 ResolverErr::WrongTypeAssign(value_type.to_string(), lhs_type.to_string()),
-                Some(expr.loc.clone())
+                Some(expr.value.get_loc())
             ))
         }
 
@@ -686,7 +732,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
         let rhs_type = self.resolve_expr(&expr.right)?;
         let lhs_type = self.resolve_expr(&expr.left)?;
 
-        if lhs_type != lhs_type {
+        if lhs_type != rhs_type {
             return Err(RevResult::new(
                 ResolverErr::WrongTypeLogical(lhs_type.to_string(), lhs_type.to_string()),
                 Some(expr.loc.clone())
@@ -697,13 +743,13 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
     }
 
     fn visit_call_expr(&mut self, expr: &CallExpr) -> ResolverExprRes {
-        self.resolve_expr(&expr.callee)?;
+        let callee_type = self.resolve_expr(&expr.callee)?;
 
         for arg in &expr.args {
             self.resolve_expr(arg)?;
         }
 
-        Ok(VarType::Any)
+        Ok(callee_type)
     }
 
     fn visit_get_expr(&mut self, expr: &GetExpr) -> ResolverExprRes {
@@ -715,7 +761,27 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
             ));
         }
 
-        self.resolve_expr(&expr.object)
+        let obj_type = self.resolve_expr(&expr.object)?;
+
+        if let VarType::Struct(s) = &obj_type {
+            let type_info = self.get_type_def(s, &expr.loc)?;
+
+            let field = type_info.fields.get(&expr.name);
+
+            if let Some(t) = field {
+                println!("Field type: {}", t);
+                Ok(t.clone())
+            } else {
+                Err(RevResult::new(ResolverErr::UndeclaredStructField(
+                        s.into(),
+                        expr.name.clone().into()
+                    ),
+                    Some(expr.loc.clone())
+                ))
+            }
+        } else {
+            Err(RevResult::new(ResolverErr::NonStructFieldAccess, Some(expr.loc.clone())))
+        }
     }
 
     fn visit_set_expr(&mut self, expr: &SetExpr) -> ResolverExprRes {
@@ -746,8 +812,18 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
     }
 
     fn visit_is_expr(&mut self, expr: &IsExpr) -> ResolverExprRes {
-        self.resolve_expr(&expr.left)?;
+        let left_type = self.resolve_expr(&expr.left)?;
         self.check_type_exists(&expr.typ.value, &expr.loc)?;
+
+        let right_type: VarType = (&expr.typ).into();
+
+        if left_type != right_type {
+            return Err(RevResult::new(ResolverErr::WrongVarType(
+                    right_type.to_string()
+                ),
+                Some(expr.left.get_loc())
+            ))
+        }
 
         Ok(VarType::Bool)
     }
