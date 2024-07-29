@@ -63,6 +63,7 @@ pub enum TokenKind {
     Less,
     LessEqual,
     DotDot,
+    SmallArrow,
 
     // Literals
     Identifier,
@@ -75,6 +76,8 @@ pub enum TokenKind {
     FloatType,
     StringType,
     BoolType,
+    AnyType,
+    VoidType,
 
     // Keywords
     Struct,
@@ -145,6 +148,9 @@ impl Lexer {
         map.insert("float".into(), TokenKind::FloatType);
         map.insert("str".into(), TokenKind::StringType);
         map.insert("bool".into(), TokenKind::BoolType);
+        map.insert("null".into(), TokenKind::Null);
+        map.insert("any".into(), TokenKind::AnyType);
+        map.insert("void".into(), TokenKind::VoidType);
         map.insert("fn".into(), TokenKind::Fn);
         map.insert("return".into(), TokenKind::Return);
         map.insert("if".into(), TokenKind::If);
@@ -154,7 +160,6 @@ impl Lexer {
         map.insert("for".into(), TokenKind::For);
         map.insert("while".into(), TokenKind::While);
         map.insert("in".into(), TokenKind::In);
-        map.insert("null".into(), TokenKind::Null);
         map.insert("print".into(), TokenKind::Print);
         map.insert("is".into(), TokenKind::Is);
 
@@ -200,7 +205,15 @@ impl Lexer {
                     }
                 }
                 ':' => self.add_token(TokenKind::Colon),
-                '-' => self.add_token(TokenKind::Minus),
+                '-' => {
+                    let tk = if self.is_at_and_advance('>') {
+                        TokenKind::SmallArrow
+                    } else {
+                        TokenKind::Minus
+                    };
+
+                    self.add_token(tk)
+                },
                 '+' => self.add_token(TokenKind::Plus),
                 '*' => self.add_token(TokenKind::Star),
                 '%' => self.add_token(TokenKind::Modulo),

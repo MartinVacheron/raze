@@ -10,8 +10,7 @@ use crate::ast::expr::{
     UnaryExpr,
 };
 use crate::ast::stmt::{
-    BlockStmt, ExprStmt, FnDeclStmt, ForRange, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt,
-    StructStmt, VarDeclStmt, WhileStmt,
+    BlockStmt, ExprStmt, FnDeclStmt, FnParam, ForRange, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StructStmt, VarDeclStmt, WhileStmt
 };
 use crate::lexer::{Token, TokenKind};
 use tools::results::{Loc, RevReport, RevResult};
@@ -178,11 +177,11 @@ pub enum ParserErr {
     MissingPropName,
 
     // Types
-    #[error("type name expected after ':'")]
-    ExpectedTypeName,
+    #[error("type name expected after '{0}'")]
+    ExpectedTypeName(String),
 
-    #[error("':' expected between variable name and type name")]
-    MissingColonTypeName,
+    #[error("missing '{0}' to declare type")]
+    MissingTokenTypeDecl(String),
 
     #[error("right hand side of 'is' must be a type identifier")]
     NonIdentTypeInIs,
@@ -211,9 +210,9 @@ enum CodeBlock {
     #[default]
     Global,
     FnDecl,
-    FnDeclBeforeBody,
-    FnCall,
-    FnCallBeforeParen,
+    FnDeclArgs,
+    FnDeclBody,
+    FnCallArgs,
     Struct,
     Block,
 }
@@ -248,21 +247,7 @@ impl Parser {
 
             match self.parse_declarations() {
                 Ok(stmt) => stmts.push(stmt),
-                Err(e) => {
-                    // Case were the error was found on last method of struct
-                    // we synchronized bit we are left with the last } of the
-                    // declaration, block or fn declaration
-                    if self.at().kind == TokenKind::CloseBrace
-                        && (self.code_blocks.last() == Some(&CodeBlock::Struct)
-                            || self.code_blocks.last() == Some(&CodeBlock::FnDecl)
-                            || self.code_blocks.last() == Some(&CodeBlock::Block))
-                    {
-                        let _ = self.eat();
-                        self.exit_code_block();
-                    }
-
-                    errors.push(e)
-                }
+                Err(e) => errors.push(e)
             }
         }
 
@@ -288,26 +273,10 @@ impl Parser {
 
     fn parse_var_declaration(&mut self) -> Result<VarDeclStmt, RevResParser> {
         let name = self
-            .expect(TokenKind::Identifier)
-            .map_err(|_| self.trigger_error_before_prev(ParserErr::VarDeclNoName))?;
+            .expect_no_eat(TokenKind::Identifier)
+            .map_err(|_| self.trigger_error_before_cur_len_one(ParserErr::VarDeclNoName))?;
 
-        let mut typ: Option<Token> = None;
-
-        if self.is_at(TokenKind::Colon) {
-            self.eat()?;
-
-            if self.is_at_type() {
-                typ = Some(self.eat()?.clone());
-            } else {
-                let err_loc = Loc::new_len_one_from_start(self.prev().loc.clone());
-
-                return Err(self.trigger_error_with_loc(ParserErr::ExpectedTypeName, err_loc));
-            }
-        } else if self.is_at_type() {
-            let err_loc = Loc::new_len_one_from_start(self.at().loc.clone());
-
-            return Err(self.trigger_error_with_loc(ParserErr::MissingColonTypeName, err_loc));
-        }
+        let typ = self.parse_type(TokenKind::Colon, ":")?;
 
         let mut value: Option<Expr> = None;
 
@@ -548,28 +517,31 @@ impl Parser {
     }
 
     fn parse_fn_decl(&mut self) -> Result<FnDeclStmt, RevResParser> {
-        self.enter_code_block(CodeBlock::FnDeclBeforeBody);
+        self.enter_code_block(CodeBlock::FnDecl);
 
         let name = self
-            .expect(TokenKind::Identifier)
-            .map_err(|_| self.trigger_error_with_prev_loc(ParserErr::MissingFnName))?;
+            .expect_no_eat(TokenKind::Identifier)
+            .map_err(|_| self.trigger_error_before_cur_len_one(ParserErr::MissingFnName))?;
 
         let open_paren = self
-            .expect_and_skip(TokenKind::OpenParen)
-            .map_err(|_| self.trigger_error_with_prev_loc(ParserErr::NoOpenParenAfterFnName))?;
+            .expect_no_eat_and_skip(TokenKind::OpenParen)
+            .map_err(|_| self.trigger_error_before_cur_len_one(ParserErr::NoOpenParenAfterFnName))?;
 
-        let mut params: Vec<EcoString> = vec![];
+        self.enter_code_block(CodeBlock::FnDeclArgs);
+
+        let mut params: Vec<FnParam> = vec![];
         if !self.is_at(TokenKind::CloseParen) && !self.eof() {
             loop {
                 if params.len() >= 255 {
                     return Err(self.trigger_error(ParserErr::MaxFnArgs));
                 }
 
-                params.push(
-                    self.expect_and_skip(TokenKind::Identifier)
-                        .map_err(|_| self.trigger_error(ParserErr::WrongFnArgType))?
-                        .value,
-                );
+                let param_name = self.expect_no_eat_and_skip(TokenKind::Identifier)
+                                    .map_err(|_| self.trigger_error(ParserErr::WrongFnArgType))?;
+
+                let param_type = self.parse_type(TokenKind::Colon, ":")?;
+
+                params.push(FnParam { name: param_name, typ: param_type });
 
                 if self.is_at(TokenKind::Comma) {
                     let _ = self.eat();
@@ -596,21 +568,26 @@ impl Parser {
             self.trigger_error_with_loc(ParserErr::ParenNeverClosed, open_paren.loc)
         })?;
 
-        let open_brace = self.expect_and_skip(TokenKind::OpenBrace).map_err(|_| {
+        self.exit_code_block();
+
+        let return_type = self.parse_type(TokenKind::SmallArrow, "->")?;
+
+        let open_brace = self.expect_no_eat_and_skip(TokenKind::OpenBrace).map_err(|_| {
             self.trigger_error_with_loc(ParserErr::MissingFnOpenBrace, close_paren.loc)
         })?;
 
-        self.exit_code_block();
-        self.enter_code_block(CodeBlock::FnDecl);
+        self.enter_code_block(CodeBlock::FnDeclBody);
 
         let body = Rc::new(self.parse_block(open_brace)?);
 
-        self.exit_code_block();
+        self.exit_code_block();  // Body
+        self.exit_code_block();  // Fn decl
 
         Ok(FnDeclStmt {
             name,
             params: Rc::new(params),
             body,
+            return_type,
             loc: self.get_loc(),
         })
     }
@@ -686,6 +663,28 @@ impl Parser {
             methods,
             loc: self.get_loc(),
         }))
+    }
+
+    fn parse_type(&mut self, start_token: TokenKind, tk_str: &str) -> Result<Option<Token>, RevResParser> {
+        let mut typ: Option<Token> = None;
+        
+        if self.is_at(start_token) {
+            self.eat()?;
+
+            if self.is_at_type() {
+                typ = Some(self.eat()?.clone());
+            } else {
+                let err_loc = Loc::new_len_one_from_start(self.prev().loc.clone());
+
+                return Err(self.trigger_error_with_loc(ParserErr::ExpectedTypeName(tk_str.into()), err_loc));
+            }
+        } else if self.is_at_type() {
+            let err_loc = Loc::new_len_one_from_start(self.at().loc.clone());
+
+            return Err(self.trigger_error_with_loc(ParserErr::MissingTokenTypeDecl(tk_str.into()), err_loc));
+        }
+
+        Ok(typ)
     }
 
     fn parse_expr_stmt(&mut self) -> ParserStmtRes {
@@ -894,8 +893,6 @@ impl Parser {
     fn parse_call(&mut self) -> ParserExprRes {
         let mut expr = self.parse_primary()?;
 
-        self.enter_code_block(CodeBlock::FnCallBeforeParen);
-
         loop {
             match self.at().kind {
                 TokenKind::OpenParen => {
@@ -920,13 +917,11 @@ impl Parser {
             }
         }
 
-        self.exit_code_block();
-
         Ok(expr)
     }
 
     fn finish_call(&mut self, callee: Expr) -> ParserExprRes {
-        self.enter_code_block(CodeBlock::FnCall);
+        self.enter_code_block(CodeBlock::FnCallArgs);
 
         let mut args: Vec<Expr> = vec![];
 
@@ -1082,8 +1077,28 @@ impl Parser {
         }
     }
 
+    fn expect_no_eat(&mut self, kind: TokenKind) -> Result<Token, RevResParser> {
+        let tk = self.at();
+
+        if tk.kind == kind {
+            Ok(self.eat()?.clone())
+        } else {
+            Err(RevResult::new(
+                ParserErr::ExpectedToken(format!("{:?}", kind), format!("{:?}", tk.kind)),
+                Some(self.get_loc()),
+            ))
+        }
+    }
+
     fn expect_and_skip(&mut self, kind: TokenKind) -> Result<Token, RevResParser> {
         let res = self.expect(kind)?;
+        self.skip_new_lines();
+
+        Ok(res)
+    }
+
+    fn expect_no_eat_and_skip(&mut self, kind: TokenKind) -> Result<Token, RevResParser> {
+        let res = self.expect_no_eat(kind)?;
         self.skip_new_lines();
 
         Ok(res)
@@ -1105,11 +1120,13 @@ impl Parser {
         matches!(
             self.at().kind,
             TokenKind::Identifier
-                | TokenKind::IntType
-                | TokenKind::FloatType
-                | TokenKind::StringType
-                | TokenKind::BoolType
-                | TokenKind::Null
+            | TokenKind::IntType
+            | TokenKind::FloatType
+            | TokenKind::StringType
+            | TokenKind::BoolType
+            | TokenKind::Null
+            | TokenKind::AnyType
+            | TokenKind::VoidType
         )
     }
 
@@ -1177,94 +1194,175 @@ impl Parser {
         RevResult::new(err, Some(loc))
     }
 
-    fn trigger_error_with_prev_loc(&mut self, err: ParserErr) -> RevResParser {
-        self.synchronize();
-
-        RevResult::new(err, Some(self.prev().loc.clone()))
-    }
-
     // Triggers before the beginning of prev token, ex:
     // var = 8
     //    ^
-    fn trigger_error_before_prev(&mut self, err: ParserErr) -> RevResParser {
-        let prev_start = self.prev().loc.start;
-        let prev_loc = Loc::new(prev_start - 1, prev_start);
+    fn trigger_error_before_cur_len_one(&mut self, err: ParserErr) -> RevResParser {
+        let prev_start = self.at().loc.start;
+        let prev_loc = Loc::new(prev_start - 1, prev_start - 1);
 
         self.trigger_error_with_loc(err, prev_loc)
     }
 
     // We are here in panic mode
     fn synchronize(&mut self) {
-        // If the error occured because unexpected Eol, we are synchro
-        // Ex: "var " -> expect on identifier but "NewLine" was eaten already
-        // Only true outside of function call: "fn(a
-        // #)".  Here, # is not valid but the tk before was a new line
-        if self.prev().kind == TokenKind::NewLine
-            && self.code_blocks.last() != Some(&CodeBlock::FnCall)
-            && self.code_blocks.last() != Some(&CodeBlock::Struct)
-        {
-            return;
-        }
-
-        // If we are in a block of code that is not the global one
-        if self.code_blocks.len() > 1 {
-            let (stop_token, inverse_token) = match self.code_blocks.last().unwrap() {
-                CodeBlock::FnCall | CodeBlock::FnCallBeforeParen => {
-                    (TokenKind::CloseParen, TokenKind::OpenParen)
-                }
-                _ => (TokenKind::CloseBrace, TokenKind::OpenBrace),
-            };
-
-            let mut nested_blocks = 0;
-
-            // In case we are beofre the fn body declaration, we didn't
-            // went through the open brace, so we simulate it
-            // When we will encounter the opening one, we'll be at 0 looking
-            // for the real closing one
-            if self.code_blocks.last() == Some(&CodeBlock::FnDeclBeforeBody)
-                || self.code_blocks.last() == Some(&CodeBlock::FnCallBeforeParen)
-            {
-                nested_blocks -= 1;
-            }
-
-            // Temporary values needed due to how pattern matching works
-            // https://stackoverflow.com/questions/28225958/why-is-this-match-pattern-unreachable-when-using-non-literal-patterns
-            while !self.eof() {
-                match &self.at().kind {
-                    tk if tk == &inverse_token => {
-                        nested_blocks += 1;
-                    }
-                    tk if tk == &stop_token => {
-                        if nested_blocks == 0 {
-                            let _ = self.eat();
-                            self.exit_code_block();
-
-                            // For function call, we have to layers of code block
-                            if self.code_blocks.last() == Some(&CodeBlock::FnCallBeforeParen) {
-                                self.exit_code_block();
-                            }
-
-                            return;
-                        } else {
-                            nested_blocks -= 1;
-                        }
-                    }
-                    _ => {}
-                }
-
+        if self.code_blocks.last() == Some(&CodeBlock::Global) {
+            while self.at().kind != TokenKind::NewLine && !self.eof() {
                 let _ = self.eat();
             }
-        } else {
-            while !self.eof() {
-                match self.at().kind {
-                    TokenKind::NewLine => {
-                        let _ = self.eat();
-                        return;
+
+            return
+        }
+
+        while self.code_blocks.last() != Some(&CodeBlock::Global) {
+            match self.code_blocks.last() {
+                Some(&CodeBlock::FnDecl) => {
+                    while !self.eof() {
+                        match self.at().kind {
+                            TokenKind::NewLine => {
+                                self.skip_new_lines();
+                            }
+                            TokenKind::OpenParen
+                            | TokenKind::OpenBrace => {
+                                let _ = self.eat();
+                            }
+                            TokenKind::CloseParen => {
+                                let _ = self.eat();
+                                self.skip_new_lines();
+
+                                if self.at().kind == TokenKind::OpenBrace {
+                                    let _ = self.eat();
+                                } else {
+                                    break
+                                }
+                            }
+                            TokenKind::CloseBrace => break,
+                            _ => { let _ = self.eat(); }
+                        }
                     }
-                    _ => {
+
+                    self.exit_code_block();
+                }
+                Some(&CodeBlock::FnDeclArgs) => {
+                    while !self.eof() {
+                        match self.at().kind {
+                            TokenKind::NewLine => {
+                                self.skip_new_lines();
+                            }
+                            TokenKind::CloseParen => {
+                                let _ = self.eat();
+                                
+                                self.skip_new_lines();
+    
+                                if self.at().kind == TokenKind::OpenBrace {
+                                    let _ = self.eat();
+                                } else {
+                                    break
+                                }
+                            },
+                            TokenKind::CloseBrace => break,
+                            _ => { let _ = self.eat(); }
+                                
+                        }
+                    }
+
+                    self.exit_code_block();
+                }
+                Some(&CodeBlock::FnDeclBody) => {
+                    let mut nb_blocks = 0;
+
+                    while !self.eof() {
+                        match self.at().kind {
+                            TokenKind::CloseBrace => {
+                                let _ = self.eat();
+
+                                if nb_blocks == 0 {
+                                    self.skip_new_lines();
+
+                                    break
+                                } else {
+                                    nb_blocks -= 1;
+                                }
+                            },
+                            TokenKind::OpenBrace => { 
+                                let _ = self.eat();
+                                nb_blocks += 1;
+                            }
+                            _ => { let _ = self.eat(); }
+                        }
+                    }
+
+                    self.exit_code_block();
+                }
+                Some(&CodeBlock::FnCallArgs) => {
+                    let mut nb_parens = 0;
+
+                    while !self.eof() {
                         let _ = self.eat();
+    
+                        match self.prev().kind {
+                            TokenKind::CloseParen => {
+                                if nb_parens == 0 {
+                                    self.skip_new_lines();
+        
+                                    break
+                                } else {
+                                    nb_parens -= 1;
+                                }
+                            },
+                            TokenKind::OpenParen => { nb_parens += 1; }
+                            _ => {}
+                        }
+                    }
+                    
+                    self.exit_code_block();
+                }
+                Some(&CodeBlock::Struct) => {
+                    let mut nb_blocks = 0;
+
+                    while !self.eof() {
+                        let _ = self.eat();
+                        
+                        match self.prev().kind {
+                            TokenKind::CloseBrace => {
+                                if nb_blocks == 0 {
+                                    self.skip_new_lines();
+        
+                                    break
+                                } else {
+                                    nb_blocks -= 1;
+                                }
+                            },
+                            TokenKind::OpenBrace => { nb_blocks += 1; }
+                            _ => {}
+                        }
+                    }
+
+                    self.exit_code_block();
+                }
+                Some(&CodeBlock::Block) => {
+                    let mut nb_blocks = 0;
+
+                    while !self.eof() {
+                        let _ = self.eat();
+                        
+                        match self.prev().kind {
+                            TokenKind::CloseBrace => {
+                                if nb_blocks == 0 {
+                                    self.exit_code_block();
+                                    self.skip_new_lines();
+        
+                                    break
+                                } else {
+                                    nb_blocks -= 1;
+                                }
+                            },
+                            TokenKind::OpenBrace => { nb_blocks += 1; }
+                            _ => {}
+                        }
                     }
                 }
+                _ => {}
             }
         }
     }

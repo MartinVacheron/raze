@@ -50,6 +50,8 @@ for dir in os.listdir():
 
         # Error print mode
         if args.print_err:
+            print(f"running {dir}::{file}...")
+            
             result = subprocess.run(["..\\target\\debug\\rev.exe", "-f", path], capture_output=True)
             rev_output = result.stdout.decode().strip()
 

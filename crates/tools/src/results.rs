@@ -80,7 +80,7 @@ impl<'a, T: RevReport> RevResult<T> {
         for (i, line) in code.split('\n').enumerate() {
             lines.push_back(line);
 
-            if loc.start >= offset && loc.start < offset + line.len() {
+            if loc.start >= offset && loc.start < offset + line.len() + 1 {
                 let ctx_line = if lines.len() == 2 { Some(lines.pop_front().unwrap()) } else { None };
 
                 return ReportContext {

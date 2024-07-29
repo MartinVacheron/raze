@@ -1,0 +1,14 @@
+var f
+var g: any
+
+fn add() {}
+
+f = add
+g = add
+
+fn add2() -> void {}
+
+f = add2
+
+fn add3(a: int) -> void {}
+g = add3 // error: 

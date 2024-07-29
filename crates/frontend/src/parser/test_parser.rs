@@ -195,7 +195,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         Ok(StmtInfos {
             fn_decl: vec![FnDeclInfos {
                 name,
-                params: stmt.params.clone().to_vec(),
+                params: stmt.params.iter().map(|p| p.name.value.clone()).collect(),
                 body,
             }],
             ..Default::default()

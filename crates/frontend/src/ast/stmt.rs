@@ -79,10 +79,18 @@ pub struct ForRange {
 #[derive(Debug, PartialEq)]
 pub struct FnDeclStmt {
     pub name: Token,
-    pub params: Rc<Vec<EcoString>>,
+    pub params: Rc<Vec<FnParam>>, // for types
     pub body: Rc<Vec<Stmt>>,
+    pub return_type: Option<Token>,
     pub loc: Loc,
 }
+
+#[derive(Debug, PartialEq)]
+pub struct FnParam {
+    pub name: Token,
+    pub typ: Option<Token>,
+}
+
 
 #[derive(Debug, PartialEq)]
 pub struct ReturnStmt {

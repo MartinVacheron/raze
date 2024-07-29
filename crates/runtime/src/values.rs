@@ -322,7 +322,7 @@ impl Function {
     pub fn new(stmt: &FnDeclStmt, closure: Rc<RefCell<Env>>) -> Self {
         Self {
             name: stmt.name.value.clone(),
-            params: stmt.params.clone(),
+            params: Rc::new(stmt.params.iter().map(|p| p.name.value.clone()).collect()),
             body: stmt.body.clone(),
             closure: Rc::new(RefCell::new(Env::new(Some(closure)))),
         }

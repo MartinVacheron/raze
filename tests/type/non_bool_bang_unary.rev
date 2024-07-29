@@ -1,0 +1,1 @@
+print !1 // error: can't use '!' token on anything other than a bool value

@@ -57,6 +57,12 @@ pub enum ResolverErr {
     #[error("operation '{0}' is not allowed between types '{1}' and '{2}'")]
     InvalidOp(String, String, String),
 
+    #[error("unary operator '!' can only be used on 'bool' type")]
+    NonBoolBangUnary,
+
+    #[error("unary operator '-' can only be used on numeric types")]
+    NonNumMinusUnary,
+
     #[error("unknown operator")]
     UnknownOp,
 
@@ -71,6 +77,10 @@ pub enum ResolverErr {
 
     #[error("variable is not of type '{0}'")]
     WrongVarType(String),
+
+    // Warings
+    #[error("{0}")]
+    Warning(#[from] ResolverWarning),
 }
 
 impl RevReport for ResolverErr {
@@ -79,12 +89,19 @@ impl RevReport for ResolverErr {
     }
 }
 
+#[derive(Debug, Error, PartialEq)]
+pub enum ResolverWarning {
+    #[error("comparison between int and float can lead to misleading result")]
+    CompIntFloat,
+}
+
+
 pub type RevResResolv = RevResult<ResolverErr>;
 pub type ResolverRes = Result<(), RevResResolv>;
 pub type ResolverExprRes = Result<VarType, RevResResolv>;
 
 #[derive(Default, Clone, Copy, PartialEq)]
-enum FnType {
+enum FnKind {
     #[default]
     None,
     Function,
@@ -99,7 +116,7 @@ enum FnType {
 // var a = "outer"
 // { var a = a }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum VarType {
     Any,
     Int,
@@ -107,8 +124,17 @@ pub enum VarType {
     Str,
     Bool,
     Null,
+    Void,
     Struct(EcoString),
+    Fn(Box<FnType>),
 }
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct FnType {
+    args_type: Vec<VarType>,
+    return_type: VarType,
+} 
+
 
 #[derive(Default, PartialEq)]
 struct StructType {
@@ -125,7 +151,21 @@ impl Display for VarType {
             VarType::Str => write!(f, "str"),
             VarType::Bool => write!(f, "bool"),
             VarType::Null => write!(f, "null"),
+            VarType::Void => write!(f, "void"),
             VarType::Struct(t) => write!(f, "{}", t),
+            VarType::Fn(t) => {
+                write!(f, "fn(")?;
+
+                for (i, arg) in t.args_type.iter().enumerate() {
+                    write!(f, "{}", arg)?;
+
+                    if i < t.args_type.len() - 1 {
+                        write!(f, ", ",)?;
+                    }
+                }
+
+                write!(f, ") -> {}", t.return_type)
+            },
         }
     }
 }
@@ -139,7 +179,17 @@ impl From<&Token> for VarType {
             "str" => VarType::Str,
             "bool" => VarType::Bool,
             "null" => VarType::Null,
+            "void" => VarType::Void,
             other => VarType::Struct(other.into()),
+        }
+    }
+}
+
+impl From<&Option<Token>> for VarType {
+    fn from(value: &Option<Token>) -> Self {
+        match value {
+            Some(v) => v.into(),
+            None => VarType::Void,
         }
     }
 }
@@ -162,8 +212,9 @@ pub struct Resolver {
     globals: Scope,
     scopes: Vec<Scope>,
     locals: HashMap<Loc, usize>,
-    fn_type: FnType,
+    fn_type: FnKind,
     current_struct: Option<EcoString>,
+    warnings: Vec<ResolverWarning>,
 }
 
 // If we can’t find it in the stack of local scopes, we assume it must be global
@@ -294,14 +345,14 @@ impl Resolver {
             .insert(name.clone(), true);
     }
 
-    fn resolve_fn(&mut self, stmt: &FnDeclStmt, typ: FnType) -> ResolverRes {
+    fn resolve_fn(&mut self, stmt: &FnDeclStmt, typ: FnKind) -> ResolverRes {
         let prev_fn_type = std::mem::replace(&mut self.fn_type, typ);
 
         self.begin_scope();
 
         for p in stmt.params.iter() {
-            self.declare_name(p, &stmt.name.loc, "function")?;
-            self.define_name(p);
+            self.declare_name(&p.name.value, &stmt.name.loc, "variable")?;
+            self.define_name(&p.name.value);
         }
 
         stmt.body.iter().try_for_each(|s| self.resolve_stmt(s))?;
@@ -311,6 +362,13 @@ impl Resolver {
         self.fn_type = prev_fn_type;
 
         Ok(())
+    }
+
+    fn resolve_fn_type(stmt: &FnDeclStmt) -> VarType {
+        let args_type: Vec<VarType> = stmt.params.iter().map(|p| (&p.typ).into()).collect();
+        let return_type: VarType = (&stmt.return_type).into();
+
+        VarType::Fn(Box::new(FnType { args_type, return_type }))
     }
 
     fn declare_type(&mut self, var_type: StructType, loc: &Loc) -> ResolverRes {
@@ -549,18 +607,21 @@ impl VisitStmt<(), ResolverErr> for Resolver {
         self.declare_name(&stmt.name.value, &stmt.name.loc, "function")?;
         self.define_name(&stmt.name.value);
 
-        self.resolve_fn(stmt, FnType::Function)
+        self.resolve_fn(stmt, FnKind::Function)?;
+        let fn_type = Resolver::resolve_fn_type(stmt);
+
+        self.bind_var_type(&stmt.name.value, fn_type)
     }
 
     fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> ResolverRes {
         match self.fn_type {
-            FnType::None => {
+            FnKind::None => {
                 return Err(RevResult::new(
                     ResolverErr::TopLevelReturn,
                     Some(stmt.loc.clone()),
                 ))
             }
-            FnType::Init => {
+            FnKind::Init => {
                 return Err(RevResult::new(
                     ResolverErr::ReturnFromInit,
                     Some(stmt.loc.clone()),
@@ -593,9 +654,9 @@ impl VisitStmt<(), ResolverErr> for Resolver {
 
         stmt.methods.iter().try_for_each(|m| {
             let typ = if m.name.value == "init" {
-                FnType::Init
+                FnKind::Init
             } else {
-                FnType::Method
+                FnKind::Method
             };
 
             self.resolve_fn(m, typ)
@@ -671,6 +732,36 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
                     _ => Err(invalid_op_error("%"))
                 }
             }
+            TokenKind::EqualEqual => {
+                match (&lhs_type, &rhs_type) {
+                    (VarType::Int, VarType::Int)
+                    | (VarType::Float, VarType::Float)
+                    | (VarType::Str, VarType::Str) 
+                    | (VarType::Bool, VarType::Bool) => Ok(VarType::Bool),
+                    (VarType::Int, VarType::Float)
+                    | (VarType::Float, VarType::Int) => {
+                        self.warnings.push(ResolverWarning::CompIntFloat);
+
+                        Ok(VarType::Bool)
+                    },
+                    _ => Err(invalid_op_error("=="))
+                }
+            }
+            TokenKind::BangEqual => {
+                match (&lhs_type, &rhs_type) {
+                    (VarType::Int, VarType::Int)
+                    | (VarType::Float, VarType::Float)
+                    | (VarType::Str, VarType::Str) 
+                    | (VarType::Bool, VarType::Bool) => Ok(VarType::Bool),
+                    (VarType::Int, VarType::Float)
+                    | (VarType::Float, VarType::Int) => {
+                        self.warnings.push(ResolverWarning::CompIntFloat);
+
+                        Ok(VarType::Bool)
+                    },
+                    _ => Err(invalid_op_error("!="))
+                }
+            }
             _ => Err(RevResult::new(
                 ResolverErr::UnknownOp, Some(expr.operator.loc.clone())
             ))
@@ -708,22 +799,48 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
     }
 
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> ResolverExprRes {
-        self.resolve_expr(&expr.right)
+        let val_type = self.resolve_expr(&expr.right)?;
+
+        match expr.operator.kind {
+            TokenKind::Minus => {
+                if val_type != VarType::Int && val_type != VarType::Float {
+                    return Err(RevResult::new(
+                        ResolverErr::NonNumMinusUnary,
+                        Some(expr.right.get_loc().clone()),
+                    ))
+                }
+            }
+            TokenKind::Bang => {
+                if val_type != VarType::Bool {
+                    return Err(RevResult::new(
+                        ResolverErr::NonBoolBangUnary,
+                        Some(expr.right.get_loc().clone()),
+                    ))
+                }
+            }
+            _ => {}
+        }
+
+        Ok(val_type)
     }
 
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> ResolverExprRes {
+        self.resolve_local(&expr.loc, &expr.name)?;
+
         self.resolve_expr(&expr.value)?;
         let lhs_type = self.get_var_type(&expr.name, &expr.loc)?;
         let value_type = expr.value.accept(self)?;
 
         if lhs_type != value_type {
-            return Err(RevResult::new(
-                ResolverErr::WrongTypeAssign(value_type.to_string(), lhs_type.to_string()),
-                Some(expr.value.get_loc())
-            ))
+            if lhs_type == VarType::Any {
+                self.bind_var_type(&expr.name, value_type)?;
+            } else {
+                return Err(RevResult::new(
+                    ResolverErr::WrongTypeAssign(value_type.to_string(), lhs_type.to_string()),
+                    Some(expr.value.get_loc())
+                ))
+            }
         }
-
-        self.resolve_local(&expr.loc, &expr.name)?;
 
         Ok(lhs_type)
     }
