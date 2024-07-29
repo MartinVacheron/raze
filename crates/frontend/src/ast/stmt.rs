@@ -88,7 +88,7 @@ pub struct FnDeclStmt {
 #[derive(Debug, PartialEq)]
 pub struct FnParam {
     pub name: Token,
-    pub typ: Option<Token>,
+    pub typ: Token,
 }
 
 

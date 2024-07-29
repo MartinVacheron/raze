@@ -1,0 +1,1 @@
+fn add(a) -> void {} // error: function's parameters must have a type

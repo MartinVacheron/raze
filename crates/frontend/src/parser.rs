@@ -1,7 +1,6 @@
 use std::rc::Rc;
 
 use colored::*;
-use ecow::EcoString;
 use thiserror::Error;
 
 use crate::ast::expr::{
@@ -152,6 +151,9 @@ pub enum ParserErr {
 
     #[error("missing '{{' before function body")]
     MissingFnOpenBrace,
+
+    #[error("function's parameters must have a type")]
+    MissingFnParamType,
 
     // Structure declaration
     #[error("missing structure name after 'struct' keyword")]
@@ -539,7 +541,12 @@ impl Parser {
                 let param_name = self.expect_no_eat_and_skip(TokenKind::Identifier)
                                     .map_err(|_| self.trigger_error(ParserErr::WrongFnArgType))?;
 
-                let param_type = self.parse_type(TokenKind::Colon, ":")?;
+                let param_type = match self.parse_type(TokenKind::Colon, ":")? {
+                    Some(t) => t,
+                    None => return Err(
+                        self.trigger_error_with_loc(ParserErr::MissingFnParamType, param_name.loc.clone())
+                    ),
+                };
 
                 params.push(FnParam { name: param_name, typ: param_type });
 
