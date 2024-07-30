@@ -6,4 +6,4 @@ var bar = 4
 
 var f = Foo()
 
-f.foo = bar // error: assigning to method is not allowed
+f.foo = bar // error: trying to assign value of type 'int' to variable of type 'fn() -> void'

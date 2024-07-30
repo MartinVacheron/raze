@@ -1,0 +1,3 @@
+struct Foo {
+    fn init() -> int {} // error: constructor can't return anything
+}

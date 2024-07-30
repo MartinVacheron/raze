@@ -71,6 +71,7 @@ pub enum InterpErr {
     ForLoop(String),
 
     // Call
+    // TODO: Remove, already done in static analysis
     #[error("only functions and structures are callable")]
     NonFnCall,
 
@@ -81,9 +82,11 @@ pub enum InterpErr {
     FnCall(String),
 
     // Property access
+    // TODO: Remove, already done in static analysis
     #[error("only structure instances have properties")]
     NonInstPropAccess,
 
+    // TODO: Remove, already done in static analysis
     #[error("structure has no field '{0}'")]
     InexistantField(EcoString),
 
@@ -543,6 +546,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
             _ => return Err(RevResult::new(InterpErr::NonFnCall, Some(expr.callee.get_loc())))
         };
 
+        // TODO: already done by static analysis
         if callable.arity() != args.len() {
             return Err(RevResult::new(
                 InterpErr::WrongArgsNb(callable.arity(), args.len()),
@@ -561,13 +565,13 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
 
         if let RtVal::InstanceVal(inst) = tmp {
             // Field
-            if let Some(v) = inst.fields.get(&expr.name) {
+            if let Some(v) = inst.fields.get(&expr.name.value) {
                 Ok(v.clone())
             // Methods
-            } else if let Some(m) = inst.strukt.borrow().methods.get(&expr.name) {
+            } else if let Some(m) = inst.strukt.borrow().methods.get(&expr.name.value) {
                 Ok(m.wrap_bind(obj.clone()))
             } else {
-                Err(RevResult::new(InterpErr::InexistantField(expr.name.clone()), Some(expr.loc.clone())))
+                Err(RevResult::new(InterpErr::InexistantField(expr.name.value.clone()), Some(expr.loc.clone())))
             }
         } else {
             Err(RevResult::new(InterpErr::NonInstPropAccess, Some(expr.loc.clone())))
@@ -582,7 +586,7 @@ impl VisitExpr<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
             RtVal::InstanceVal(inst) => {
                 let val = expr.value.accept(self)?;
 
-                inst.set(expr.name.clone(), val.clone())
+                inst.set(expr.name.value.clone(), val.clone())
                     .map_err(|e| RevResult::new(InterpErr::InexistantFieldBis(e.to_string()), Some(expr.loc.clone())))?;
 
                 Ok(val)

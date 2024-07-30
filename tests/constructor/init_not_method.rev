@@ -1,6 +1,7 @@
 struct Foo {
-
-    fn init(arg) {
+    field: str
+    
+    fn init(arg: str) {
         print "Foo.init(" + arg + ")"
         self.field = "init"
     }

@@ -1,0 +1,22 @@
+fn add() -> int {
+    return "foo" // error: wrong type returned, expected 'int' but found 'str'
+}
+
+fn add1() {
+    return "foo" // error: no return type declared but 'str' is returned
+}
+
+fn add2() -> int {
+     // error: no value returned but declared function's return type is 'int'
+}
+
+fn add3(foo: float) -> bool {
+    return foo // error: wrong type returned, expected 'bool' but found 'float'
+}
+
+var bar: bool
+fn add4() -> str {
+    return bar // error: wrong type returned, expected 'str' but found 'bool'
+}
+
+fn add5() -> void {} // should be ok, same as no return type

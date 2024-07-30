@@ -1,6 +1,6 @@
 var f
 
-fn foo(param) {
+fn foo(param: str) {
     fn f_() {
         print param
     }

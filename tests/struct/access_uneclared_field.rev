@@ -5,3 +5,9 @@ struct Foo {
 var f = Foo()
 
 print f.aa // error: structure 'Foo' has no field 'aa'
+
+struct Bar {
+    fn init() {
+        self.b = 1 // error: structure 'Bar' has no field 'b'
+    }
+}

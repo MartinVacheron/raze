@@ -151,14 +151,14 @@ pub struct CallExpr {
 #[derive(Debug, PartialEq, Clone)]
 pub struct GetExpr {
     pub object: Box<Expr>,
-    pub name: EcoString,
+    pub name: Token,
     pub loc: Loc,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SetExpr {
     pub object: Box<Expr>,
-    pub name: EcoString,
+    pub name: Token,
     pub value: Box<Expr>,
     pub loc: Loc,
 }

@@ -1,7 +1,5 @@
 use std::rc::Rc;
 
-use ecow::EcoString;
-
 use crate::lexer::Token;
 
 use super::expr::Expr;

@@ -1,0 +1,7 @@
+struct Foo {
+    a: int
+
+    fn init(b: str) {
+        self.a = b // error: trying to assign value of type 'str' to variable of type 'int'
+    }
+}

@@ -332,6 +332,7 @@ impl Lexer {
             .unwrap()
             .iter()
             .collect();
+
         // We eat the "
         self.eat();
 
@@ -350,7 +351,12 @@ impl Lexer {
                 return Err(self.trigger_error(LexerErr::TwoDecimalParts));
             }
 
-            if !self.is_skippable() && self.at() != '\n' && !self.is_math_op() && !self.eof() {
+            if !self.is_skippable()
+                && self.at() != '\n'
+                && !self.is_math_op()
+                && !self.is_enclosing()
+                && !self.eof()
+            {
                 return Err(self.trigger_error(LexerErr::NonNumberDecimal));
             }
 
@@ -369,6 +375,7 @@ impl Lexer {
                 && !self.is_skippable()
                 && self.at() != '\n'
                 && !self.is_math_op()
+                && !self.is_enclosing()
                 && !self.eof()
             {
                 return Err(self.trigger_error(LexerErr::NonNumberDecimal));
@@ -462,6 +469,10 @@ impl Lexer {
 
     fn is_math_op(&self) -> bool {
         matches!(self.at(), '+' | '-' | '*' | '/')
+    }
+
+    fn is_enclosing(&self) -> bool {
+        matches!(self.at(), '(' | ')' | '[' | ']' | '{' | '}')
     }
 
     fn eat(&mut self) -> char {

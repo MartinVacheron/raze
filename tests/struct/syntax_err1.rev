@@ -1,4 +1,4 @@
 struct Foo {
-    fn init
+    fn init // error: missing '(' after function name
 
 }

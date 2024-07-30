@@ -1,0 +1,10 @@
+struct Foo {
+    a: int
+    b: str
+    c: float
+}
+
+var f = Foo()
+f.a = true // error: trying to assign value of type 'bool' to variable of type 'int'
+f.b = 1 // error: trying to assign value of type 'int' to variable of type 'str'
+f.c = 1 // implicit cast ok

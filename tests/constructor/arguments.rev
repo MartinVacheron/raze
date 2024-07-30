@@ -1,8 +1,8 @@
 struct Foo {
-    a
-    b
+    a: int
+    b: int
     
-    fn init(a, b) {
+    fn init(a: int, b: int) {
         print "init" // expect: "init"
         self.a = a
         self.b = b

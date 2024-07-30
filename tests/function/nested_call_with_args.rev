@@ -1,12 +1,12 @@
-fn returnArg(arg) {
+fn returnArg(arg: fn(str) -> void) -> fn(str) -> void {
     return arg
 }
 
-fn returnFunCallWithArg(func, arg) {
-    return returnArg(func)(arg)
+fn returnFunCallWithArg(func: fn(str) -> void, arg: str) {
+    returnArg(func)(arg)
 }
 
-fn printArg(arg) {
+fn printArg(arg: str) {
     print arg
 }
 

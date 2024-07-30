@@ -1,0 +1,14 @@
+fn add(a: int, b: float) -> bool {
+    if a == b {
+        return true
+    }
+
+    return false
+}
+
+struct Foo {}
+
+add(1, true) // error: wrong arguments type, expected 'float' but found 'bool'
+add(1, Foo) // error: wrong arguments type, expected 'float' but found 'Foo'
+add("bar", 1.5) // error: wrong arguments type, expected 'int' but found 'str'
+add(1, 1) // implicit cast ok

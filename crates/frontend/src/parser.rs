@@ -911,8 +911,7 @@ impl Parser {
                     self.eat()?;
                     let prop_name = self
                         .expect(TokenKind::Identifier)
-                        .map_err(|_| self.trigger_error(ParserErr::MissingPropName))?
-                        .value;
+                        .map_err(|_| self.trigger_error(ParserErr::MissingPropName))?;
 
                     expr = Expr::Get(GetExpr {
                         object: Box::new(expr),
@@ -1231,44 +1230,53 @@ impl Parser {
                             }
                             TokenKind::OpenParen
                             | TokenKind::OpenBrace => {
-                                let _ = self.eat();
+                                _ = self.eat();
                             }
                             TokenKind::CloseParen => {
-                                let _ = self.eat();
+                                _ = self.eat();
                                 self.skip_new_lines();
 
                                 if self.at().kind == TokenKind::OpenBrace {
-                                    let _ = self.eat();
+                                    _ = self.eat();
                                 } else {
                                     break
                                 }
                             }
                             TokenKind::CloseBrace => break,
-                            _ => { let _ = self.eat(); }
+                            _ => { _ = self.eat(); }
                         }
                     }
 
                     self.exit_code_block();
                 }
                 Some(&CodeBlock::FnDeclArgs) => {
+                    let mut opened_brace = 0;
+
                     while !self.eof() {
                         match self.at().kind {
                             TokenKind::NewLine => {
                                 self.skip_new_lines();
                             }
                             TokenKind::CloseParen => {
-                                let _ = self.eat();
+                                _ = self.eat();
                                 
                                 self.skip_new_lines();
     
                                 if self.at().kind == TokenKind::OpenBrace {
-                                    let _ = self.eat();
+                                    opened_brace += 1;
+
+                                    _ = self.eat();
                                 } else {
                                     break
                                 }
                             },
-                            TokenKind::CloseBrace => break,
-                            _ => { let _ = self.eat(); }
+                            TokenKind::CloseBrace => {
+                                if opened_brace == 0 { break }
+                                
+                                _ = self.eat();
+                                opened_brace -= 1;
+                            },
+                            _ => { _ = self.eat(); }
                                 
                         }
                     }
