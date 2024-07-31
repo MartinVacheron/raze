@@ -1,0 +1,3 @@
+null + null // error: operation '+' is not allowed between types 'null' and 'null'
+3 + null // error: operation '+' is not allowed between types 'int' and 'null'
+null + "foo" // error: operation '+' is not allowed between types 'null' and 'str'

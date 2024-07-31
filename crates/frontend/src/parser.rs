@@ -9,7 +9,8 @@ use crate::ast::expr::{
     UnaryExpr,
 };
 use crate::ast::stmt::{
-    BlockStmt, ExprStmt, FnDeclStmt, FnParam, ForRange, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StructStmt, VarDeclStmt, WhileStmt
+    BlockStmt, ExprStmt, FnDeclStmt, FnParam, ForRange, ForStmt, IfStmt, PrintStmt, ReturnStmt,
+    Stmt, StructStmt, VarDeclStmt, VarTypeDecl, WhileStmt,
 };
 use crate::lexer::{Token, TokenKind};
 use tools::results::{Loc, RevReport, RevResult};
@@ -188,6 +189,21 @@ pub enum ParserErr {
     #[error("right hand side of 'is' must be a type identifier")]
     NonIdentTypeInIs,
 
+    #[error("missing opening parenthesis in lambda type declaration")]
+    MissingOpenParenLambda,
+    
+    #[error("expected type names between parenthesis in lambda type declaration")]
+    NonTypeArgsLambdaDecl,
+
+    #[error("missing closing parenthesis in lambda type declaration")]
+    MissingCloseParenLambda,
+
+    #[error("missing return type after '->' in lambda type declaration")]
+    MissingTypeArrowLambda,
+
+    #[error("missing '->' before return type in lambda type declaration")]
+    MissingSmallArrowLambda,
+
     // Others
     #[error("unexpected end of file")]
     UnexpectedEof,
@@ -249,7 +265,7 @@ impl Parser {
 
             match self.parse_declarations() {
                 Ok(stmt) => stmts.push(stmt),
-                Err(e) => errors.push(e)
+                Err(e) => errors.push(e),
             }
         }
 
@@ -304,8 +320,6 @@ impl Parser {
             TokenKind::NewLine | TokenKind::Eof | TokenKind::CloseBrace => {}
             _ => return Err(self.trigger_error(ParserErr::WrongRhsVarDecl)),
         }
-
-        // self.skip_new_lines();
 
         Ok(VarDeclStmt {
             name,
@@ -527,7 +541,9 @@ impl Parser {
 
         let open_paren = self
             .expect_no_eat_and_skip(TokenKind::OpenParen)
-            .map_err(|_| self.trigger_error_before_cur_len_one(ParserErr::NoOpenParenAfterFnName))?;
+            .map_err(|_| {
+                self.trigger_error_before_cur_len_one(ParserErr::NoOpenParenAfterFnName)
+            })?;
 
         self.enter_code_block(CodeBlock::FnDeclArgs);
 
@@ -538,17 +554,24 @@ impl Parser {
                     return Err(self.trigger_error(ParserErr::MaxFnArgs));
                 }
 
-                let param_name = self.expect_no_eat_and_skip(TokenKind::Identifier)
-                                    .map_err(|_| self.trigger_error(ParserErr::WrongFnArgType))?;
+                let param_name = self
+                    .expect_no_eat_and_skip(TokenKind::Identifier)
+                    .map_err(|_| self.trigger_error(ParserErr::WrongFnArgType))?;
 
                 let param_type = match self.parse_type(TokenKind::Colon, ":")? {
                     Some(t) => t,
-                    None => return Err(
-                        self.trigger_error_with_loc(ParserErr::MissingFnParamType, param_name.loc.clone())
-                    ),
+                    None => {
+                        return Err(self.trigger_error_with_loc(
+                            ParserErr::MissingFnParamType,
+                            param_name.loc.clone(),
+                        ))
+                    }
                 };
 
-                params.push(FnParam { name: param_name, typ: param_type });
+                params.push(FnParam {
+                    name: param_name,
+                    typ: param_type,
+                });
 
                 if self.is_at(TokenKind::Comma) {
                     let _ = self.eat();
@@ -576,19 +599,21 @@ impl Parser {
         })?;
 
         self.exit_code_block();
+        self.exit_code_block();
 
         let return_type = self.parse_type(TokenKind::SmallArrow, "->")?;
 
-        let open_brace = self.expect_no_eat_and_skip(TokenKind::OpenBrace).map_err(|_| {
-            self.trigger_error_with_loc(ParserErr::MissingFnOpenBrace, close_paren.loc)
-        })?;
+        let open_brace = self
+            .expect_no_eat_and_skip(TokenKind::OpenBrace)
+            .map_err(|_| {
+                self.trigger_error_with_loc(ParserErr::MissingFnOpenBrace, close_paren.loc)
+            })?;
 
         self.enter_code_block(CodeBlock::FnDeclBody);
 
         let body = Rc::new(self.parse_block(open_brace)?);
 
-        self.exit_code_block();  // Body
-        self.exit_code_block();  // Fn decl
+        self.exit_code_block();
 
         Ok(FnDeclStmt {
             name,
@@ -672,26 +697,78 @@ impl Parser {
         }))
     }
 
-    fn parse_type(&mut self, start_token: TokenKind, tk_str: &str) -> Result<Option<Token>, RevResParser> {
-        let mut typ: Option<Token> = None;
-        
+    fn parse_type(
+        &mut self,
+        start_token: TokenKind,
+        tk_str: &str,
+    ) -> Result<Option<VarTypeDecl>, RevResParser> {
+        if self.is_at_type() {
+            let err_loc = Loc::new_len_one_from_start(self.at().loc.clone());
+
+            return Err(self
+                .trigger_error_with_loc(ParserErr::MissingTokenTypeDecl(tk_str.into()), err_loc));
+        }
+
         if self.is_at(start_token) {
             self.eat()?;
 
-            if self.is_at_type() {
-                typ = Some(self.eat()?.clone());
-            } else {
+            if !self.is_at_type() {
                 let err_loc = Loc::new_len_one_from_start(self.prev().loc.clone());
 
-                return Err(self.trigger_error_with_loc(ParserErr::ExpectedTypeName(tk_str.into()), err_loc));
+                return Err(self
+                    .trigger_error_with_loc(ParserErr::ExpectedTypeName(tk_str.into()), err_loc));
             }
-        } else if self.is_at_type() {
-            let err_loc = Loc::new_len_one_from_start(self.at().loc.clone());
 
-            return Err(self.trigger_error_with_loc(ParserErr::MissingTokenTypeDecl(tk_str.into()), err_loc));
+            let tmp_type = self.eat()?.clone();
+
+            return Ok(Some(match tmp_type.kind {
+                TokenKind::Fn => self.parse_fn_type(tmp_type)?,
+                _ => VarTypeDecl::Identifier(tmp_type)
+            }))
         }
 
-        Ok(typ)
+        Ok(None)
+    }
+
+    fn parse_fn_type(&mut self, fn_tk: Token) -> Result<VarTypeDecl, RevResParser> {
+        self.expect_no_eat_and_skip(TokenKind::OpenParen)
+            .map_err(|_| self.trigger_error_before_cur_len_one(ParserErr::MissingOpenParenLambda))?;
+
+        if !self.is_at_type() && !self.is_at(TokenKind::CloseParen) {
+            return Err(self
+                .trigger_error_with_loc(ParserErr::NonTypeArgsLambdaDecl, self.at().loc.clone()));
+        }
+
+        let mut param_types: Vec<Token> = vec![];
+        while self.is_at_type() && !self.eof() {
+            param_types.push(self.eat()?.clone());
+
+            if self.at().kind == TokenKind::Comma {
+                self.eat()?;
+                self.skip_new_lines();
+            }
+        }
+
+        self.expect_no_eat(TokenKind::CloseParen)
+            .map_err(|_| self.trigger_error_before_cur_len_one(ParserErr::MissingCloseParenLambda))?;
+
+        let return_type = if self.is_at(TokenKind::SmallArrow) {
+            self.eat()?;
+
+            if !self.is_at_type() {
+                return Err(self.trigger_error_before_cur_len_one(ParserErr::MissingTypeArrowLambda))
+            }
+
+            Some(self.eat()?.clone())
+        } else {
+            if self.is_at_type() {
+                return Err(self.trigger_error_before_cur_len_one(ParserErr::MissingSmallArrowLambda))
+            }
+
+            None
+        };
+
+        Ok(VarTypeDecl::Fn {fn_tk,  param_types, return_type })
     }
 
     fn parse_expr_stmt(&mut self) -> ParserStmtRes {
@@ -1126,13 +1203,14 @@ impl Parser {
         matches!(
             self.at().kind,
             TokenKind::Identifier
-            | TokenKind::IntType
-            | TokenKind::FloatType
-            | TokenKind::StringType
-            | TokenKind::BoolType
-            | TokenKind::Null
-            | TokenKind::AnyType
-            | TokenKind::VoidType
+                | TokenKind::IntType
+                | TokenKind::FloatType
+                | TokenKind::StringType
+                | TokenKind::BoolType
+                | TokenKind::Null
+                | TokenKind::AnyType
+                | TokenKind::VoidType
+                | TokenKind::Fn
         )
     }
 
@@ -1217,7 +1295,7 @@ impl Parser {
                 let _ = self.eat();
             }
 
-            return
+            return;
         }
 
         while self.code_blocks.last() != Some(&CodeBlock::Global) {
@@ -1228,8 +1306,7 @@ impl Parser {
                             TokenKind::NewLine => {
                                 self.skip_new_lines();
                             }
-                            TokenKind::OpenParen
-                            | TokenKind::OpenBrace => {
+                            TokenKind::OpenParen | TokenKind::OpenBrace => {
                                 _ = self.eat();
                             }
                             TokenKind::CloseParen => {
@@ -1239,11 +1316,16 @@ impl Parser {
                                 if self.at().kind == TokenKind::OpenBrace {
                                     _ = self.eat();
                                 } else {
-                                    break
+                                    break;
                                 }
                             }
-                            TokenKind::CloseBrace => break,
-                            _ => { _ = self.eat(); }
+                            TokenKind::CloseBrace => {
+                                _ = self.eat();
+                                break
+                            },
+                            _ => {
+                                _ = self.eat();
+                            }
                         }
                     }
 
@@ -1259,25 +1341,28 @@ impl Parser {
                             }
                             TokenKind::CloseParen => {
                                 _ = self.eat();
-                                
+
                                 self.skip_new_lines();
-    
+
                                 if self.at().kind == TokenKind::OpenBrace {
                                     opened_brace += 1;
 
                                     _ = self.eat();
                                 } else {
-                                    break
+                                    break;
                                 }
-                            },
+                            }
                             TokenKind::CloseBrace => {
-                                if opened_brace == 0 { break }
-                                
+                                if opened_brace == 0 {
+                                    break;
+                                }
+
                                 _ = self.eat();
                                 opened_brace -= 1;
-                            },
-                            _ => { _ = self.eat(); }
-                                
+                            }
+                            _ => {
+                                _ = self.eat();
+                            }
                         }
                     }
 
@@ -1294,16 +1379,18 @@ impl Parser {
                                 if nb_blocks == 0 {
                                     self.skip_new_lines();
 
-                                    break
+                                    break;
                                 } else {
                                     nb_blocks -= 1;
                                 }
-                            },
-                            TokenKind::OpenBrace => { 
+                            }
+                            TokenKind::OpenBrace => {
                                 let _ = self.eat();
                                 nb_blocks += 1;
                             }
-                            _ => { let _ = self.eat(); }
+                            _ => {
+                                let _ = self.eat();
+                            }
                         }
                     }
 
@@ -1314,22 +1401,24 @@ impl Parser {
 
                     while !self.eof() {
                         let _ = self.eat();
-    
+
                         match self.prev().kind {
                             TokenKind::CloseParen => {
                                 if nb_parens == 0 {
                                     self.skip_new_lines();
-        
-                                    break
+
+                                    break;
                                 } else {
                                     nb_parens -= 1;
                                 }
-                            },
-                            TokenKind::OpenParen => { nb_parens += 1; }
+                            }
+                            TokenKind::OpenParen => {
+                                nb_parens += 1;
+                            }
                             _ => {}
                         }
                     }
-                    
+
                     self.exit_code_block();
                 }
                 Some(&CodeBlock::Struct) => {
@@ -1337,18 +1426,20 @@ impl Parser {
 
                     while !self.eof() {
                         let _ = self.eat();
-                        
+
                         match self.prev().kind {
                             TokenKind::CloseBrace => {
                                 if nb_blocks == 0 {
                                     self.skip_new_lines();
-        
-                                    break
+
+                                    break;
                                 } else {
                                     nb_blocks -= 1;
                                 }
-                            },
-                            TokenKind::OpenBrace => { nb_blocks += 1; }
+                            }
+                            TokenKind::OpenBrace => {
+                                nb_blocks += 1;
+                            }
                             _ => {}
                         }
                     }
@@ -1360,19 +1451,21 @@ impl Parser {
 
                     while !self.eof() {
                         let _ = self.eat();
-                        
+
                         match self.prev().kind {
                             TokenKind::CloseBrace => {
                                 if nb_blocks == 0 {
                                     self.exit_code_block();
                                     self.skip_new_lines();
-        
-                                    break
+
+                                    break;
                                 } else {
                                     nb_blocks -= 1;
                                 }
-                            },
-                            TokenKind::OpenBrace => { nb_blocks += 1; }
+                            }
+                            TokenKind::OpenBrace => {
+                                nb_blocks += 1;
+                            }
                             _ => {}
                         }
                     }

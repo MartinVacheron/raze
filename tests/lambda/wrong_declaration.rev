@@ -1,0 +1,4 @@
+var a: fn  // error: missing opening parenthesis in lambda type declaration
+var a: fn() void // error: missing '->' before return type in lambda type declaration
+var a: fn() -> // error: missing return type after '->' in lambda type declaration
+var a: fn( // error: expected type names between parenthesis in lambda type declaration

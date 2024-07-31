@@ -1,5 +1,5 @@
 struct Foo {
-    fn method() {
+    fn method() -> str {
         return "ok"
         print "bad"
     }

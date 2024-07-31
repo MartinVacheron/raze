@@ -5,6 +5,36 @@ use crate::lexer::Token;
 use super::expr::Expr;
 use tools::results::{Loc, RevReport, RevResult};
 
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum VarTypeDecl {
+    Identifier(Token),
+    Fn {
+        fn_tk: Token,  // For error reporting
+        param_types: Vec<Token>,
+        return_type: Option<Token>
+    }
+}
+
+impl VarTypeDecl {
+    pub fn get_loc(&self) -> Loc {
+        match self {
+            VarTypeDecl::Identifier(tk) => tk.loc.clone(),
+            VarTypeDecl::Fn { fn_tk, param_types, return_type } => {
+                let end = return_type
+                    .as_ref()
+                    .map(|r| r.loc.end)
+                    .unwrap_or_else(|| param_types
+                        .last()
+                        .map_or(fn_tk.loc.end, |p| p.loc.end));
+
+                Loc::new(fn_tk.loc.start, end)
+            }
+        }
+    }
+}
+
+
 #[derive(Debug, PartialEq)]
 pub enum Stmt {
     Expr(ExprStmt),
@@ -41,7 +71,7 @@ pub struct BlockStmt {
 pub struct VarDeclStmt {
     pub name: Token,
     pub value: Option<Expr>,
-    pub typ: Option<Token>,
+    pub typ: Option<VarTypeDecl>,
     pub loc: Loc,
 }
 
@@ -79,14 +109,14 @@ pub struct FnDeclStmt {
     pub name: Token,
     pub params: Rc<Vec<FnParam>>, // for types
     pub body: Rc<Vec<Stmt>>,
-    pub return_type: Option<Token>,
+    pub return_type: Option<VarTypeDecl>,
     pub loc: Loc,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct FnParam {
     pub name: Token,
-    pub typ: Token,
+    pub typ: VarTypeDecl,
 }
 
 

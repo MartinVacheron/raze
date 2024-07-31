@@ -8,5 +8,5 @@ struct Foo {
     }
 }
 
-var foo = Foo(1, 2, 3, 4) // error: wrong arguments number, expected 2 but got 4
-var bar = Foo(1) // error: wrong arguments number, expected 2 but got 1
+var foo = Foo(1, 2, 3, 4) // error: wrong arguments number, expected 2 but found 4
+var bar = Foo(1) // error: wrong arguments number, expected 2 but found 1

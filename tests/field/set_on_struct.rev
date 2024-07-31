@@ -1,2 +1,0 @@
-struct Foo {}
-Foo.bar = "value" // error: only structure instances have properties

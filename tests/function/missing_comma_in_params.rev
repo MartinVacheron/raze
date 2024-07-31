@@ -1,1 +1,1 @@
-fn foo(a, b c, d, e, f) {} // error: missing comma to seperate arguments
+fn foo(a: bool, b: str c, d, e, f) {} // error: missing comma to seperate arguments

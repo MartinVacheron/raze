@@ -1,26 +1,26 @@
-fn a(a, b) {}
-fn b(a, b,) {}
+fn a(a: int, b: int) {}
+fn b(a: int, b: int,) {}
 
 fn c(
-    a,
-    b,
+    a: str,
+    b: str,
 ) {}
 
 fn c(
-    a,
-    b
+    a: float,
+    b: float
 ) {}
 
 fn d(
-    a,
-    b,)
+    a: bool,
+    b: bool,)
 {
 }
 
 fn add(
-    a
+    a: int
     ,
-    b
+    b: int
     ,
 ) {}
 

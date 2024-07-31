@@ -1,1 +1,2 @@
-"1" / 1 // error: can't use this operator for operations on string and int types
+"1" / 1 // error: operation '/' is not allowed between types 'str' and 'int'
+1 / "1"  // error: operation '/' is not allowed between types 'int' and 'str'

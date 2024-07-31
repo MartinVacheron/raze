@@ -20,8 +20,7 @@ use frontend::ast::{expr::{
     FloatLiteralExpr, StrLiteralExpr, UnaryExpr, VisitExpr, IsExpr,
 }, stmt::StructStmt};
 use frontend::ast::stmt::{
-    BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt,
-    VisitStmt, WhileStmt,
+    BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, VarDeclStmt, VarTypeDecl, VisitStmt, WhileStmt
 };
 use frontend::lexer::TokenKind;
 
@@ -181,8 +180,8 @@ impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
 
         // We check for the case where we init a float with a real to be sure
         // to keep the 'float' information: var a: float = 1 + 2
-        if let Some(t) = &stmt.typ {
-            if t.kind == TokenKind::FloatType {
+        if let Some(VarTypeDecl::Identifier(i)) = &stmt.typ {
+            if i.kind == TokenKind::FloatType {
                 let mut val = None;
 
                 if let RtVal::IntVal(v) = &*value.borrow() {
@@ -193,6 +192,7 @@ impl VisitStmt<Rc<RefCell<RtVal>>, InterpErr> for Interpreter {
                     value = RtVal::new_float(i as f64).into();
                 }
             }
+            
         }
 
         self.env

@@ -7,4 +7,4 @@ print Foo == Bar // expect: false
 print Bar == Foo // expect: false
 print Bar == Bar // expect: true
 
-print Foo == "Foo"  // error: operation not supported
+print Foo == "Foo"  // error: operation '==' is not allowed between types 'Foo' and 'str'

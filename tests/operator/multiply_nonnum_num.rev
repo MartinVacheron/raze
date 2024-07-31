@@ -1,1 +1,2 @@
-"1" * 1.5 // error: operation not supported
+"1" * 1.5 // error: operation '*' is not allowed between types 'str' and 'float'
+1.5 * "1" // error:  operation '*' is not allowed between types 'float' and 'str'

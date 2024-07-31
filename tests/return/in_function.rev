@@ -1,4 +1,4 @@
-fn f() {
+fn f() -> str {
     return "ok"
     
     print "bad"

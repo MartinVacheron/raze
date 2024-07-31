@@ -1,4 +1,4 @@
 struct Foo {
     fn a() {}
-    fn a() {} // error: a method with this name already exists
+    fn a() {} // error: a method with the same name as already been declared in this scope
 }

@@ -1,6 +1,7 @@
-fn f() {
+fn f() -> fn() {
     for i in 0..2 {
         var i = "i"
+
         fn g() { print i }
         
         return g

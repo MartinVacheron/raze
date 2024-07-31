@@ -1,6 +1,6 @@
 {
     struct Bizar {
-        fn return_self() {
+        fn return_self() -> Bizar {
             return Bizar
         }
     }

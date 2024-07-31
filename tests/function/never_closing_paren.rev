@@ -1,1 +1,1 @@
-fn fib(a, b // error: parenthesis is never closed
+fn fib(a: int, b: bool // error: parenthesis is never closed

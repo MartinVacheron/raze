@@ -1,0 +1,9 @@
+fn fna(a: int) -> float {
+    return a * 2.5
+}
+
+fn fnb() -> bool {
+    return false
+}
+
+print fna(1) + fnb() // error: operation '+' is not allowed between types 'float' and 'bool'

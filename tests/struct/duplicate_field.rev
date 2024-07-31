@@ -1,4 +1,4 @@
 struct Foo {
     a: int
-    a: int // error: a field with this name already exists in this structure
+    a: int // error: a field with the same name as already been declared in this scope
 }

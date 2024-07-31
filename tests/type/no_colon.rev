@@ -1,1 +1,1 @@
-var a bool = true // error: ':' expected between variable name and type name
+var a bool = true // error: missing ':' to declare type

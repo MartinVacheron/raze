@@ -1,4 +1,4 @@
 struct Foo {
-    fn init(}
+    fn init(} // error: function paramters must be identifiers
 
 }

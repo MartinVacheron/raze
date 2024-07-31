@@ -1,0 +1,12 @@
+var a: fn(str, bool)
+
+fn add(a: str, b: int) {}
+
+a = add // error: trying to assign value of type 'fn(str, int) -> void' to variable of type 'fn(str, bool) -> void'
+
+struct Foo {
+    bar: fn(str, int) -> bool
+}
+
+var f = Foo()
+f.bar = add // error: trying to assign value of type 'fn(str, int) -> void' to variable of type 'fn(str, int) -> bool'

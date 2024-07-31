@@ -11,4 +11,4 @@ fn add2() -> void {}
 f = add2
 
 fn add3(a: int) -> void {}
-g = add3 // error: 
+g = add3 // error: trying to assign value of type 'fn(int) -> void' to variable of type 'fn() -> void'

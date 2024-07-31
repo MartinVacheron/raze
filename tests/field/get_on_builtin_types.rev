@@ -1,0 +1,9 @@
+true.foo // error: only structure instances have fields
+(12.34).bar // error: only structure instances have fields
+null.bar // error: only structure instances have fields
+"str".bar // error: only structure instances have fields
+
+
+fn foo() {}
+
+foo.bar // error: only structure instances have fields

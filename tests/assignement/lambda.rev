@@ -1,17 +1,12 @@
-struct Foo {
-    bar
-}
-
-fn bar(a, b) {
+fn bar(a: int, b: int) {
     print "bar"
     print a
     print b
 }
 
-var foo = Foo()
-foo.bar = bar
+var a: fn(int, int) = bar
 
-foo.bar(1, 2)
+a(1, 2)
 // expect: "bar"
 // expect: 1
 // expect: 2

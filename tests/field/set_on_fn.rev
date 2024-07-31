@@ -1,3 +1,0 @@
-fn foo() {}
-
-foo.bar = true // error: only structure instances have properties

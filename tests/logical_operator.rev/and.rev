@@ -1,10 +1,10 @@
-fn print_foo() {
+fn print_foo() -> bool {
     print "foo"
 
     return true
 }
 
-fn print_bar() {
+fn print_bar() -> bool {
     print "bar"
 
     return false
@@ -23,8 +23,8 @@ print print_foo() and print_bar() and false
 
 
 // Short-circuit at the first false argument.
-var a = "before"
-var b = "before"
-(a = true) and (b = false) and (a = "bad")
+var a = false
+var b = false
+(a = true) and (b = false) and (a = false)
 print a // expect: true
 print b // expect: false

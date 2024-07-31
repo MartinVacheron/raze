@@ -1,1 +1,1 @@
-!"5" // error: can't use '!' token on anything other than a bool value
+!"5" // error: unary operator '!' can only be used on 'bool' type

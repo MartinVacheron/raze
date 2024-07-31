@@ -1,83 +1,83 @@
 struct Foo {
-    bilberry
-    lime
-    elderberry
-    raspberry
-    gooseberry
-    longan
-    mandarine
-    kiwifruit
-    orange
-    pomegranate
-    tomato
-    banana
-    juniper
-    damson
-    blackcurrant
-    peach
-    grape
-    mango
-    redcurrant
-    watermelon
-    plumcot
-    papaya
-    cloudberry
-    rambutan
-    salak
-    physalis
-    huckleberry
-    coconut
-    date
-    tamarind
-    lychee
-    raisin
-    apple
-    avocado
-    nectarine
-    pomelo
-    melon
-    currant
-    plum
-    persimmon
-    olive
-    cranberry
-    boysenberry
-    blackberry
-    passionfruit
-    mulberry
-    marionberry
-    plantain
-    lemon
-    yuzu
-    loquat
-    kumquat
-    salmonberry
-    tangerine
-    durian
-    pear
-    cantaloupe
-    quince
-    guava
-    strawberry
-    nance
-    apricot
-    jambul
-    grapefruit
-    clementine
-    jujube
-    cherry
-    feijoa
-    jackfruit
-    fig
-    cherimoya
-    pineapple
-    blueberry
-    jabuticaba
-    miracle
-    dragonfruit
-    satsuma
-    tamarillo
-    honeydew
+    bilberry: str
+    lime: str
+    elderberry: str
+    raspberry: str
+    gooseberry: str
+    longan: str
+    mandarine: str
+    kiwifruit: str
+    orange: str
+    pomegranate: str
+    tomato: str
+    banana: str
+    juniper: str
+    damson: str
+    blackcurrant: str
+    peach: str
+    grape: str
+    mango: str
+    redcurrant: str
+    watermelon: str
+    plumcot: str
+    papaya: str
+    cloudberry: str
+    rambutan: str
+    salak: str
+    physalis: str
+    huckleberry: str
+    coconut: str
+    date: str
+    tamarind: str
+    lychee: str
+    raisin: str
+    apple: str
+    avocado: str
+    nectarine: str
+    pomelo: str
+    melon: str
+    currant: str
+    plum: str
+    persimmon: str
+    olive: str
+    cranberry: str
+    boysenberry: str
+    blackberry: str
+    passionfruit: str
+    mulberry: str
+    marionberry: str
+    plantain: str
+    lemon: str
+    yuzu: str
+    loquat: str
+    kumquat: str
+    salmonberry: str
+    tangerine: str
+    durian: str
+    pear: str
+    cantaloupe: str
+    quince: str
+    guava: str
+    strawberry: str
+    nance: str
+    apricot: str
+    jambul: str
+    grapefruit: str
+    clementine: str
+    jujube: str
+    cherry: str
+    feijoa: str
+    jackfruit: str
+    fig: str
+    cherimoya: str
+    pineapple: str
+    blueberry: str
+    jabuticaba: str
+    miracle: str
+    dragonfruit: str
+    satsuma: str
+    tamarillo: str
+    honeydew: str
 }
 
 var foo = Foo()

@@ -1,5 +1,4 @@
 use std::{collections::HashMap, fmt::Display};
-use std::collections::hash_map::Entry::Occupied;
 
 use colored::Colorize;
 use ecow::EcoString;
@@ -15,7 +14,7 @@ use frontend::{
         },
         stmt::{
             BlockStmt, ExprStmt, FnDeclStmt, ForStmt, IfStmt, PrintStmt, ReturnStmt, Stmt,
-            StructStmt, VarDeclStmt, VisitStmt, WhileStmt,
+            StructStmt, VarDeclStmt, VarTypeDecl, VisitStmt, WhileStmt,
         },
     },
     lexer::{Token, TokenKind},
@@ -48,7 +47,7 @@ pub enum ResolverErr {
     #[error("structure '{0}' has no method constructor")]
     InexistantConstructor(String),
 
-    #[error("only structures have fields")]
+    #[error("only structure instances have fields")]
     NonStructFieldAccess,
 
     #[error("constructor can't return anything")]
@@ -100,10 +99,6 @@ pub enum ResolverErr {
 
     #[error("wrong arguments type, expected '{0}' but found '{1}'")]
     WrongArgsType(String, String),
-
-    // Set
-    #[error("only structure instances have properties")]
-    NonInstPropAccess,
 
     // Call
     #[error("only functions and structures are callable")]
@@ -160,6 +155,16 @@ pub enum VarType {
     Void,
     Struct(EcoString),
     Fn(Box<FnType>),
+    NativeFn,
+}
+
+impl VarType {
+    fn into_fn_return_type(self) -> Self {
+        match self {
+            VarType::Fn(f) => f.return_type,
+            _ => self
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -170,7 +175,10 @@ pub struct FnType {
 
 impl Default for FnType {
     fn default() -> Self {
-        FnType { args_type: vec![], return_type: VarType::Void }
+        FnType {
+            args_type: vec![],
+            return_type: VarType::Void,
+        }
     }
 }
 
@@ -225,6 +233,7 @@ impl Display for VarType {
 
                 write!(f, ") -> {}", t.return_type)
             }
+            VarType::NativeFn => write!(f, "<native fn>"),
         }
     }
 }
@@ -246,6 +255,36 @@ impl From<&Token> for VarType {
 
 impl From<&Option<Token>> for VarType {
     fn from(value: &Option<Token>) -> Self {
+        match value {
+            Some(v) => v.into(),
+            None => VarType::Void,
+        }
+    }
+}
+
+impl From<&VarTypeDecl> for VarType {
+    fn from(value: &VarTypeDecl) -> Self {
+        match value {
+            VarTypeDecl::Identifier(tk) => tk.into(),
+            VarTypeDecl::Fn {
+                param_types,
+                return_type,
+                ..
+            } => {
+                let args_type = param_types.iter().map(VarType::from).collect();
+                let return_type = return_type.into();
+
+                VarType::Fn(Box::new(FnType {
+                    args_type,
+                    return_type,
+                }))
+            }
+        }
+    }
+}
+
+impl From<&Option<VarTypeDecl>> for VarType {
+    fn from(value: &Option<VarTypeDecl>) -> Self {
         match value {
             Some(v) => v.into(),
             None => VarType::Void,
@@ -306,6 +345,7 @@ impl Resolver {
         self.globals.var_types.insert("true".into(), VarType::Bool);
         self.globals.var_types.insert("false".into(), VarType::Bool);
         self.globals.var_types.insert("null".into(), VarType::Null);
+        self.globals.var_types.insert("clock".into(), VarType::NativeFn);
 
         for t in ["any", "int", "float", "str", "bool", "void"] {
             self.globals
@@ -390,7 +430,7 @@ impl Resolver {
         if typ == FnKind::Init && stmt.return_type.is_some() {
             return Err(RevResult::new(
                 ResolverErr::ConstructorReturnType,
-                Some(stmt.return_type.as_ref().unwrap().loc.clone()),
+                Some(stmt.return_type.as_ref().unwrap().get_loc()),
             ));
         }
 
@@ -401,7 +441,7 @@ impl Resolver {
         for p in stmt.params.iter() {
             self.declare_name(&p.name.value, &stmt.name.loc, "variable")?;
             self.define_name(&p.name.value);
-            self.bind_var_type(&p.name.value, (&p.typ).into())?;
+            self.init_var_type(&p.name.value, (&p.typ).into());
         }
 
         let mut return_type = None;
@@ -436,16 +476,18 @@ impl Resolver {
             (None, Some(r)) => {
                 if Into::<VarType>::into(r) != VarType::Void {
                     return Err(RevResult::new(
-                        ResolverErr::NoReturnButDeclOne(r.to_string()),
-                        Some(r.loc.clone()),
+                        ResolverErr::NoReturnButDeclOne(Into::<VarType>::into(r).to_string()),
+                        Some(r.get_loc()),
                     ));
                 }
             }
             (Some(r), None) => {
-                return Err(RevResult::new(
-                    ResolverErr::NoTypeDeclButReturnOne(r.to_string()),
-                    Some(tmp_loc),
-                ))
+                if r != VarType::Void {
+                    return Err(RevResult::new(
+                        ResolverErr::NoTypeDeclButReturnOne(r.to_string()),
+                        Some(tmp_loc),
+                    ))
+                }
             }
             _ => {}
         }
@@ -505,48 +547,25 @@ impl Resolver {
         Ok(())
     }
 
-    fn bind_var_type(&mut self, var_name: &EcoString, var_type: VarType) -> ResolverRes {
-        // if self.scopes.is_empty() {
-        //     self.globals.var_types.insert(var_name.clone(), var_type);
+    fn init_var_type(&mut self, var_name: &EcoString, var_type: VarType) {
+        let target = if self.scopes.is_empty() {
+            &mut self.globals.var_types
+        } else {
+            &mut self.scopes.last_mut().unwrap().var_types
+        };
 
-        //     return Ok(());
-        // }
+        target.insert(var_name.clone(), var_type);
+    }
 
-        // self.scopes
-        //     .last_mut()
-        //     .unwrap()
-        //     .var_types
-        //     .insert(var_name.clone(), var_type);
-
-        for scope in self.scopes.iter_mut().rev() {
-            if let Occupied(mut v) = scope.var_types.entry(var_name.clone()) {
-                v.insert(var_type);
-
-                return Ok(())
+    fn update_var_type(&mut self, var_name: &EcoString, var_type: VarType, loc: &Loc) {
+        if let Some(depth) = self.locals.get(loc) {
+            if let Some(scope) = self.scopes.iter_mut().rev().nth(*depth) {
+                scope.var_types.insert(var_name.clone(), var_type);
+                return;
             }
         }
 
-        if let Occupied(mut v) = self.globals.var_types.entry(var_name.clone()) {
-            v.insert(var_type);
-
-            return Ok(())
-        }
-
-        panic!("Undeclared var: {}", var_name)
-
-        // Err(RevResult::new(
-        //     ResolverErr::UndeclaredVar(name.into()),
-        //     Some(loc.clone()),
-        // ))
-
-        // if !self.globals.variables.contains_key(name) {
-        //     return Err(RevResult::new(
-        //         ResolverErr::UndeclaredVar(name.into()),
-        //         Some(loc.clone()),
-        //     ));
-        // }
-
-        // Ok(())
+        self.globals.var_types.insert(var_name.clone(), var_type);
     }
 
     fn check_type_exists(&self, type_name: &EcoString, loc: &Loc) -> ResolverRes {
@@ -616,8 +635,7 @@ impl Resolver {
     fn struct_members_types(
         fields: &[VarDeclStmt],
         methods: &[FnDeclStmt],
-    ) -> Result<(HashMap<EcoString, VarType>, HashMap<EcoString, VarType>), RevResResolv>
-    {
+    ) -> Result<(HashMap<EcoString, VarType>, HashMap<EcoString, VarType>), RevResResolv> {
         let mut fields_types: HashMap<EcoString, VarType> = HashMap::new();
         let mut methods_types: HashMap<EcoString, VarType> = HashMap::new();
         let mut has_init = false;
@@ -652,7 +670,10 @@ impl Resolver {
         }
 
         if !has_init {
-            methods_types.insert(EcoString::from("init"), VarType::Fn(Box::new(FnType::default())));
+            methods_types.insert(
+                EcoString::from("init"),
+                VarType::Fn(Box::new(FnType::default())),
+            );
         }
 
         Ok((fields_types, methods_types))
@@ -691,13 +712,28 @@ impl VisitStmt<(), ResolverErr> for Resolver {
     fn visit_var_decl_stmt(&mut self, stmt: &VarDeclStmt) -> ResolverRes {
         self.declare_name(&stmt.name.value, &stmt.name.loc, "variable")?;
 
-        let mut final_type = VarType::Any;
+        let mut final_type = match &stmt.typ {
+            Some(VarTypeDecl::Identifier(i)) => {
+                self.check_type_exists(&i.value, &i.loc)?;
+                i.into()
+            }
+            t @ Some(VarTypeDecl::Fn {
+                param_types,
+                return_type,
+                ..
+            }) => {
+                if let Some(r) = return_type {
+                    self.check_type_exists(&r.value, &r.loc)?;
+                }
 
-        if let Some(t) = &stmt.typ {
-            self.check_type_exists(&t.value, &t.loc)?;
+                param_types
+                    .iter()
+                    .try_for_each(|p| self.check_type_exists(&p.value, &p.loc))?;
 
-            final_type = t.into();
-        }
+                t.into()
+            }
+            None => VarType::Any
+        };
 
         if let Some(v) = &stmt.value {
             let value_type = self.resolve_expr(v)?;
@@ -719,10 +755,7 @@ impl VisitStmt<(), ResolverErr> for Resolver {
         }
 
         self.define_name(&stmt.name.value);
-
-        println!("Locals index: {}", self.locals.get(k))
-
-        self.bind_var_type(&stmt.name.value, final_type)?;
+        self.init_var_type(&stmt.name.value, final_type);
 
         Ok(())
     }
@@ -758,6 +791,7 @@ impl VisitStmt<(), ResolverErr> for Resolver {
         // I need a scope to declare the placeholder
         self.begin_scope();
         self.resolve_stmt(&(&stmt.placeholder).into())?;
+        self.init_var_type(&stmt.placeholder.name.value, VarType::Int);
         self.resolve_stmt(&stmt.body)?;
         self.end_scope();
 
@@ -768,10 +802,12 @@ impl VisitStmt<(), ResolverErr> for Resolver {
         self.declare_name(&stmt.name.value, &stmt.name.loc, "function")?;
         self.define_name(&stmt.name.value);
 
-        self.resolve_fn(stmt, FnKind::Function)?;
         let fn_type = Resolver::resolve_fn_type(stmt);
+        self.init_var_type(&stmt.name.value, fn_type);
 
-        self.bind_var_type(&stmt.name.value, fn_type)
+        self.resolve_fn(stmt, FnKind::Function)?;
+
+        Ok(())
     }
 
     fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> ResolverRes {
@@ -841,8 +877,8 @@ impl VisitStmt<(), ResolverErr> for Resolver {
 
 impl VisitExpr<VarType, ResolverErr> for Resolver {
     fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> ResolverExprRes {
-        let lhs_type = self.resolve_expr(&expr.left)?;
-        let rhs_type = self.resolve_expr(&expr.right)?;
+        let lhs_type = self.resolve_expr(&expr.left)?.into_fn_return_type();
+        let rhs_type = self.resolve_expr(&expr.right)?.into_fn_return_type();
 
         let invalid_op_error = |op: &str| {
             RevResult::new(
@@ -898,6 +934,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
 
                     Ok(VarType::Bool)
                 }
+                (VarType::Struct(_), VarType::Struct(_)) => Ok(VarType::Bool),
                 _ => Err(invalid_op_error(expr.operator.value.as_str())),
             },
             _ => Err(RevResult::new(
@@ -972,10 +1009,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
 
         if lhs_type != value_type {
             if lhs_type == VarType::Any {
-                println!("Value type: {}", value_type);
-                println!("Variable name: {}", expr.name);
-
-                self.bind_var_type(&expr.name, value_type)?;
+                self.update_var_type(&expr.name, value_type, &expr.loc);
             } else if !Resolver::is_castable(&value_type, &lhs_type) {
                 return Err(RevResult::new(
                     ResolverErr::WrongTypeAssign(value_type.to_string(), lhs_type.to_string()),
@@ -1010,8 +1044,6 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
             .map(|a| a.accept(self))
             .collect::<Result<_, _>>()?;
 
-        println!("Callee type: {}", callee_type);
-        
         let fn_type = match &callee_type {
             VarType::Struct(s) => {
                 let typedef = self.get_type_def(s, &expr.loc)?;
@@ -1036,10 +1068,12 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
                 }
             }
             VarType::Fn(f) => f,
-            _ => return Err(RevResult::new(
+            _ => {
+                return Err(RevResult::new(
                     ResolverErr::NonFnCall,
                     Some(expr.callee.get_loc()),
                 ))
+            }
         };
 
         if fn_type.args_type.len() != expr.args.len() {
@@ -1049,8 +1083,13 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
             ));
         }
 
-        for (call_arg, arg_decl) in call_args.iter().zip(&fn_type.args_type) {
-            if call_arg != arg_decl && !Resolver::is_castable(&call_arg, arg_decl) {
+        for (mut call_arg, arg_decl) in call_args.into_iter().zip(&fn_type.args_type) {
+            // If we dont wait for a function as arg, we collapse it to the return value
+            if !matches!(arg_decl, VarType::Fn(_)) {
+                call_arg = call_arg.into_fn_return_type();
+            }
+
+            if &call_arg != arg_decl && !Resolver::is_castable(&call_arg, arg_decl) {
                 return Err(RevResult::new(
                     ResolverErr::WrongArgsType(arg_decl.to_string(), call_arg.to_string()),
                     Some(expr.loc.clone()),
@@ -1063,7 +1102,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
             Ok(())
         })?;
 
-        Ok(callee_type)
+        Ok(callee_type.into_fn_return_type())
     }
 
     fn visit_get_expr(&mut self, expr: &GetExpr) -> ResolverExprRes {
@@ -1079,8 +1118,8 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
 
         if let VarType::Struct(s) = &obj_type {
             let type_info = self.get_type_def(s, &expr.loc)?;
-            
-            return type_info.get_member_type(&expr.name)
+
+            return type_info.get_member_type(&expr.name);
         }
 
         Err(RevResult::new(
@@ -1106,7 +1145,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
             }
         } else {
             return Err(RevResult::new(
-                ResolverErr::NonInstPropAccess,
+                ResolverErr::NonStructFieldAccess,
                 Some(expr.loc.clone()),
             ));
         }

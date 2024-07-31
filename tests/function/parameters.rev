@@ -1,4 +1,4 @@
-fn f0() { return 0 }
+fn f0() -> int { return 0 }
 print f0() // expect: 0
 
 fn f1(a: int) -> int { return a }
@@ -19,7 +19,7 @@ print f5(1, 2, 3, 4, 5) // expect: 15
 fn f6(a: int, b: int, c: int, d: int, e: int, f: int) -> int { return a + b + c + d + e + f }
 print f6(1, 2, 3, 4, 5, 6) // expect: 21
 
-fn f7(a: int, b: int, c: int, d, e: int, f: int, g: int) -> int { return a + b + c + d + e + f + g }
+fn f7(a: int, b: int, c: int, d: int, e: int, f: int, g: int) -> int { return a + b + c + d + e + f + g }
 print f7(1, 2, 3, 4, 5, 6, 7) // expect: 28
 
 fn f8(a: int, b: int, c: int, d: int, e: int, f: int, g: int, h: int) -> int { return a + b + c + d + e + f + g + h }

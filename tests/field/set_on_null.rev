@@ -1,1 +1,0 @@
-null.bar = "str" // error: only structure instances have properties

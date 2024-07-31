@@ -1,13 +1,13 @@
 struct Foo {
-    fn method0() { return "no args" }
-    fn method1(a) { return a }
-    fn method2(a, b) { return a + b }
-    fn method3(a, b, c) { return a + b + c }
-    fn method4(a, b, c, d) { return a + b + c + d }
-    fn method5(a, b, c, d, e) { return a + b + c + d + e }
-    fn method6(a, b, c, d, e, f) { return a + b + c + d + e + f }
-    fn method7(a, b, c, d, e, f, g) { return a + b + c + d + e + f + g }
-    fn method8(a, b, c, d, e, f, g, h) { return a + b + c + d + e + f + g + h }
+    fn method0() -> str { return "no args" }
+    fn method1(a: int) -> int { return a }
+    fn method2(a: int, b: int) -> int { return a + b }
+    fn method3(a: int, b: int, c: int) -> int { return a + b + c }
+    fn method4(a: int, b: int, c: int, d: int) -> int { return a + b + c + d }
+    fn method5(a: int, b: int, c: int, d: int, e: int) -> int { return a + b + c + d + e }
+    fn method6(a: int, b: int, c: int, d: int, e: int, f: int) -> int { return a + b + c + d + e + f }
+    fn method7(a: int, b: int, c: int, d: int, e: int, f: int, g: int) -> int { return a + b + c + d + e + f + g }
+    fn method8(a: int, b: int, c: int, d: int, e: int, f: int, g: int, h: int) -> int { return a + b + c + d + e + f + g + h }
 }
 
 var foo = Foo()

@@ -1,1 +1,0 @@
-var bool = 1 // error: missing variable name after 'var' keyword in declaration

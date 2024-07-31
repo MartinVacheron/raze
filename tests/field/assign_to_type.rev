@@ -2,6 +2,8 @@ struct Foo {
     a: int
     b: str
     c: float
+
+    bar: fn(int, int)
 }
 
 var f = Foo()

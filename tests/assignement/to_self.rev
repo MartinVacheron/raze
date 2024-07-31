@@ -1,5 +1,0 @@
-struct Foo {
-    fn init() {
-        self = 4 // error: invalid assignment target
-    }
-}

@@ -1,4 +1,4 @@
-struct Foo { bar }
+struct Foo { bar: str }
 
 var foo = Foo()
 foo.bar = "not fn"

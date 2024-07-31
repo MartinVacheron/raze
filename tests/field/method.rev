@@ -1,5 +1,5 @@
 struct Foo {
-    fn bar(arg) {
+    fn bar(arg: str) {
         print arg
     }
 }

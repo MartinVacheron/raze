@@ -1,0 +1,4 @@
+true + null // error: operation '+' is not allowed between types 'bool' and 'null'
+true + 4 // error: operation '+' is not allowed between types 'bool' and 'int'
+true + "t" // error: operation '+' is not allowed between types 'bool' and 'str'
+true + false // error: operation '+' is not allowed between types 'bool' and 'bool'

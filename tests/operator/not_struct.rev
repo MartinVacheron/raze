@@ -1,2 +1,2 @@
 struct Bar {}
-print !Bar    // error: can't use '!' token on anything other than a bool value
+print !Bar    // error: unary operator '!' can only be used on 'bool' type

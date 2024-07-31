@@ -1,0 +1,4 @@
+fn aa(a: int) -> bool { return true }
+fn bb(b: bool) -> float {return 1.5}
+
+print bb(aa(1)) // expect: 1.5

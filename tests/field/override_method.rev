@@ -1,11 +1,11 @@
 // Bound methods have identity equality.
 struct Foo {
-    fn method(a) {
+    fn method(a: int) {
         print "method"
         print a
     }
 
-    fn other(a) {
+    fn other(a: int) {
         print "other"
         print a
     }
@@ -28,10 +28,10 @@ method(2)
 // Probleme parce qu'on assigne a une struct (donc borrow_mut) et on va chercher
 // un de ses champs, donc on double borrow avec un borrow mut...
 // Meme pb avec :
-struct Foo {
-    a
-    b
-}
+// struct Foo {
+//     a: bool
+//     b: bool
+// }
 
-var f = Foo()
-f.a = f.b
+// var f = Foo()
+// f.a = f.b

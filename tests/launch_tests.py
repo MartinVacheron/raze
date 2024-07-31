@@ -97,7 +97,7 @@ for dir in os.listdir():
                 res = clr_str("Ko", RED)
                 total_ko += 1
 
-            print(f"testing {dir}::{file}...  {res}")
+            print(f"{clr_str('testing', YELLOW)} {dir}::{file}...  {res}")
 
             if not ok:
                 if len(rev_res) > 0:
@@ -105,8 +105,8 @@ for dir in os.listdir():
                     print(f"Got:\n{rev_res}")
 
                 if len(rev_err) > 0:
-                    print(f"Expected erros:\n{errors}")
-                    print(f"Got erros:\n{rev_err}")
+                    print(f"Expected errors:\n{errors}")
+                    print(f"Got errros:\n{rev_err}")
 
                 print()
 

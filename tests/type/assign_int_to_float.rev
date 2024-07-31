@@ -12,4 +12,4 @@ var d: int = a+b
 print c is float // expect: true
 
 var e = a + 1.5
-print e is float
+print e is float // expect: true

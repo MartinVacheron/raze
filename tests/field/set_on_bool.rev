@@ -1,1 +1,0 @@
-true.foo = "value" // error: only structure instances have properties
