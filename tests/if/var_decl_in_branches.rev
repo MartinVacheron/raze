@@ -1,0 +1,15 @@
+var a = 1
+
+if true {
+    var a = 42
+    print a // expect: 42
+}
+
+print a // expect: 1
+
+if false {} else {
+    var a = 65
+    print a // expect: 65
+}
+
+print a // expect: 1

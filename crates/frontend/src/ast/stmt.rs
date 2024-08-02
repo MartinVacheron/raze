@@ -64,7 +64,6 @@ pub struct PrintStmt {
 #[derive(Debug, PartialEq)]
 pub struct BlockStmt {
     pub stmts: Vec<Stmt>,
-    pub loc: Loc,
 }
 
 #[derive(Debug, PartialEq)]
@@ -78,8 +77,8 @@ pub struct VarDeclStmt {
 #[derive(Debug, PartialEq)]
 pub struct IfStmt {
     pub condition: Expr,
-    pub then_branch: Option<Box<Stmt>>,
-    pub else_branch: Option<Box<Stmt>>,
+    pub then_branch: Option<BlockStmt>,
+    pub else_branch: Option<BlockStmt>,
     pub loc: Loc,
 }
 
@@ -107,8 +106,8 @@ pub struct ForRange {
 #[derive(Debug, PartialEq)]
 pub struct FnDeclStmt {
     pub name: Token,
-    pub params: Rc<Vec<FnParam>>, // for types
-    pub body: Rc<Vec<Stmt>>,
+    pub params: Rc<Vec<FnParam>>,
+    pub body: Rc<BlockStmt>,
     pub return_type: Option<VarTypeDecl>,
     pub loc: Loc,
 }
@@ -144,7 +143,7 @@ impl Stmt {
             Stmt::Expr(stmt) => visitor.visit_expr_stmt(stmt),
             Stmt::Print(stmt) => visitor.visit_print_stmt(stmt),
             Stmt::VarDecl(stmt) => visitor.visit_var_decl_stmt(stmt),
-            Stmt::Block(stmt) => visitor.visit_block_stmt(stmt),
+            Stmt::Block(stmt) => stmt.accept(visitor),
             Stmt::If(stmt) => visitor.visit_if_stmt(stmt),
             Stmt::While(stmt) => visitor.visit_while_stmt(stmt),
             Stmt::For(stmt) => visitor.visit_for_stmt(stmt),
@@ -152,6 +151,15 @@ impl Stmt {
             Stmt::Return(stmt) => visitor.visit_return_stmt(stmt),
             Stmt::Struct(stmt) => visitor.visit_struct_stmt(stmt),
         }
+    }
+}
+
+impl BlockStmt {
+    pub fn accept<T, U: RevReport>(
+        &self,
+        visitor: &mut impl VisitStmt<T, U>,
+    ) -> Result<T, RevResult<U>> {
+        visitor.visit_block_stmt(self)
     }
 }
 

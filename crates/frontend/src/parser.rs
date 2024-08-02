@@ -68,14 +68,8 @@ pub enum ParserErr {
     #[error("missing block start '{{' after 'if' condition")]
     MissingIfOpenBrace,
 
-    #[error("missing block end '}}' in 'if' branch")]
-    MissingIfCloseBrace,
-
     #[error("missing block start '{{' after 'else'")]
     MissingElseOpenBrace,
-
-    #[error("missing block end '}}' in 'else' branch")]
-    MissingElseCloseBrace,
 
     #[error("'if' statement with no condition")]
     IfWithNoCond,
@@ -85,9 +79,6 @@ pub enum ParserErr {
 
     #[error("missing right expression in 'and' statement")]
     AndWithNoCond,
-
-    #[error("variable declaration inside 'if' block is not allowed")]
-    VarDeclInIf,
 
     #[error("'else' branch can't have a condition")]
     ElseWithCond,
@@ -359,21 +350,13 @@ impl Parser {
     }
 
     fn parse_block_stmt(&mut self) -> ParserStmtRes {
-        self.enter_code_block(CodeBlock::Block);
-
         let open_brace = self.expect_and_skip(TokenKind::OpenBrace)?;
 
-        let stmts = self.parse_block(open_brace)?;
-
-        self.exit_code_block();
-
-        Ok(Stmt::Block(BlockStmt {
-            stmts,
-            loc: self.get_loc(),
-        }))
+        Ok(Stmt::Block(self.parse_block(open_brace)?))
     }
 
-    fn parse_block(&mut self, open_brace: Token) -> Result<Vec<Stmt>, RevResParser> {
+    fn parse_block(&mut self, open_brace: Token) -> Result<BlockStmt, RevResParser> {
+        self.enter_code_block(CodeBlock::Block);
         let mut stmts: Vec<Stmt> = vec![];
 
         while !self.is_at(TokenKind::CloseBrace) && !self.eof() {
@@ -384,7 +367,9 @@ impl Parser {
         self.expect_and_skip(TokenKind::CloseBrace)
             .map_err(|_| self.trigger_error_with_loc(ParserErr::UnclosedBlock, open_brace.loc))?;
 
-        Ok(stmts)
+        self.exit_code_block();
+
+        Ok(BlockStmt { stmts })
     }
 
     fn parse_if_stmt(&mut self) -> ParserStmtRes {
@@ -393,44 +378,34 @@ impl Parser {
 
         let condition = self.parse_expr()?;
 
-        self.skip_expect_and_skip(TokenKind::OpenBrace)
+        let tk = self.skip_expect_and_skip(TokenKind::OpenBrace)
             .map_err(|_| self.trigger_error(ParserErr::MissingIfOpenBrace))?;
 
-        let mut then_branch = None;
+        let then_branch = if !self.is_at(TokenKind::CloseBrace) {
+            Some(self.parse_block(tk)?)
+        } else {
+            self.eat()?;
+            None
+        };
 
-        if !self.is_at(TokenKind::CloseBrace) {
-            if self.is_at(TokenKind::Var) {
-                return Err(self.trigger_error(ParserErr::VarDeclInIf));
-            }
-
-            then_branch = Some(Box::new(self.parse_stmt()?));
-        }
-
-        self.expect_and_skip(TokenKind::CloseBrace)
-            .map_err(|_| self.trigger_error(ParserErr::MissingIfCloseBrace))?;
-
-        let mut else_branch: Option<Box<Stmt>> = None;
-
-        if self.is_at(TokenKind::Else) {
+        let else_branch = if self.is_at(TokenKind::Else) {
             self.eat()?;
             self.skip_new_lines();
             self.is_not_at_brace_or_end_of(ParserErr::ElseWithCond)?;
 
-            self.expect_and_skip(TokenKind::OpenBrace)
+            let tk = self.expect_and_skip(TokenKind::OpenBrace)
                 .map_err(|_| self.trigger_error(ParserErr::MissingElseOpenBrace))?;
 
             match self.at().kind {
                 TokenKind::CloseBrace => {
                     self.eat()?;
+                    None
                 }
-                _ => {
-                    else_branch = Some(Box::new(self.parse_stmt()?));
-
-                    self.expect_and_skip(TokenKind::CloseBrace)
-                        .map_err(|_| self.trigger_error(ParserErr::MissingElseCloseBrace))?;
-                }
+                _ => Some(self.parse_block(tk)?)
             }
-        }
+        } else {
+            None
+        };
 
         Ok(Stmt::If(IfStmt {
             condition,
@@ -1187,12 +1162,12 @@ impl Parser {
         Ok(res)
     }
 
-    fn skip_expect_and_skip(&mut self, kind: TokenKind) -> Result<(), RevResParser> {
+    fn skip_expect_and_skip(&mut self, kind: TokenKind) -> Result<Token, RevResParser> {
         self.skip_new_lines();
-        self.expect(kind)?;
+        let tk = self.expect(kind)?;
         self.skip_new_lines();
 
-        Ok(())
+        Ok(tk)
     }
 
     fn is_at(&self, kind: TokenKind) -> bool {
@@ -1801,7 +1776,6 @@ if a {} else {}
         let code = "
 if
 if {}
-if a { var a = 1 }
 if a {} else a {}
 ";
         // 0
@@ -1809,7 +1783,6 @@ if a {} else a {}
         let e = errs.iter().map(|e| &e.err).collect::<Vec<&ParserErr>>();
         assert!(e[0] == &ParserErr::IfWithNoCond);
         assert!(e[1] == &ParserErr::IfWithNoCond);
-        assert!(e[2] == &ParserErr::VarDeclInIf);
         assert!(e[3] == &ParserErr::ElseWithCond);
     }
 

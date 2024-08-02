@@ -1,3 +1,27 @@
-fn foo(arg: str, arg: str) { // error: a variable with the same name as already been declared in this scope
-    "body"
+fn a(a: int, b: int) {}
+fn b(a: int, b: int,) {}
+
+fn c(
+    a: str,
+    b: str,
+) {}
+
+fn c(
+    a: float,
+    b: float  // if we put a comma, it works
+) {}
+
+fn d(
+    a: bool,
+    b: bool,)
+{
 }
+
+fn add(
+    a: int
+    ,
+    b: int
+    ,
+) {}
+
+print "ok" // expect: "ok"

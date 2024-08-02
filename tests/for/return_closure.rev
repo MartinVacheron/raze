@@ -1,4 +1,4 @@
-fn f() -> fn() {
+fn return_closure() -> fn() {
     for i in 0..2 {
         var i = "i"
 
@@ -8,5 +8,5 @@ fn f() -> fn() {
     }
 }
 
-var h = f()
+var h = return_closure()
 h() // expect: "i"

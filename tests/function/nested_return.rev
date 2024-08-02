@@ -1,0 +1,48 @@
+fn sub() -> int {}
+fn div() {}
+
+
+
+fn add() -> fn() { // should see that return div in for
+    for i in 1..5 {
+        return div
+    }
+}
+
+
+fn add() -> fn() { // should return div
+    for i in ..5 {
+        return div
+        return sub // not possible because of type
+    }
+
+    return sub // not possible because of type
+}
+
+fn add() -> fn() { // should see that not all branch return something
+    if true {
+        return div
+    }
+}
+
+fn add() -> fn() { // should see that not all branch return same type
+    if true {
+        return sub
+    }
+
+    return div
+}
+
+fn add() -> fn() { // should see that not all branch return same type
+    if true {
+        if false {
+            // erreur because nothing returned in this branch
+        } else {
+            return sub
+        }
+    }
+
+    return div
+}
+
+// expect: "not implemented yet"

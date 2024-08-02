@@ -1,0 +1,9 @@
+if true {
+    print "true once"   // expect: "true once"
+    print "true twice"  // expect: "true twice"
+}
+
+if false {} else {
+    print "false once"   // expect: "false once"
+    print "false twice"  // expect: "false twice"
+}

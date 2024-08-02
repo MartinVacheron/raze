@@ -447,7 +447,7 @@ impl Resolver {
         let mut return_type = None;
         let mut tmp_loc = Loc::new(0, 0);
 
-        stmt.body.iter().try_for_each(|s| {
+        stmt.body.stmts.iter().try_for_each(|s| {
             if return_type.is_some() {
                 self.warnings.push(ResolverWarning::UnreachAfterReturn);
             }
@@ -772,10 +772,12 @@ impl VisitStmt<(), ResolverErr> for Resolver {
         self.resolve_expr(&stmt.condition)?;
 
         if let Some(t) = &stmt.then_branch {
-            self.resolve_stmt(t)?;
+            t.accept(self)?;
+            // self.resolve_stmt(t)?;
         }
         if let Some(e) = &stmt.else_branch {
-            self.resolve_stmt(e)?;
+            e.accept(self)?;
+            // self.resolve_stmt(e)?;
         }
 
         Ok(())

@@ -1,6 +1,6 @@
 use colored::*;
 use ecow::EcoString;
-use frontend::ast::stmt::{FnDeclStmt, Stmt, StructStmt};
+use frontend::ast::stmt::{BlockStmt, FnDeclStmt, StructStmt};
 use std::{
     cell::RefCell,
     collections::{
@@ -314,7 +314,7 @@ impl Operate<Bool> for Bool {
 pub struct Function {
     pub name: EcoString,
     pub params: Rc<Vec<EcoString>>,
-    pub body: Rc<Vec<Stmt>>,
+    pub body: Rc<BlockStmt>,
     pub closure: Rc<RefCell<Env>>,
 }
 
@@ -374,7 +374,7 @@ impl Callable for Function {
                 .map_err(|_| RevResult::new(CallErr::WrongFnParamDecl, None))?;
         }
 
-        match interpreter.execute_block_stmt(&self.body, new_env) {
+        match interpreter.execute_block_stmt(&self.body.stmts, new_env) {
             Ok(_) => Ok(RtVal::new_null()),
             Err(e) => match e.err {
                 InterpErr::Return(v) => Ok(v),

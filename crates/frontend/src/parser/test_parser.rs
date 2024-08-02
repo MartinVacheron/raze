@@ -188,7 +188,7 @@ impl VisitStmt<StmtInfos, ParserTestErr> for TestParser {
         let name = stmt.name.value.clone();
 
         let mut body: Vec<StmtInfos> = vec![];
-        for s in &*stmt.body {
+        for s in &*stmt.body.stmts {
             body.push(s.accept(self)?);
         }
 
