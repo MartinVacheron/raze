@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::sync::Arc;
 
 use colored::*;
 use thiserror::Error;
@@ -586,13 +587,13 @@ impl Parser {
 
         self.enter_code_block(CodeBlock::FnDeclBody);
 
-        let body = Rc::new(self.parse_block(open_brace)?);
+        let body = Arc::new(self.parse_block(open_brace)?);
 
         self.exit_code_block();
 
         Ok(FnDeclStmt {
             name,
-            params: Rc::new(params),
+            params: Arc::new(params),
             body,
             return_type,
             loc: self.get_loc(),

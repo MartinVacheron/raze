@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{rc::Rc, sync::Arc};
 
 use crate::lexer::Token;
 
@@ -106,8 +106,8 @@ pub struct ForRange {
 #[derive(Debug, PartialEq)]
 pub struct FnDeclStmt {
     pub name: Token,
-    pub params: Rc<Vec<FnParam>>,
-    pub body: Rc<BlockStmt>,
+    pub params: Arc<Vec<FnParam>>,
+    pub body: Arc<BlockStmt>,
     pub return_type: Option<VarTypeDecl>,
     pub loc: Loc,
 }

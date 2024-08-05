@@ -8,7 +8,7 @@ use std::{
         HashMap,
     },
     fmt::Display,
-    rc::Rc,
+    rc::Rc, sync::Arc,
 };
 use thiserror::Error;
 use tools::results::{RevReport, RevResult};
@@ -314,7 +314,7 @@ impl Operate<Bool> for Bool {
 pub struct Function {
     pub name: EcoString,
     pub params: Rc<Vec<EcoString>>,
-    pub body: Rc<BlockStmt>,
+    pub body: Arc<BlockStmt>,
     pub closure: Rc<RefCell<Env>>,
 }
 
