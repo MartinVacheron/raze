@@ -1,0 +1,103 @@
+// Not all code paths
+fn a() -> int {
+    if false {}
+    else {
+        return 0
+    }
+} // error: not all code paths return a value of type 'int' in function 'a'
+
+
+// Even if there is code after, last control flow didn't return on each path
+fn b() -> int {
+    if false {}
+    else {
+        return 0
+    }
+
+    print "ko"
+} // error: not all code paths return a value of type 'int' in function 'b'
+
+
+// Check until last one
+fn c() -> int {
+    if true { return 4 }
+
+    if true {}
+    else {
+        return 0
+    }
+
+    if false {}
+    else {
+        return 0
+    }
+
+    print "ko"
+} // error: not all code paths return a value of type 'int' in function 'c'
+
+
+// We are not guarantee to go inside for and while loop
+fn d() -> int {
+    if false { return 4 }
+
+    for i in 0..4 {
+        return 1
+    }
+
+    while true {
+        return 1
+    }
+} // error: not all code paths return a value of type 'int' in function 'd'
+
+
+// ------------------
+// Complicated cases
+
+// Nested
+fn e() -> int {
+    if true {
+        if false {
+            return 1
+        }
+    }
+} // error: not all code paths return a value of type 'int' in function 'e'
+
+
+// Nested bis
+fn f() -> int {
+    if true {
+        if false {
+            if false {
+                return 45
+            } else {
+                return -85
+            }
+        } else {
+            return 65
+        }
+    }
+} // error: not all code paths return a value of type 'int' in function 'f'
+
+
+// For and while not always returns
+fn g() -> int {
+    for i in 0..5 {
+        if false {
+            return 1
+        }
+    }
+} // error: not all code paths return a value of type 'int' in function 'g'
+
+
+// Nested for but with complete if arms
+fn h() -> int {
+    for i in 0..5 {
+        for j in 0..4 {
+            if false {
+                return 1
+            } else {
+                return 0
+            }
+        }
+    }
+} // error: not all code paths return a value of type 'int' in function 'h'

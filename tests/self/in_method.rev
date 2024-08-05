@@ -1,6 +1,6 @@
 struct Foo {
-    fn bar() { return self }
-    fn baz() { return "baz" }
+    fn bar() -> Foo { return self }
+    fn baz() -> str { return "baz" }
 }
 
 print Foo().bar().baz() // expect: "baz"

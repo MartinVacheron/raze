@@ -1,27 +1,22 @@
-fn a(a: int, b: int) {}
-fn b(a: int, b: int,) {}
+struct Foo {
+    fn getClosure() -> fn() -> fn() -> fn() -> str {
+        fn f() -> fn() -> fn() -> str {
+            fn g() -> fn() -> str {
+                fn h() -> str {
+                    return self.toString()
+                }
 
-fn c(
-    a: str,
-    b: str,
-) {}
+                return h
+            }
 
-fn c(
-    a: float,
-    b: float  // if we put a comma, it works
-) {}
+            return g
+        }
 
-fn d(
-    a: bool,
-    b: bool,)
-{
+        return f
+    }
+
+    fn toString() -> str { return "Foo" }
 }
 
-fn add(
-    a: int
-    ,
-    b: int
-    ,
-) {}
-
-print "ok" // expect: "ok"
+var closure = Foo().getClosure()
+print closure()()() // expect: "Foo"

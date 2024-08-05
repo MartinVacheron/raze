@@ -1,12 +1,12 @@
 struct Foo {
-    fn getClosure() {
-        fn closure() {
+    fn getClosure() -> fn() -> str {
+        fn closure() -> str {
             return self.toString()
         }
         return closure
     }
 
-    fn toString() { return "Foo" }
+    fn toString() -> str { return "Foo" }
 }
 
 var closure = Foo().getClosure()

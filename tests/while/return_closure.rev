@@ -1,10 +1,14 @@
-fn f() {
-    while (true) {
+fn dummy() { print "ko" }
+
+fn f() -> fn() {
+    while true {
         var i = "i"
         fn g() { print i }
         
         return g
     }
+
+    return dummy
 }
 
 var h = f()

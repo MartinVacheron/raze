@@ -1,0 +1,38 @@
+// Ok because all return types are good and final return
+fn a() -> int {
+    if true {}
+    else {
+        return 0
+    }
+
+    return 42
+}
+
+print a() // expect: 42
+
+// If at least one is ok, the function is ok but there is some dead code
+fn d() -> int {
+    if false { return 4 }
+
+    if true {
+        return 1
+    }
+    else {
+        return 0
+    }
+
+    if false {}
+    else {
+        return 0
+    }
+
+    var a = 10
+}
+print d() // expect: 1
+
+
+fn f() -> str {
+  if false { return "no" } else { return "ok" }
+}
+
+print f() // expect: "ok"

@@ -6,7 +6,7 @@ fn c(
     b: str,
 ) {}
 
-fn c(
+fn e(
     a: float,
     b: float
 ) {}

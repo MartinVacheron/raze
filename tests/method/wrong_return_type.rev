@@ -1,0 +1,17 @@
+struct Foo {
+    f1: bool
+
+    fn method() -> str {
+        if false {
+            return self.f1 // error: wrong type returned, expected 'str' but found 'bool'
+        } else {
+            return "ko"
+        }
+    }
+}
+
+struct Bar {
+    fn method(a: int) {
+        return "ko" // error: wrong type returned, expected 'void' but found 'str'
+    }
+}

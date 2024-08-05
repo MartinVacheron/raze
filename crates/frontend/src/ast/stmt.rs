@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 use crate::lexer::Token;
 
@@ -12,7 +12,7 @@ pub enum VarTypeDecl {
     Fn {
         fn_tk: Token,  // For error reporting
         param_types: Vec<Token>,
-        return_type: Option<Token>
+        return_type: Option<Box<VarTypeDecl>>
     }
 }
 
@@ -23,7 +23,7 @@ impl VarTypeDecl {
             VarTypeDecl::Fn { fn_tk, param_types, return_type } => {
                 let end = return_type
                     .as_ref()
-                    .map(|r| r.loc.end)
+                    .map(|r| r.get_loc().end)
                     .unwrap_or_else(|| param_types
                         .last()
                         .map_or(fn_tk.loc.end, |p| p.loc.end));
@@ -174,16 +174,4 @@ pub trait VisitStmt<T, U: RevReport> {
     fn visit_fn_decl_stmt(&mut self, stmt: &FnDeclStmt) -> Result<T, RevResult<U>>;
     fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Result<T, RevResult<U>>;
     fn visit_struct_stmt(&mut self, stmt: &StructStmt) -> Result<T, RevResult<U>>;
-}
-
-// Into
-impl From<&VarDeclStmt> for Stmt {
-    fn from(value: &VarDeclStmt) -> Self {
-        Self::VarDecl(VarDeclStmt {
-            name: value.name.clone(),
-            value: value.value.clone(),
-            typ: value.typ.clone(),
-            loc: value.loc.clone(),
-        })
-    }
 }

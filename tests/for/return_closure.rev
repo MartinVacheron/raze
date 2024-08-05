@@ -1,3 +1,5 @@
+fn dummy() {}
+
 fn return_closure() -> fn() {
     for i in 0..2 {
         var i = "i"
@@ -6,6 +8,8 @@ fn return_closure() -> fn() {
         
         return g
     }
+
+    return dummy
 }
 
 var h = return_closure()

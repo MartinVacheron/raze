@@ -389,6 +389,8 @@ impl Parser {
             None
         };
 
+        self.skip_new_lines();
+
         let else_branch = if self.is_at(TokenKind::Else) {
             self.eat()?;
             self.skip_new_lines();
@@ -548,6 +550,8 @@ impl Parser {
                     name: param_name,
                     typ: param_type,
                 });
+
+                self.skip_new_lines();
 
                 if self.is_at(TokenKind::Comma) {
                     let _ = self.eat();
@@ -728,23 +732,27 @@ impl Parser {
         self.expect_no_eat(TokenKind::CloseParen)
             .map_err(|_| self.trigger_error_before_cur_len_one(ParserErr::MissingCloseParenLambda))?;
 
-        let return_type = if self.is_at(TokenKind::SmallArrow) {
+        if self.is_at(TokenKind::SmallArrow) {
             self.eat()?;
 
             if !self.is_at_type() {
                 return Err(self.trigger_error_before_cur_len_one(ParserErr::MissingTypeArrowLambda))
             }
 
-            Some(self.eat()?.clone())
+            if self.is_at(TokenKind::Fn) {
+                let tk = self.eat()?.clone();
+
+                Ok(VarTypeDecl::Fn { fn_tk: tk.clone(), param_types, return_type: Some(Box::new(self.parse_fn_type(tk)?)) })
+            } else {
+                Ok(VarTypeDecl::Fn { fn_tk, param_types: param_types, return_type: Some(Box::new(VarTypeDecl::Identifier(self.eat()?.clone()))) })
+            }
         } else {
             if self.is_at_type() {
                 return Err(self.trigger_error_before_cur_len_one(ParserErr::MissingSmallArrowLambda))
             }
 
-            None
-        };
-
-        Ok(VarTypeDecl::Fn {fn_tk,  param_types, return_type })
+            Ok(VarTypeDecl::Fn {fn_tk,  param_types, return_type: None })
+        }
     }
 
     fn parse_expr_stmt(&mut self) -> ParserStmtRes {
@@ -1350,13 +1358,11 @@ impl Parser {
                     while !self.eof() {
                         match self.at().kind {
                             TokenKind::CloseBrace => {
-                                let _ = self.eat();
-
                                 if nb_blocks == 0 {
-                                    self.skip_new_lines();
-
                                     break;
                                 } else {
+                                    let _ = self.eat();
+
                                     nb_blocks -= 1;
                                 }
                             }

@@ -1,0 +1,38 @@
+fn a() -> str {
+    if true {
+        return "true"
+    }
+
+    for i in 0..2 {
+        while true {
+            if false {
+                return -1
+            }
+        }
+    }
+
+    return "false"
+} // error: wrong type returned, expected 'str' but found 'int'
+
+
+fn return_bool() -> bool {
+    if true {
+        return true
+    } else {
+        return false
+    }
+}
+
+fn b() -> int {
+    if true {
+        for i in 0..3 {
+            return 1
+        }
+    } else {
+        while false {
+            return return_bool()
+        }
+
+        return 2
+    }
+} // error: wrong type returned, expected 'int' but found 'bool'

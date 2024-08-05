@@ -1,5 +1,0 @@
-fn f() {
-    if true { return "ok" } else {  }
-}
-
-print f() // expect: "ok"

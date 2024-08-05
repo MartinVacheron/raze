@@ -3,11 +3,11 @@ fn add() -> int {
 }
 
 fn add1() {
-    return "foo" // error: no return type declared but 'str' is returned
+    return "foo" // error: wrong type returned, expected 'void' but found 'str'
 }
 
 fn add2() -> int {
-     // error: no value returned but declared function's return type is 'int'
+     // error: not all code paths return a value of type 'int' in function 'add2'
 }
 
 fn add3(foo: float) -> bool {

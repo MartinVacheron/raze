@@ -1,7 +1,7 @@
 struct Foo {
   // 256 parameters.
   fn method(
-    a1,
+    a1: int,
     a2: int,
     a3: int,
     a4: int,

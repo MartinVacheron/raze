@@ -1,18 +1,21 @@
 struct Foo {
-    fn getClosure() {
-        fn f() {
-            fn g() {
-                fn h() {
+    fn getClosure() -> fn() -> fn() -> fn() -> str {
+        fn f() -> fn() -> fn() -> str {
+            fn g() -> fn() -> str {
+                fn h() -> str {
                     return self.toString()
                 }
+
                 return h
             }
+
             return g
         }
+
         return f
     }
 
-    fn toString() { return "Foo" }
+    fn toString() -> str { return "Foo" }
 }
 
 var closure = Foo().getClosure()
