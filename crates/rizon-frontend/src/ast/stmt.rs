@@ -49,6 +49,37 @@ pub enum Stmt {
     Struct(StructStmt),
 }
 
+impl Stmt {
+    pub fn get_loc(&self) -> Loc {
+        match self {
+            Self::Expr(s) => s.loc.clone(),
+            Self::Print(s) => s.loc.clone(),
+            Self::VarDecl(s) => s.loc.clone(),
+            Self::Block(s) => {
+                let mut loc = if !s.stmts.is_empty() {
+                    s.stmts[0].get_loc()
+                } else {
+                    Loc::new(0, 0)
+                };
+
+                if s.stmts.len() >= 2 {
+                    let end = s.stmts.last().unwrap().get_loc();
+
+                    loc = Loc::new(end.start - loc.start, end.end - loc.end);
+                }
+
+                loc
+            },
+            Self::If(s) => s.loc.clone(),
+            Self::While(s) => s.loc.clone(),
+            Self::For(s) => s.body.get_loc(),
+            Self::FnDecl(s) => s.loc.clone(),
+            Self::Return(s) => s.loc.clone(),
+            Self::Struct(s) => s.loc.clone(),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct ExprStmt {
     pub expr: Expr,

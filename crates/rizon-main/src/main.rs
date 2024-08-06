@@ -7,10 +7,8 @@ use std::{
 };
 use colored::*;
 
-use rizon_frontend::{
-    ast::ast_pretty_print::AstPrinter, lexer::Lexer, parser::Parser,
-};
-use rizon_static_analysis::Resolver;
+use rizon_frontend::{lexer::Lexer, parser::Parser};
+use rizon_static_analyzer::StaticAnalyzer;
 use rizon_runtime::{interpreter::Interpreter, values::RtVal};
 
 // --------
@@ -33,10 +31,6 @@ struct Cli {
     #[arg(long)]
     print_tokens: bool,
 
-    // Prints the AST tree
-    #[arg(short, long)]
-    print_ast: bool,
-
     // Static analysis
     #[arg(short, long)]
     static_analyse: bool,
@@ -44,16 +38,14 @@ struct Cli {
 
 struct Repl {
     cli: Cli,
-    ast_printer: AstPrinter,
-    resolver: Resolver,
+    resolver: StaticAnalyzer,
     interpreter: Interpreter,
 }
 
 fn main() {
     let mut repl = Repl {
         cli: Cli::parse(),
-        ast_printer: AstPrinter {},
-        resolver: Resolver::default(),
+        resolver: StaticAnalyzer::default(),
         interpreter: Interpreter::new(),
     };
 
@@ -130,12 +122,6 @@ impl Repl {
                 return
             }
         };
-
-        if self.cli.print_ast {
-            for n in &nodes {
-                println!("{}", self.ast_printer.print(n).unwrap());
-            }
-        }
 
         let locals = match self.resolver.resolve(&nodes) {
             Ok(l) => l,

@@ -157,7 +157,7 @@ dependencies = [
  "colored",
  "rizon-frontend",
  "rizon-runtime",
- "rizon-static-analysis",
+ "rizon-static-analyzer",
 ]
 
 [[package]]
@@ -177,13 +177,12 @@ dependencies = [
  "colored",
  "ecow",
  "rizon-frontend",
- "rizon-static-analysis",
  "rizon-tools",
  "thiserror",
 ]
 
 [[package]]
-name = "rizon-static-analysis"
+name = "rizon-static-analyzer"
 version = "0.1.0"
 dependencies = [
  "colored",

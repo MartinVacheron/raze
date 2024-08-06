@@ -1,7 +1,6 @@
-pub mod resolver;
+pub mod static_analyzer;
 // Allow to use it as resolver::Resolver instead of resolver::resolver::Resolver
-pub use resolver::Resolver;
+pub use static_analyzer::StaticAnalyzer;
 
-pub mod utils;
 
 extern crate rizon_frontend;

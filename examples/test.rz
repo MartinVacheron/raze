@@ -1,22 +1,8 @@
-struct Foo {
-    fn getClosure() -> fn() -> fn() -> fn() -> str {
-        fn f() -> fn() -> fn() -> str {
-            fn g() -> fn() -> str {
-                fn h() -> str {
-                    return self.toString()
-                }
+var a = AAAA
+var a = 1.1
 
-                return h
-            }
-
-            return g
-        }
-
-        return f
-    }
-
-    fn toString() -> str { return "Foo" }
+if true {
+    return 4
 }
 
-var closure = Foo().getClosure()
-print closure()()() // expect: "Foo"
+return 2

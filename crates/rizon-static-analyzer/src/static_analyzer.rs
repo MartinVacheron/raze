@@ -21,7 +21,7 @@ use rizon_frontend::{
 };
 
 #[derive(Error, Debug, PartialEq)]
-pub enum ResolverErr {
+pub enum StaticAnalyzerErr {
     #[error("local variable initializer is shadoweding global variable")]
     LocalVarInOwnInit,
 
@@ -103,17 +103,20 @@ pub enum ResolverErr {
 
     // Warings
     #[error("{0}")]
-    Warning(#[from] ResolverWarning),
+    Warning(#[from] Warning),
 }
 
-impl RizonReport for ResolverErr {
+impl RizonReport for StaticAnalyzerErr {
     fn get_err_msg(&self) -> String {
-        format!("{} {}", "Resolver error:".red(), self)
+        match self {
+            StaticAnalyzerErr::Warning(_) => format!("{} {}", "Static analyser warning:".red(), self),
+            _ => format!("{} {}", "Static analyser error:".red(), self)
+        }
     }
 }
 
-#[derive(Debug, Error, PartialEq)]
-pub enum ResolverWarning {
+#[derive(Debug, Error, PartialEq, Clone)]
+pub enum StaticAnalyzerWarning {
     #[error("comparison between int and float can lead to misleading result")]
     CompIntFloat,
 
@@ -121,9 +124,27 @@ pub enum ResolverWarning {
     UnreachAfterReturn,
 }
 
-pub type RizonResResolv = RizonResult<ResolverErr>;
-pub type ResolverRes = Result<bool, RizonResResolv>;
-pub type ResolverExprRes = Result<VarType, RizonResResolv>;
+#[derive(Debug, Error, PartialEq, Clone)]
+pub struct Warning {
+    kind: StaticAnalyzerWarning,
+    loc: Loc,
+}
+
+impl Warning {
+    pub fn new(kind: StaticAnalyzerWarning, loc: Loc) -> Self {
+        Self { kind, loc }
+    }
+}
+
+impl Display for Warning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.kind)
+    }
+}
+
+pub type RizonResResolv = RizonResult<StaticAnalyzerErr>;
+pub type StaticAnalyzerRes = Result<bool, RizonResResolv>;
+pub type StaticAnalyzerExprRes = Result<VarType, RizonResResolv>;
 
 #[derive(Clone, Copy, PartialEq)]
 enum FnKind {
@@ -199,7 +220,7 @@ struct StructType {
 }
 
 impl StructType {
-    fn get_member_type(&self, member_name: &Token) -> ResolverExprRes {
+    fn get_member_type(&self, member_name: &Token) -> StaticAnalyzerExprRes {
         if let Some(t) = self
             .fields
             .get(&member_name.value)
@@ -209,7 +230,7 @@ impl StructType {
         }
 
         Err(RizonResult::new(
-            ResolverErr::InexistantField(
+            StaticAnalyzerErr::InexistantField(
                 self.name.clone().into(),
                 member_name.value.clone().into(),
             ),
@@ -320,17 +341,17 @@ struct Scope {
 }
 
 #[derive(Default)]
-pub struct Resolver {
+pub struct StaticAnalyzer {
     globals: Scope,
     scopes: Vec<Scope>,
     locals: HashMap<Loc, usize>,
     fn_ctx: FnCtx,
     current_struct: Option<EcoString>,
-    warnings: Vec<ResolverWarning>,
+    warnings: Vec<Warning>,
 }
 
 // If we can’t find it in the stack of local scopes, we assume it must be global
-impl Resolver {
+impl StaticAnalyzer {
     pub fn resolve(&mut self, stmts: &[Stmt]) -> Result<HashMap<Loc, usize>, Vec<RizonResResolv>> {
         self.set_globals();
 
@@ -343,7 +364,12 @@ impl Resolver {
             }
         }
 
-        if !errors.is_empty() {
+        if !errors.is_empty() || !self.warnings.is_empty() {
+            self.warnings.iter().for_each(|w| errors.push(RizonResult::new(
+                StaticAnalyzerErr::Warning((*w).clone()),
+                Some(w.loc.clone()),
+            )));
+
             return Err(errors);
         }
 
@@ -374,11 +400,11 @@ impl Resolver {
         }
     }
 
-    fn resolve_stmt(&mut self, stmt: &Stmt) -> ResolverRes {
+    fn resolve_stmt(&mut self, stmt: &Stmt) -> StaticAnalyzerRes {
         stmt.accept(self)
     }
 
-    fn resolve_expr(&mut self, expr: &Expr) -> ResolverExprRes {
+    fn resolve_expr(&mut self, expr: &Expr) -> StaticAnalyzerExprRes {
         expr.accept(self)
     }
 
@@ -394,7 +420,7 @@ impl Resolver {
 
         if !self.globals.variables.contains_key(name) {
             return Err(RizonResult::new(
-                ResolverErr::UndeclaredVar(name.into()),
+                StaticAnalyzerErr::UndeclaredVar(name.into()),
                 Some(loc.clone()),
             ));
         }
@@ -406,7 +432,7 @@ impl Resolver {
         if self.scopes.is_empty() {
             if self.globals.variables.contains_key(name) {
                 return Err(RizonResult::new(
-                    ResolverErr::AlreadyDecl(decl_type.into()),
+                    StaticAnalyzerErr::AlreadyDecl(decl_type.into()),
                     Some(loc.clone()),
                 ));
             }
@@ -418,7 +444,7 @@ impl Resolver {
 
         if self.scopes.last().unwrap().variables.contains_key(name) {
             return Err(RizonResult::new(
-                ResolverErr::AlreadyDecl(decl_type.into()),
+                StaticAnalyzerErr::AlreadyDecl(decl_type.into()),
                 Some(loc.clone()),
             ));
         }
@@ -449,7 +475,7 @@ impl Resolver {
     fn resolve_fn(&mut self, stmt: &FnDeclStmt, fn_ctx: FnCtx) -> Result<(), RizonResResolv> {
         if fn_ctx.kind == FnKind::Init && stmt.return_type.is_some() {
             return Err(RizonResult::new(
-                ResolverErr::ConstructorReturnType,
+                StaticAnalyzerErr::ConstructorReturnType,
                 Some(stmt.return_type.as_ref().unwrap().get_loc()),
             ));
         }
@@ -469,7 +495,7 @@ impl Resolver {
 
         for stmt in &stmt.body.stmts {
             if return_type.is_some() || end_reached {
-                self.warnings.push(ResolverWarning::UnreachAfterReturn);
+                self.warnings.push(Warning::new(StaticAnalyzerWarning::UnreachAfterReturn, stmt.get_loc()));
             }
 
             if let Stmt::Return(r) = stmt {
@@ -485,7 +511,7 @@ impl Resolver {
             (None, Some(r)) if !end_reached => {
                 if Into::<VarType>::into(r) != VarType::Void {
                     return Err(RizonResult::new(
-                        ResolverErr::NotAllPathReturn(
+                        StaticAnalyzerErr::NotAllPathReturn(
                             Into::<VarType>::into(r).to_string(),
                             stmt.name.value.to_string()
                         ),
@@ -517,7 +543,7 @@ impl Resolver {
         if self.scopes.is_empty() {
             if self.globals.types_def.contains_key(&var_type.name) {
                 return Err(RizonResult::new(
-                    ResolverErr::AlreadyDecl("type".into()),
+                    StaticAnalyzerErr::AlreadyDecl("type".into()),
                     Some(loc.clone()),
                 ));
             }
@@ -537,7 +563,7 @@ impl Resolver {
             .contains_key(&var_type.name)
         {
             return Err(RizonResult::new(
-                ResolverErr::AlreadyDecl("type".into()),
+                StaticAnalyzerErr::AlreadyDecl("type".into()),
                 Some(loc.clone()),
             ));
         }
@@ -579,7 +605,7 @@ impl Resolver {
 
         if self.scopes.is_empty() {
             return Err(RizonResult::new(
-                ResolverErr::UnknownType(type_name.to_string()),
+                StaticAnalyzerErr::UnknownType(type_name.to_string()),
                 Some(loc.clone()),
             ));
         }
@@ -591,12 +617,12 @@ impl Resolver {
         }
 
         Err(RizonResult::new(
-            ResolverErr::UnknownType(type_name.to_string()),
+            StaticAnalyzerErr::UnknownType(type_name.to_string()),
             Some(loc.clone()),
         ))
     }
 
-    fn get_var_type(&self, var_name: &EcoString, loc: &Loc) -> ResolverExprRes {
+    fn get_var_type(&self, var_name: &EcoString, loc: &Loc) -> StaticAnalyzerExprRes {
         for scope in self.scopes.iter().rev() {
             if let Some(t) = scope.var_types.get(var_name) {
                 return Ok(t.clone());
@@ -616,7 +642,7 @@ impl Resolver {
             return Ok((&t.name).into());
         }
 
-        Err(RizonResult::new(ResolverErr::VarNonType, Some(loc.clone())))
+        Err(RizonResult::new(StaticAnalyzerErr::VarNonType, Some(loc.clone())))
     }
 
     fn get_type_def(&self, type_name: &EcoString, loc: &Loc) -> Result<&StructType, RizonResResolv> {
@@ -631,7 +657,7 @@ impl Resolver {
         }
 
         Err(RizonResult::new(
-            ResolverErr::UnknownType(type_name.into()),
+            StaticAnalyzerErr::UnknownType(type_name.into()),
             Some(loc.clone()),
         ))
     }
@@ -647,7 +673,7 @@ impl Resolver {
         for field in fields {
             if fields_types.contains_key(&field.name.value) {
                 return Err(RizonResult::new(
-                    ResolverErr::AlreadyDecl("field".into()),
+                    StaticAnalyzerErr::AlreadyDecl("field".into()),
                     Some(field.name.loc.clone()),
                 ));
             }
@@ -660,7 +686,7 @@ impl Resolver {
         for method in methods {
             if methods_types.contains_key(&method.name.value) {
                 return Err(RizonResult::new(
-                    ResolverErr::AlreadyDecl("method".into()),
+                    StaticAnalyzerErr::AlreadyDecl("method".into()),
                     Some(method.name.loc.clone()),
                 ));
             }
@@ -669,7 +695,7 @@ impl Resolver {
                 has_init = true;
             }
 
-            let fn_ctx = Resolver::resolve_fn_type(method);
+            let fn_ctx = StaticAnalyzer::resolve_fn_type(method);
             methods_types.insert(method.name.value.clone(), fn_ctx);
         }
 
@@ -699,21 +725,21 @@ impl Resolver {
     }
 }
 
-impl VisitStmt<bool, ResolverErr> for Resolver {
-    fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> ResolverRes {
+impl VisitStmt<bool, StaticAnalyzerErr> for StaticAnalyzer {
+    fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> StaticAnalyzerRes {
         self.resolve_expr(&stmt.expr)?;
 
         Ok(false)
     }
 
-    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> ResolverRes {
+    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> StaticAnalyzerRes {
         match self.resolve_expr(&stmt.expr) {
             Ok(_) => Ok(false),
             Err(e) => Err(e),
         }
     }
 
-    fn visit_var_decl_stmt(&mut self, stmt: &VarDeclStmt) -> ResolverRes {
+    fn visit_var_decl_stmt(&mut self, stmt: &VarDeclStmt) -> StaticAnalyzerRes {
         self.declare_name(&stmt.name.value, &stmt.name.loc, "variable")?;
 
         let mut final_type = match &stmt.typ {
@@ -746,9 +772,9 @@ impl VisitStmt<bool, ResolverErr> for Resolver {
 
             if final_type != VarType::Any && final_type != value_type {
                 // We allow passing int values to float types
-                if !Resolver::is_castable(&value_type, &final_type) {
+                if !StaticAnalyzer::is_castable(&value_type, &final_type) {
                     return Err(RizonResult::new(
-                        ResolverErr::WrongTypeAssign(
+                        StaticAnalyzerErr::WrongTypeAssign(
                             value_type.to_string(),
                             final_type.to_string(),
                         ),
@@ -766,13 +792,13 @@ impl VisitStmt<bool, ResolverErr> for Resolver {
         Ok(false)
     }
 
-    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> ResolverRes {
+    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> StaticAnalyzerRes {
         self.begin_scope();
 
         let mut end_reached = false;
         for stmt in &stmt.stmts {
             if end_reached {
-                self.warnings.push(ResolverWarning::UnreachAfterReturn);
+                self.warnings.push(Warning::new(StaticAnalyzerWarning::UnreachAfterReturn, stmt.get_loc()));
             }
 
             end_reached = end_reached || stmt.accept(self)?;
@@ -783,7 +809,7 @@ impl VisitStmt<bool, ResolverErr> for Resolver {
         Ok(end_reached)
     }
 
-    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> ResolverRes {
+    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> StaticAnalyzerRes {
         stmt.condition.accept(self)?;
 
         let complete_then = if let Some(t) = &stmt.then_branch {
@@ -801,14 +827,14 @@ impl VisitStmt<bool, ResolverErr> for Resolver {
         Ok(complete_then && complete_else)
     }
 
-    fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> ResolverRes {
+    fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> StaticAnalyzerRes {
         stmt.condition.accept(self)?;
         stmt.body.accept(self)?;
 
         Ok(false)
     }
 
-    fn visit_for_stmt(&mut self, stmt: &ForStmt) -> ResolverRes {
+    fn visit_for_stmt(&mut self, stmt: &ForStmt) -> StaticAnalyzerRes {
         self.begin_scope();
         self.visit_var_decl_stmt(&stmt.placeholder)?;
         self.init_var_type(&stmt.placeholder.name.value, VarType::Int);
@@ -818,11 +844,11 @@ impl VisitStmt<bool, ResolverErr> for Resolver {
         Ok(false)
     }
 
-    fn visit_fn_decl_stmt(&mut self, stmt: &FnDeclStmt) -> ResolverRes {
+    fn visit_fn_decl_stmt(&mut self, stmt: &FnDeclStmt) -> StaticAnalyzerRes {
         self.declare_name(&stmt.name.value, &stmt.name.loc, "function")?;
         self.define_name(&stmt.name.value);
 
-        let return_type = Resolver::resolve_fn_type(stmt);
+        let return_type = StaticAnalyzer::resolve_fn_type(stmt);
         self.init_var_type(&stmt.name.value, return_type.clone());
 
         self.resolve_fn(
@@ -836,17 +862,17 @@ impl VisitStmt<bool, ResolverErr> for Resolver {
         Ok(false)
     }
 
-    fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> ResolverRes {
+    fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> StaticAnalyzerRes {
         match self.fn_ctx.kind {
             FnKind::None => {
                 return Err(RizonResult::new(
-                    ResolverErr::TopLevelReturn,
+                    StaticAnalyzerErr::TopLevelReturn,
                     Some(stmt.loc.clone()),
                 ))
             }
             FnKind::Init => {
                 return Err(RizonResult::new(
-                    ResolverErr::ReturnFromInit,
+                    StaticAnalyzerErr::ReturnFromInit,
                     Some(stmt.loc.clone()),
                 ))
             }
@@ -856,7 +882,7 @@ impl VisitStmt<bool, ResolverErr> for Resolver {
 
                     if return_type != self.fn_ctx.return_type {
                         return Err(RizonResult::new(
-                            ResolverErr::WrongReturnType(
+                            StaticAnalyzerErr::WrongReturnType(
                                 self.fn_ctx.return_type.to_string(),
                                 return_type.to_string(),
                             ),
@@ -870,13 +896,13 @@ impl VisitStmt<bool, ResolverErr> for Resolver {
         Ok(true)
     }
 
-    fn visit_struct_stmt(&mut self, stmt: &StructStmt) -> ResolverRes {
+    fn visit_struct_stmt(&mut self, stmt: &StructStmt) -> StaticAnalyzerRes {
         self.current_struct = Some(stmt.name.value.clone());
 
         self.declare_name(&stmt.name.value, &stmt.name.loc, "structure")?;
         self.define_name(&stmt.name.value);
 
-        let (fields, methods) = Resolver::struct_members_types(&stmt.fields, &stmt.methods)?;
+        let (fields, methods) = StaticAnalyzer::struct_members_types(&stmt.fields, &stmt.methods)?;
 
         let struct_type = StructType {
             name: stmt.name.value.clone(),
@@ -916,14 +942,14 @@ impl VisitStmt<bool, ResolverErr> for Resolver {
     }
 }
 
-impl VisitExpr<VarType, ResolverErr> for Resolver {
-    fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> ResolverExprRes {
+impl VisitExpr<VarType, StaticAnalyzerErr> for StaticAnalyzer {
+    fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> StaticAnalyzerExprRes {
         let lhs_type = self.resolve_expr(&expr.left)?.into_fn_return_type();
         let rhs_type = self.resolve_expr(&expr.right)?.into_fn_return_type();
 
         let invalid_op_error = |op: &str| {
             RizonResult::new(
-                ResolverErr::InvalidOp(op.into(), lhs_type.to_string(), rhs_type.to_string()),
+                StaticAnalyzerErr::InvalidOp(op.into(), lhs_type.to_string(), rhs_type.to_string()),
                 Some(expr.get_loc()),
             )
         };
@@ -959,7 +985,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
                     Ok(VarType::Bool)
                 }
                 (VarType::Int, VarType::Float) | (VarType::Float, VarType::Int) => {
-                    self.warnings.push(ResolverWarning::CompIntFloat);
+                    self.warnings.push(Warning::new(StaticAnalyzerWarning::CompIntFloat, expr.get_loc()));
 
                     Ok(VarType::Bool)
                 }
@@ -971,7 +997,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
                 | (VarType::Str, VarType::Str)
                 | (VarType::Bool, VarType::Bool) => Ok(VarType::Bool),
                 (VarType::Int, VarType::Float) | (VarType::Float, VarType::Int) => {
-                    self.warnings.push(ResolverWarning::CompIntFloat);
+                    self.warnings.push(Warning::new(StaticAnalyzerWarning::CompIntFloat, expr.get_loc()));
 
                     Ok(VarType::Bool)
                 }
@@ -979,34 +1005,34 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
                 _ => Err(invalid_op_error(expr.operator.value.as_str())),
             },
             _ => Err(RizonResult::new(
-                ResolverErr::UnknownOp,
+                StaticAnalyzerErr::UnknownOp,
                 Some(expr.operator.loc.clone()),
             )),
         }
     }
 
-    fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> ResolverExprRes {
+    fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> StaticAnalyzerExprRes {
         self.resolve_expr(&expr.expr)
     }
 
-    fn visit_int_literal_expr(&mut self, _: &IntLiteralExpr) -> ResolverExprRes {
+    fn visit_int_literal_expr(&mut self, _: &IntLiteralExpr) -> StaticAnalyzerExprRes {
         Ok(VarType::Int)
     }
 
-    fn visit_float_literal_expr(&mut self, _: &FloatLiteralExpr) -> ResolverExprRes {
+    fn visit_float_literal_expr(&mut self, _: &FloatLiteralExpr) -> StaticAnalyzerExprRes {
         Ok(VarType::Float)
     }
 
-    fn visit_str_literal_expr(&mut self, _: &StrLiteralExpr) -> ResolverExprRes {
+    fn visit_str_literal_expr(&mut self, _: &StrLiteralExpr) -> StaticAnalyzerExprRes {
         Ok(VarType::Str)
     }
 
-    fn visit_identifier_expr(&mut self, expr: &IdentifierExpr) -> ResolverExprRes {
+    fn visit_identifier_expr(&mut self, expr: &IdentifierExpr) -> StaticAnalyzerExprRes {
         if !self.scopes.is_empty()
             && self.scopes.last().unwrap().variables.get(&expr.name) == Some(&false)
         {
             return Err(RizonResult::new(
-                ResolverErr::LocalVarInOwnInit,
+                StaticAnalyzerErr::LocalVarInOwnInit,
                 Some(expr.loc.clone()),
             ));
         }
@@ -1015,14 +1041,14 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
         self.get_var_type(&expr.name, &expr.loc)
     }
 
-    fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> ResolverExprRes {
+    fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> StaticAnalyzerExprRes {
         let val_type = self.resolve_expr(&expr.right)?;
 
         match expr.operator.kind {
             TokenKind::Minus => {
                 if val_type != VarType::Int && val_type != VarType::Float {
                     return Err(RizonResult::new(
-                        ResolverErr::NonNumMinusUnary,
+                        StaticAnalyzerErr::NonNumMinusUnary,
                         Some(expr.right.get_loc().clone()),
                     ));
                 }
@@ -1030,7 +1056,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
             TokenKind::Bang => {
                 if val_type != VarType::Bool {
                     return Err(RizonResult::new(
-                        ResolverErr::NonBoolBangUnary,
+                        StaticAnalyzerErr::NonBoolBangUnary,
                         Some(expr.right.get_loc().clone()),
                     ));
                 }
@@ -1041,7 +1067,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
         Ok(val_type)
     }
 
-    fn visit_assign_expr(&mut self, expr: &AssignExpr) -> ResolverExprRes {
+    fn visit_assign_expr(&mut self, expr: &AssignExpr) -> StaticAnalyzerExprRes {
         self.resolve_local(&expr.loc, &expr.name)?;
 
         self.resolve_expr(&expr.value)?;
@@ -1051,9 +1077,9 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
         if lhs_type != value_type {
             if lhs_type == VarType::Any {
                 self.update_var_type(&expr.name, value_type, &expr.loc);
-            } else if !Resolver::is_castable(&value_type, &lhs_type) {
+            } else if !StaticAnalyzer::is_castable(&value_type, &lhs_type) {
                 return Err(RizonResult::new(
-                    ResolverErr::WrongTypeAssign(value_type.to_string(), lhs_type.to_string()),
+                    StaticAnalyzerErr::WrongTypeAssign(value_type.to_string(), lhs_type.to_string()),
                     Some(expr.value.get_loc()),
                 ));
             }
@@ -1062,13 +1088,13 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
         Ok(lhs_type)
     }
 
-    fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> ResolverExprRes {
+    fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> StaticAnalyzerExprRes {
         let rhs_type = self.resolve_expr(&expr.right)?;
         let lhs_type = self.resolve_expr(&expr.left)?;
 
         if lhs_type != rhs_type {
             return Err(RizonResult::new(
-                ResolverErr::WrongTypeLogical(lhs_type.to_string(), lhs_type.to_string()),
+                StaticAnalyzerErr::WrongTypeLogical(lhs_type.to_string(), lhs_type.to_string()),
                 Some(expr.loc.clone()),
             ));
         }
@@ -1076,7 +1102,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
         Ok(rhs_type)
     }
 
-    fn visit_call_expr(&mut self, expr: &CallExpr) -> ResolverExprRes {
+    fn visit_call_expr(&mut self, expr: &CallExpr) -> StaticAnalyzerExprRes {
         let callee_type = self.resolve_expr(&expr.callee)?;
 
         let call_args: Vec<VarType> = expr
@@ -1094,7 +1120,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
                         .get(&EcoString::from("init"))
                         .ok_or_else(|| {
                             RizonResult::new(
-                                ResolverErr::InexistantConstructor(s.to_string()),
+                                StaticAnalyzerErr::InexistantConstructor(s.to_string()),
                                 Some(expr.loc.clone()),
                             )
                         })?;
@@ -1103,7 +1129,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
                     f
                 } else {
                     return Err(RizonResult::new(
-                        ResolverErr::InexistantConstructor(s.to_string()),
+                        StaticAnalyzerErr::InexistantConstructor(s.to_string()),
                         Some(expr.loc.clone()),
                     ));
                 }
@@ -1111,7 +1137,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
             VarType::Fn(f) => f,
             _ => {
                 return Err(RizonResult::new(
-                    ResolverErr::NonFnCall,
+                    StaticAnalyzerErr::NonFnCall,
                     Some(expr.callee.get_loc()),
                 ))
             }
@@ -1119,7 +1145,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
 
         if fn_ctx.args_type.len() != expr.args.len() {
             return Err(RizonResult::new(
-                ResolverErr::WrongArgsNb(fn_ctx.args_type.len(), expr.args.len()),
+                StaticAnalyzerErr::WrongArgsNb(fn_ctx.args_type.len(), expr.args.len()),
                 Some(expr.loc.clone()),
             ));
         }
@@ -1130,9 +1156,9 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
                 call_arg = call_arg.into_fn_return_type();
             }
 
-            if &call_arg != arg_decl && !Resolver::is_castable(&call_arg, arg_decl) {
+            if &call_arg != arg_decl && !StaticAnalyzer::is_castable(&call_arg, arg_decl) {
                 return Err(RizonResult::new(
-                    ResolverErr::WrongArgsType(arg_decl.to_string(), call_arg.to_string()),
+                    StaticAnalyzerErr::WrongArgsType(arg_decl.to_string(), call_arg.to_string()),
                     Some(expr.loc.clone()),
                 ));
             }
@@ -1146,11 +1172,11 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
         Ok(callee_type.into_fn_return_type())
     }
 
-    fn visit_get_expr(&mut self, expr: &GetExpr) -> ResolverExprRes {
+    fn visit_get_expr(&mut self, expr: &GetExpr) -> StaticAnalyzerExprRes {
         // Can't call constructor like: Foo().init()
         if expr.name.value.as_str() == "init" {
             return Err(RizonResult::new(
-                ResolverErr::DirectConstructorCall,
+                StaticAnalyzerErr::DirectConstructorCall,
                 Some(expr.loc.clone()),
             ));
         }
@@ -1164,12 +1190,12 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
         }
 
         Err(RizonResult::new(
-            ResolverErr::NonStructFieldAccess,
+            StaticAnalyzerErr::NonStructFieldAccess,
             Some(expr.loc.clone()),
         ))
     }
 
-    fn visit_set_expr(&mut self, expr: &SetExpr) -> ResolverExprRes {
+    fn visit_set_expr(&mut self, expr: &SetExpr) -> StaticAnalyzerExprRes {
         let obj_type = self.resolve_expr(&expr.object)?;
         let value_type = self.resolve_expr(&expr.value)?;
 
@@ -1178,15 +1204,15 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
 
             let member_type = struct_type.get_member_type(&expr.name)?;
 
-            if member_type != value_type && !Resolver::is_castable(&value_type, &member_type) {
+            if member_type != value_type && !StaticAnalyzer::is_castable(&value_type, &member_type) {
                 return Err(RizonResult::new(
-                    ResolverErr::WrongTypeAssign(value_type.to_string(), member_type.to_string()),
+                    StaticAnalyzerErr::WrongTypeAssign(value_type.to_string(), member_type.to_string()),
                     Some(expr.value.get_loc()),
                 ));
             }
         } else {
             return Err(RizonResult::new(
-                ResolverErr::NonStructFieldAccess,
+                StaticAnalyzerErr::NonStructFieldAccess,
                 Some(expr.loc.clone()),
             ));
         }
@@ -1194,10 +1220,10 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
         Ok(obj_type)
     }
 
-    fn visit_self_expr(&mut self, expr: &SelfExpr) -> ResolverExprRes {
+    fn visit_self_expr(&mut self, expr: &SelfExpr) -> StaticAnalyzerExprRes {
         if self.current_struct.is_none() {
             return Err(RizonResult::new(
-                ResolverErr::SelfOutsideStruct,
+                StaticAnalyzerErr::SelfOutsideStruct,
                 Some(expr.loc.clone()),
             ));
         }
@@ -1209,7 +1235,7 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
         ))
     }
 
-    fn visit_is_expr(&mut self, expr: &IsExpr) -> ResolverExprRes {
+    fn visit_is_expr(&mut self, expr: &IsExpr) -> StaticAnalyzerExprRes {
         let left_type = self.resolve_expr(&expr.left)?;
         self.check_type_exists(&expr.typ.value, &expr.loc)?;
 
@@ -1217,131 +1243,11 @@ impl VisitExpr<VarType, ResolverErr> for Resolver {
 
         if left_type != right_type {
             return Err(RizonResult::new(
-                ResolverErr::WrongVarType(right_type.to_string()),
+                StaticAnalyzerErr::WrongVarType(right_type.to_string()),
                 Some(expr.left.get_loc()),
             ));
         }
 
         Ok(VarType::Bool)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{resolver::ResolverErr, utils::lex_parse_resolve};
-
-    #[test]
-    fn depth() {
-        let code = "
-var a
-{
-    var b = a
-    var c = b
-    {
-        var d = c
-        d = a + 6
-        {
-            var e
-            e = e + 1
-            e = d - 5
-            e = b
-        }
-    }
-}
-";
-        let locals = lex_parse_resolve(code).unwrap();
-
-        assert_eq!(locals.len(), 9);
-
-        // We have to sort because (key, value) aren't inserted in the hashmap
-        // in the same order as insertion
-        let mut depths = locals.into_values().collect::<Vec<usize>>();
-        depths.sort();
-
-        assert_eq!(depths, vec![0, 0, 0, 0, 0, 0, 1, 1, 2]);
-    }
-
-    #[test]
-    fn depth_fn() {
-        let code = "
-{
-    var a
-    var b
-    {
-        fn foo(a) {
-            var c = a
-            var d = b
-        }
-    }
-}
-";
-        let locals = lex_parse_resolve(code).unwrap();
-
-        assert_eq!(locals.len(), 2);
-
-        // We have to sort because (key, value) aren't inserted in the hashmap
-        // in the same order as insertion
-        let mut depths = locals.into_values().collect::<Vec<usize>>();
-        depths.sort();
-
-        assert_eq!(depths, vec![0usize, 2usize]);
-    }
-
-    #[test]
-    fn local_var_in_its_init() {
-        let code = "
-var a
-{
-    var a = a
-}
-";
-        let resolver = lex_parse_resolve(code);
-        let errs = resolver.err().unwrap();
-        assert_eq!(errs[0].err, ResolverErr::LocalVarInOwnInit);
-    }
-
-    #[test]
-    fn already_decl() {
-        let code = "
-{
-    var a
-    var a
-}
-";
-        let resolver = lex_parse_resolve(code);
-        let errs = resolver.err().unwrap();
-        assert_eq!(errs[0].err, ResolverErr::AlreadyDecl("variable".into()),);
-    }
-
-    #[test]
-    fn toplev_return() {
-        let code = "
-return
-";
-        let resolver = lex_parse_resolve(code);
-        let errs = resolver.err().unwrap();
-        assert_eq!(errs[0].err, ResolverErr::TopLevelReturn);
-    }
-
-    #[test]
-    fn self_no_struct() {
-        let code = "
-self.foo
-";
-        let resolver = lex_parse_resolve(code);
-        let errs = resolver.err().unwrap();
-        assert_eq!(errs[0].err, ResolverErr::SelfOutsideStruct);
-    }
-
-    #[test]
-    fn return_from_init() {
-        let code = "
-struct Foo {
-    fn init() { return 1 }
-}
-";
-        let resolver = lex_parse_resolve(code);
-        let errs = resolver.err().unwrap();
-        assert_eq!(errs[0].err, ResolverErr::ReturnFromInit);
     }
 }

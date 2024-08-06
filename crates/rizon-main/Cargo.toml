@@ -6,6 +6,6 @@ edition = "2021"
 [dependencies]
 rizon-frontend = { workspace = true }
 rizon-runtime = { workspace = true }
-rizon-static-analysis = { workspace = true }
+rizon-static-analyzer = { workspace = true }
 clap = { workspace = true }
 colored = { workspace = true }

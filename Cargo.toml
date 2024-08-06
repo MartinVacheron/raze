@@ -15,6 +15,6 @@ colored = "2.0"
 ecow = "0"
 thiserror = "1.0"
 rizon-frontend = { path = "crates/rizon-frontend" }
-rizon-static-analysis = { path = "crates/rizon-static-analysis" }
+rizon-static-analyzer = { path = "crates/rizon-static-analyzer" }
 rizon-runtime = { path = "crates/rizon-runtime" }
 rizon-tools = { path = "crates/rizon-tools" }

@@ -1,5 +1,5 @@
 [package]
-name = "rizon-static-analysis"
+name = "rizon-static-analyzer"
 version = "0.1.0"
 edition = "2021"
 
