@@ -38,14 +38,14 @@ struct Cli {
 
 struct Repl {
     cli: Cli,
-    resolver: StaticAnalyzer,
+    static_analyzer: StaticAnalyzer,
     interpreter: Interpreter,
 }
 
 fn main() {
     let mut repl = Repl {
         cli: Cli::parse(),
-        resolver: StaticAnalyzer::default(),
+        static_analyzer: StaticAnalyzer::default(),
         interpreter: Interpreter::new(),
     };
 
@@ -123,7 +123,7 @@ impl Repl {
             }
         };
 
-        let locals = match self.resolver.resolve(&nodes) {
+        let locals = match self.static_analyzer.resolve(&nodes) {
             Ok(l) => l,
             Err(e) => {
                 e.iter()
