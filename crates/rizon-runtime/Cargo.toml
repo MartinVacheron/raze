@@ -1,0 +1,13 @@
+[package]
+name = "rizon-runtime"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+rizon-frontend = { workspace = true }
+rizon-tools = { workspace = true }
+rizon-static-analysis = { workspace = true }
+colored = { workspace = true }
+ecow = { workspace = true }
+thiserror = { workspace = true }

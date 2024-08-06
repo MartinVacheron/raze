@@ -114,16 +114,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54bfbb1708988623190a6c4dbedaeaf0f53c20c6395abd6a01feb327b3146f4b"
 
 [[package]]
-name = "frontend"
-version = "0.1.0"
-dependencies = [
- "colored",
- "ecow",
- "thiserror",
- "tools",
-]
-
-[[package]]
 name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -160,37 +150,54 @@ dependencies = [
 ]
 
 [[package]]
-name = "resolver"
-version = "0.1.0"
-dependencies = [
- "colored",
- "ecow",
- "frontend",
- "thiserror",
- "tools",
-]
-
-[[package]]
-name = "rev"
+name = "rizon"
 version = "0.1.0"
 dependencies = [
  "clap",
  "colored",
- "frontend",
- "resolver",
- "runtime",
+ "rizon-frontend",
+ "rizon-runtime",
+ "rizon-static-analysis",
 ]
 
 [[package]]
-name = "runtime"
+name = "rizon-frontend"
 version = "0.1.0"
 dependencies = [
  "colored",
  "ecow",
- "frontend",
- "resolver",
+ "rizon-tools",
  "thiserror",
- "tools",
+]
+
+[[package]]
+name = "rizon-runtime"
+version = "0.1.0"
+dependencies = [
+ "colored",
+ "ecow",
+ "rizon-frontend",
+ "rizon-static-analysis",
+ "rizon-tools",
+ "thiserror",
+]
+
+[[package]]
+name = "rizon-static-analysis"
+version = "0.1.0"
+dependencies = [
+ "colored",
+ "ecow",
+ "rizon-frontend",
+ "rizon-tools",
+ "thiserror",
+]
+
+[[package]]
+name = "rizon-tools"
+version = "0.1.0"
+dependencies = [
+ "colored",
 ]
 
 [[package]]
@@ -228,13 +235,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "tools"
-version = "0.1.0"
-dependencies = [
- "colored",
 ]
 
 [[package]]

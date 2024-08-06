@@ -27,7 +27,7 @@ def clr_str(msg: str, clr: str) -> str:
 
 
 # Main
-print(clr_str("\t\tLaunching tests for Rev language", YELLOW))
+print(clr_str("\t\tLaunching tests for Rizon language", YELLOW))
 
 total_tests = 0
 total_ok = 0
@@ -52,17 +52,17 @@ for dir in os.listdir():
         if args.print_err:
             print(f"running {dir}::{file}...")
             
-            result = subprocess.run(["..\\target\\debug\\rev.exe", "-f", path], capture_output=True)
-            rev_output = result.stdout.decode().strip()
+            result = subprocess.run(["..\\target\\debug\\rizon.exe", "-f", path], capture_output=True)
+            rizon_output = result.stdout.decode().strip()
 
-            for line in rev_output.split("\n"):
+            for line in rizon_output.split("\n"):
                 if "error" in line or "-->" in line or " | " in line or "^" in line or line == "":
                     print(line)
                 else:
                     continue
 
         else:
-            result = subprocess.run(["..\\target\\debug\\rev.exe", "-f", path], capture_output=True)
+            result = subprocess.run(["..\\target\\debug\\rizon.exe", "-f", path], capture_output=True)
 
             content = open(path, "r", encoding="utf-8")
 
@@ -76,19 +76,19 @@ for dir in os.listdir():
                     exp = line.split("expect: ")[1].strip()
                     expects.append(exp)
 
-            rev_output = result.stdout.decode().strip()
+            rizon_output = result.stdout.decode().strip()
 
-            rev_res = []
-            rev_err = []
-            for line in rev_output.split("\n"):
+            rizon_res = []
+            rizon_err = []
+            for line in rizon_output.split("\n"):
                 if "-->" in line or " | " in line or "^" in line or line == "":
                     continue
                 elif "error" in line:
-                    rev_err.append(line.split(": ")[1])
+                    rizon_err.append(line.split(": ")[1])
                 else:
-                    rev_res.append(line.strip())
+                    rizon_res.append(line.strip())
 
-            ok = rev_res == expects and rev_err == errors
+            ok = rizon_res == expects and rizon_err == errors
 
             if ok:
                 res = clr_str("Ok", GREEN)
@@ -100,13 +100,13 @@ for dir in os.listdir():
             print(f"{clr_str('testing', YELLOW)} {dir}::{file}...  {res}")
 
             if not ok:
-                if len(rev_res) > 0:
+                if len(rizon_res) > 0:
                     print(f"Expected:\n{expects}")
-                    print(f"Got:\n{rev_res}")
+                    print(f"Got:\n{rizon_res}")
 
-                if len(rev_err) > 0:
+                if len(rizon_err) > 0:
                     print(f"Expected errors:\n{errors}")
-                    print(f"Got errros:\n{rev_err}")
+                    print(f"Got errros:\n{rizon_err}")
 
                 print()
 

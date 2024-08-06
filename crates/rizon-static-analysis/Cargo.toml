@@ -1,0 +1,12 @@
+[package]
+name = "rizon-static-analysis"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+rizon-frontend = { workspace = true }
+rizon-tools = { workspace = true }
+thiserror = { workspace = true }
+colored = { workspace = true }
+ecow = { workspace = true }

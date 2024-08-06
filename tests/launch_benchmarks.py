@@ -26,7 +26,7 @@ def clr_str(msg: str, clr: str) -> str:
 
 
 # Main
-print(clr_str("\n\t\tLaunching benchmarks for Rev language\n", YELLOW))
+print(clr_str("\n\t\tLaunching benchmarks for Rizon language\n", YELLOW))
 
 # Compilation
 print("Compiling in release mode...")
