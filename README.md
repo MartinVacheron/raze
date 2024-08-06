@@ -32,14 +32,11 @@ You can pass additional arguments:
 | -h        | --help           | shows help message and exits                                              | false   |
 | -v        | --version        | prints version information and exits                                      | false   |
 
-## Statically typed
-
-
 ## Tools
 You can use the official VSCode plugin to work with the language to have basic language support. You can find the **vsix** file in the official repo: [rizon-vscode-tools](https://github.com/MartinVacheron/rizon-vscode-tools).
 
 ## Road map
-For version v0.2, the following features are gonna be added:
+### Rizon v0.2
 
 - [ ] ```break``` statement in for and while loops
 - [ ] ```else if``` branch
@@ -47,3 +44,4 @@ For version v0.2, the following features are gonna be added:
 - [ ] Ternary operator: ```var a = foo == bar1 ? 1 : 0```
 - [ ] Compound assign: ```a += 1```
 - [ ] Coma declaration for variables: ```var a, b, c: int```
+- [ ] Delayed functions' body static analysis to allow mutual recursion
