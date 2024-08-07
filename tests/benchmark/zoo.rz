@@ -1,10 +1,10 @@
 struct Zoo {
-    aarvark 
-    baboon  
-    cat     
-    donkey  
-    elephant
-    fox     
+    aarvark: int
+    baboon: int
+    cat: int
+    donkey: int
+    elephant: int
+    fox: int
 
     fn init() {
         self.aarvark  = 1
@@ -15,12 +15,12 @@ struct Zoo {
         self.fox      = 1
     }
   
-    fn ant()    { return self.aarvark }
-    fn banana() { return self.baboon }
-    fn tuna()   { return self.cat }
-    fn hay()    { return self.donkey }
-    fn grass()  { return self.elephant }
-    fn mouse()  { return self.fox }
+    fn ant()    -> int { return self.aarvark }
+    fn banana() -> int { return self.baboon }
+    fn tuna()   -> int { return self.cat }
+    fn hay()    -> int { return self.donkey }
+    fn grass()  -> int { return self.elephant }
+    fn mouse()  -> int { return self.fox }
 }
 
 var zoo = Zoo()
@@ -28,13 +28,7 @@ var sum = 0
 var start = clock()
 
 while sum < 10000000 {
-  sum = sum + zoo.ant()
-            + zoo.banana()
-            + zoo.tuna()
-            + zoo.hay()
-            + zoo.grass()
-            + zoo.mouse()
+  sum = sum + zoo.ant() + zoo.banana() + zoo.tuna() + zoo.hay() + zoo.grass() + zoo.mouse()
 }
 
-print sum
 print clock() - start

@@ -1965,9 +1965,11 @@ a1 == a1
 }
 
 var elapsed = clock() - start
+
+print elapsed - loopTime
+
 print "loop"
 print loopTime
-print "elapsed"
-print elapsed
+
 print "equals"
-print elapsed - loopTime
+print elapsed

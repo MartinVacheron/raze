@@ -1,5 +1,4 @@
-Benchmark message: 
-Removed UUID in resolver and clippy corrections
+Benchmark message: Removed UUID in resolver and clippy corrections
 
 running benchmark: benchmark::equality.rev...
 	"loop"

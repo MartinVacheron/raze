@@ -3,7 +3,7 @@ var i = 0
 var loopStart = clock()
 
 while i < 1000000 {
-    i = i + 1.1
+    i = i + 1
 
     1
     1
@@ -77,9 +77,8 @@ while i < 1000000 {
 
 var elapsed = clock() - start
 
+print elapsed + loopTime
 print "loop"
 print loopTime
-print "elapsed"
-print elapsed
 print "equals"
-print elapsed - loopTime
+print elapsed

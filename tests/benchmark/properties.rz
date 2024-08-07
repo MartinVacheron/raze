@@ -1,36 +1,36 @@
 // This benchmark stresses both field and method lookup.
 
 struct Foo {
-    field0 
-    field1 
-    field2 
-    field3 
-    field4 
-    field5 
-    field6 
-    field7 
-    field8 
-    field9 
-    field10
-    field11
-    field12
-    field13
-    field14
-    field15
-    field16
-    field17
-    field18
-    field19
-    field20
-    field21
-    field22
-    field23
-    field24
-    field25
-    field26
-    field27
-    field28
-    field29
+    field0 : int
+    field1 : int
+    field2 : int
+    field3 : int
+    field4 : int
+    field5 : int
+    field6 : int
+    field7 : int
+    field8 : int
+    field9 : int
+    field10: int
+    field11: int
+    field12: int
+    field13: int
+    field14: int
+    field15: int
+    field16: int
+    field17: int
+    field18: int
+    field19: int
+    field20: int
+    field21: int
+    field22: int
+    field23: int
+    field24: int
+    field25: int
+    field26: int
+    field27: int
+    field28: int
+    field29: int
 
   fn init() {
     self.field0 = 1
@@ -65,36 +65,36 @@ struct Foo {
     self.field29 = 1
   }
 
-  fn method0() { return self.field0 }
-  fn method1() { return self.field1 }
-  fn method2() { return self.field2 }
-  fn method3() { return self.field3 }
-  fn method4() { return self.field4 }
-  fn method5() { return self.field5 }
-  fn method6() { return self.field6 }
-  fn method7() { return self.field7 }
-  fn method8() { return self.field8 }
-  fn method9() { return self.field9 }
-  fn method10() { return self.field10 }
-  fn method11() { return self.field11 }
-  fn method12() { return self.field12 }
-  fn method13() { return self.field13 }
-  fn method14() { return self.field14 }
-  fn method15() { return self.field15 }
-  fn method16() { return self.field16 }
-  fn method17() { return self.field17 }
-  fn method18() { return self.field18 }
-  fn method19() { return self.field19 }
-  fn method20() { return self.field20 }
-  fn method21() { return self.field21 }
-  fn method22() { return self.field22 }
-  fn method23() { return self.field23 }
-  fn method24() { return self.field24 }
-  fn method25() { return self.field25 }
-  fn method26() { return self.field26 }
-  fn method27() { return self.field27 }
-  fn method28() { return self.field28 }
-  fn method29() { return self.field29 }
+  fn method0() -> int { return self.field0 }
+  fn method1() -> int { return self.field1 }
+  fn method2() -> int { return self.field2 }
+  fn method3() -> int { return self.field3 }
+  fn method4() -> int { return self.field4 }
+  fn method5() -> int { return self.field5 }
+  fn method6() -> int { return self.field6 }
+  fn method7() -> int { return self.field7 }
+  fn method8() -> int { return self.field8 }
+  fn method9() -> int { return self.field9 }
+  fn method10() -> int { return self.field10 }
+  fn method11() -> int { return self.field11 }
+  fn method12() -> int { return self.field12 }
+  fn method13() -> int { return self.field13 }
+  fn method14() -> int { return self.field14 }
+  fn method15() -> int { return self.field15 }
+  fn method16() -> int { return self.field16 }
+  fn method17() -> int { return self.field17 }
+  fn method18() -> int { return self.field18 }
+  fn method19() -> int { return self.field19 }
+  fn method20() -> int { return self.field20 }
+  fn method21() -> int { return self.field21 }
+  fn method22() -> int { return self.field22 }
+  fn method23() -> int { return self.field23 }
+  fn method24() -> int { return self.field24 }
+  fn method25() -> int { return self.field25 }
+  fn method26() -> int { return self.field26 }
+  fn method27() -> int { return self.field27 }
+  fn method28() -> int { return self.field28 }
+  fn method29() -> int { return self.field29 }
 }
 
 var foo = Foo()

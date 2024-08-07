@@ -1,0 +1,31 @@
+     --- Running benchmarks for Rizon language ---
+
+
+Benchmark message: Implemented static type checker
+
+
+running equality.rz...
+	global:  mean: 10.060900, stdev: 0.321379
+	"loop":  mean: 3.150500, stdev: 0.113889
+	"equals":  mean: 6.910400, stdev: 0.250487
+
+running fib.rz...
+	global:  mean: 0.425700, stdev: 0.004762
+
+running instanciation.rz...
+	global:  mean: 8.507900, stdev: 0.108753
+
+running invocation.rz...
+	global:  mean: 8.459200, stdev: 0.164033
+
+running properties.rz...
+	global:  mean: 12.735900, stdev: 0.317331
+
+running string_equality.rz...
+	global:  mean: 11.483800, stdev: 0.417863
+	"loop":  mean: 4.746300, stdev: 0.350242
+	"equals":  mean: 16.230100, stdev: 0.596047
+
+running zoo.rz...
+	global:  mean: 10.005200, stdev: 0.777516
+

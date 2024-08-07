@@ -2,6 +2,19 @@ import os
 import subprocess
 import time
 import argparse
+import statistics
+from tools import *
+
+
+"""
+Each benchmark file is executed 20
+
+Return format expected: 
+ - First output is the total time of execution
+ - For each other output, they must be by group of 2:
+    - A label
+    - A time
+"""
 
 
 # CLI
@@ -14,16 +27,6 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-# ANSI escape codes
-RED = "\033[31m"
-GREEN = "\033[32m"
-YELLOW = "\033[33m"
-BLUE = "\033[34m"
-RESET = "\033[0m"
-
-def clr_str(msg: str, clr: str) -> str:
-    return f"{clr}{msg}{RESET}"
-
 
 # Main
 print(clr_str("\n\t\tLaunching benchmarks for Rizon language\n", YELLOW))
@@ -35,32 +38,53 @@ print("Compilation done\n")
 
 # Result file
 time = time.strftime("%Y%m%d-%H%M%S")
-outfile = open(f"benchmark_results\\benchmark_{time}", "w")
+outfile = open(f"benchmark\\benchmark_results\\benchmark_{time}", "w")
+
+outfile.write("     --- Running benchmarks for Rizon language ---\n\n")
 
 if not args.msg is None:
-    outfile.write(f"Benchmark message: \n{args.msg}\n\n")
+    outfile.write(f"Benchmark message: {args.msg}\n\n")
 
-for dir in os.listdir():
-    if dir == "benchmark":
-        files = os.listdir(dir)
+dir = "benchmark"
+nb_runs = 10
 
-        for file in files:
-            path = f"{dir}\\{file}"
-            print(f"running benchmark: {dir}::{file}...")
-            outfile.write(f"running benchmark: {dir}::{file}...\n")
+for file in os.listdir(dir):
+    if file == "benchmark_results":
+        continue
 
-            result = subprocess.run(["..\\target\\release\\rev.exe", "-f", path], capture_output=True)
+    path = f"{dir}\\{file}"
+    print(f"running {file}...")
+    outfile.write(f"running {file}...\n")
 
-            rev_output = result.stdout.decode().strip()
+    times = []
+    labels = []
+    for i in range(nb_runs):
+        print(f"Run n°{i}")
 
-            for line in rev_output.split("\n"):
-                print(line)
-                outfile.write(f"\t{line}\n")
+        result = subprocess.run(["..\\target\\release\\rizon.exe", "-f", path], capture_output=True)
 
-            print()
-            outfile.write("\n")
+        rev_output = result.stdout.decode().strip()
+        rev_split = rev_output.split("\n")
+        rev_split.insert(0, 'global')
 
-        print()
-        outfile.close()
+        if i == 0:
+            times = [[] for _ in range(int(len(rev_split) / 2))]
 
-        exit()
+            for label in rev_split[0::2]:
+                labels.append(label)
+
+        for i, time in enumerate(rev_split[1::2]):
+            times[i].append(float(time))
+                
+
+    means = [statistics.mean(x) for x in times]
+    stdevs = [statistics.stdev(x) for x in times]
+
+    for i in range(len(times)):
+        outfile.write(f"\t{labels[i]}:  mean: {means[i]:.6f}, stdev: {stdevs[i]:.6f}\n")
+
+    print()
+    outfile.write("\n")
+
+print()
+outfile.close()
